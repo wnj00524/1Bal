@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="TacticalSim.Core/TacticalSim.Core.csproj" />
+  <Project Path="TacticalSim.Tests/TacticalSim.Tests.csproj" />
+</Solution>
