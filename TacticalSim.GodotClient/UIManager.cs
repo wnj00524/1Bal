@@ -21,9 +21,46 @@ namespace TacticalSim.GodotClient
         private RichTextLabel _reportText = null!;
         private bool _hasExportedReport = false;
 
+        private OptionButton _ammoSelectButton = null!;
+        
+        private readonly System.Collections.Generic.List<TacticalSim.Core.Entities.AmmunitionProfile> _ammoProfiles = new()
+        {
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "5.56x45mm NATO",
+                MuzzleVelocity = 900f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.004f, CrossSectionalArea = 0.000024f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.3f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "9x19mm Parabellum",
+                MuzzleVelocity = 380f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.15f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = ".308 Winchester",
+                MuzzleVelocity = 800f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.0097f, CrossSectionalArea = 0.000048f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.4f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "12 Gauge Slug",
+                MuzzleVelocity = 480f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.0283f, CrossSectionalArea = 0.00025f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.5f) }
+            }
+        };
+
         public override void _Ready()
         {
             _simulationManager = GetNode<SimulationManager>(SimulationManagerPath);
+            
+            _ammoSelectButton = GetNode<OptionButton>("Control/Panel/Margin/VBox/HBox/AmmoSelect");
+            foreach (var ammo in _ammoProfiles)
+            {
+                _ammoSelectButton.AddItem(ammo.Name);
+            }
+            _ammoSelectButton.ItemSelected += OnAmmoSelected;
             
             _playPauseButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/PlayBtn");
             _playPauseButton.Pressed += OnPlayPausePressed;
@@ -37,6 +74,16 @@ namespace TacticalSim.GodotClient
             _medTickButton.Pressed += OnMedTickPressed;
             
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+        }
+
+        private void OnAmmoSelected(long index)
+        {
+            _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
+            
+            // Re-simulate from beginning if we change ammo
+            _currentPlaybackTime = 0f;
+            _timelineSlider.Value = 0f;
+            UpdateScrubber(0f);
         }
 
         private void OnMedTickPressed()

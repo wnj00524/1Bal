@@ -43,6 +43,18 @@ namespace TacticalSim.GodotClient
             _serviceProvider = services.BuildServiceProvider();
         }
 
+        public AmmunitionProfile ActiveAmmo { get; set; } = new AmmunitionProfile
+        {
+            Name = "5.56x45mm NATO",
+            MuzzleVelocity = 900f,
+            Ballistics = new BallisticProfile
+            {
+                Mass = 0.004f, 
+                CrossSectionalArea = 0.000024f,
+                DragModel = new StandardDragCurve(0.3f)
+            }
+        };
+
         public void ScrubToTime(float flightTime)
         {
             // 1. Instantiate a fresh Dummy with full health
@@ -50,17 +62,7 @@ namespace TacticalSim.GodotClient
             actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
             Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -10f), actorPhysiology);
             
-            var ammo = new AmmunitionProfile
-            {
-                Name = "5.56x45mm NATO",
-                MuzzleVelocity = 900f,
-                Ballistics = new BallisticProfile
-                {
-                    Mass = 0.004f, 
-                    CrossSectionalArea = 0.000024f,
-                    DragModel = new StandardDragCurve(0.3f)
-                }
-            };
+            var ammo = ActiveAmmo;
 
             var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
             Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
