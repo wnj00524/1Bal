@@ -156,13 +156,16 @@ namespace TacticalSim.Core.Physiology
             // Update projectile state (Position is handled by RK4 external loop)
             projectile.Velocity = rayDirection * exitSpeed;
 
-            return ApplyKineticEnergy(energyLost, projectile.Position);
+            // Direct crush damage from the physical bullet passing through
+            float directCrushVolume = profile.CrossSectionalArea * distanceInMeters;
+
+            return ApplyKineticEnergy(energyLost, projectile.Position, directCrushVolume);
         }
 
         /// <summary>
         /// Applies kinetic energy transfer to the voxel directly (e.g. from adjacent blast).
         /// </summary>
-        public CavitationEvent? ApplyKineticEnergy(float deltaE, Vector3 originPoint)
+        public CavitationEvent? ApplyKineticEnergy(float deltaE, Vector3 originPoint, float directCrushVolume = 0f)
         {
             if (IsDestroyed) return null;
 
@@ -176,15 +179,19 @@ namespace TacticalSim.Core.Physiology
             // Calculate spherical radius of the temporary cavity (V = 4/3 * pi * r^3 -> r = cbrt(V / (4/3 * pi)))
             float cavityRadius = MathF.Cbrt(TemporaryCavityVolume / (4f/3f * MathF.PI));
 
-            // Permanent cavity occurs when accumulated stretch stress exceeds shear strength
+            // Permanent damage consists of direct crush + stretch tearing
+            PermanentCavityVolume += directCrushVolume;
+
+            // Permanent cavity from stretch occurs when accumulated stretch stress exceeds shear strength
             // The threshold scales linearly with Voxel Size since smaller voxels receive proportionally less of the bullet's continuous energy dump
             if (TemporaryCavityVolume > Tissue.ShearStrength * 0.1f * Size) 
             {
                 PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
-                if (PermanentCavityVolume > (Size * Size * Size * 0.5f)) // Destroyed if 50% of volume is carved out
-                {
-                    IsDestroyed = true;
-                }
+            }
+            
+            if (PermanentCavityVolume > (Size * Size * Size * 0.5f)) // Destroyed if 50% of volume is carved out
+            {
+                IsDestroyed = true;
             }
             
             // If cavity radius exceeds half voxel size, we need to propagate
