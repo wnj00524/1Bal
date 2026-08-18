@@ -1,1 +1,17 @@
-Knife Debug: Hit 0 voxels. Final Pos: <0, 1.2585074, -0.1819464>
+--- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---
+
+ORGAN DAMAGE (Volume Destroyed):
+- Muscle: 2313.0 cc
+- Bone: 314.0 cc
+
+SYSTEMIC BLEED RATE: 22010 ml/min
+ESTIMATED TIME TO UNCONSCIOUSNESS: < 1 minute (4 seconds)
+
+--- LIVE VITALS ---
+Blood Volume: 5.00 L / 5.00 L
+Blood Pressure (MAP): 93 mmHg
+Heart Rate: 80 BPM
+Hemorrhage Class: Class1
+SpO2 (Oxygenation): 100%
+Pain Level: 0%
+Consciousness: 100%

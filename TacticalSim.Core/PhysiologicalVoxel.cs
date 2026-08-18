@@ -204,8 +204,10 @@ namespace TacticalSim.Core.Physiology
                 
                 if (localStretchVolume > tearThreshold)
                 {
-                    // 10% of the over-stretched volume becomes permanent tearing
-                    PermanentCavityVolume += localStretchVolume * 0.1f;
+                    // Tissues with high elasticity (like muscle) snap back and suffer less permanent tearing
+                    // Brittle tissues (like liver, bone) suffer massive permanent tearing
+                    float tearingFactor = 0.1f * (1.0f - Tissue.Elasticity);
+                    PermanentCavityVolume += localStretchVolume * tearingFactor;
                 }
             }
             
