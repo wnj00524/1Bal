@@ -124,6 +124,41 @@ namespace TacticalSim.Core.Physiology
             return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)));
         }
 
+        public bool Contains(Vector3 point)
+        {
+            return point.X >= MinBounds.X && point.X <= MaxBounds.X &&
+                   point.Y >= MinBounds.Y && point.Y <= MaxBounds.Y &&
+                   point.Z >= MinBounds.Z && point.Z <= MaxBounds.Z;
+        }
+
+        /// <summary>
+        /// Processes a projectile moving a specific distance through this voxel during a timestep.
+        /// </summary>
+        public CavitationEvent? ProcessPenetrationStep(ref ProjectileState projectile, in BallisticProfile profile, float distanceInMeters)
+        {
+            if (IsDestroyed || distanceInMeters <= 0.000001f) return null;
+
+            Vector3 rayDirection = Vector3.Normalize(projectile.Velocity);
+            float speed = projectile.Velocity.Length();
+            float initialEnergy = 0.5f * profile.Mass * (speed * speed);
+            
+            // Simplified ballistic gel/tissue penetration drag: F_d = 0.5 * rho_tissue * v^2 * Cd * A
+            float dragForce = 0.5f * Tissue.Density * (speed * speed) * profile.DragModel.GetDragCoefficient(0) * profile.CrossSectionalArea;
+            
+            // Work done by drag = Force * distance = Energy lost
+            float energyLost = dragForce * distanceInMeters;
+            energyLost = MathF.Min(energyLost, initialEnergy);
+            
+            // Calculate exit velocity
+            float remainingEnergy = initialEnergy - energyLost;
+            float exitSpeed = MathF.Sqrt((2f * remainingEnergy) / profile.Mass);
+            
+            // Update projectile state (Position is handled by RK4 external loop)
+            projectile.Velocity = rayDirection * exitSpeed;
+
+            return ApplyKineticEnergy(energyLost, projectile.Position);
+        }
+
         /// <summary>
         /// Applies kinetic energy transfer to the voxel directly (e.g. from adjacent blast).
         /// </summary>

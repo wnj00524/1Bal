@@ -96,15 +96,19 @@ namespace TacticalSim.GodotClient
                     var localState = impactState;
                     localState.Position -= Dummy.Position;
                     
-                    var cav = voxel.ProcessPenetration(ref localState, ammo.Ballistics);
-                    
-                    // Sync state back
-                    impactState.Position = localState.Position + Dummy.Position;
-                    impactState.Velocity = localState.Velocity;
-
-                    if (cav.HasValue)
+                    if (voxel.Contains(localState.Position))
                     {
-                        cavEvents.Add((impactState.Time, cav.Value));
+                        float distanceThisStep = localState.Velocity.Length() * simTimeStep;
+                        var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
+                        
+                        // Sync state back
+                        impactState.Velocity = localState.Velocity;
+
+                        if (cav.HasValue)
+                        {
+                            cavEvents.Add((impactState.Time, cav.Value));
+                        }
+                        break; // Can only be in one voxel at a time
                     }
                 }
             }
