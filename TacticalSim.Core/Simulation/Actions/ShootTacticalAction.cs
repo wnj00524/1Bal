@@ -27,7 +27,7 @@ namespace TacticalSim.Core.Simulation.Actions
 
         public override void Execute(float dt)
         {
-            if (State != TacticalActionState.Executing) return;
+            if (State == TacticalActionState.Cancelled || State == TacticalActionState.Failed) return;
 
             ExecutionProgress += dt;
 

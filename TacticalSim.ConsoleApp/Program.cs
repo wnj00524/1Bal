@@ -72,11 +72,50 @@ namespace TacticalSim.ConsoleApp
                         Console.WriteLine($"   -> Final Projectile Position: {fs.Position}");
                         Console.WriteLine($"   -> Flight Time: {fs.Time:F4}s");
                         
-                        // Check if dummy was hit
-                        if (Vector3.Distance(fs.Position, dummy.Position) < 0.5f)
+                        Console.WriteLine("\n--- Terminal Ballistics & Trauma Simulation ---");
+                        // Transform ray to dummy local space for the voxel check. 
+                        // To guarantee a hit on our test rig, we simulate the bullet just before impact on the torso center.
+                        Vector3 torsoCenter = new Vector3(0, 0.25f, 0); 
+                        Vector3 impactDir = Vector3.Normalize(torsoCenter - new Vector3(0, 0.25f, -10f));
+                        
+                        var ammo = shooter.EquippedWeapon.LoadedAmmunition;
+                        var impactState = new ProjectileState 
                         {
-                            Console.WriteLine("   -> Dummy hit! (Scaffold intersection)");
+                            Position = torsoCenter - (impactDir * 0.5f), // 0.5m in front
+                            Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f), // 10% velocity loss in air
+                            Time = fs.Time
+                        };
+                        
+                        float initialEnergy = 0.5f * ammo.Ballistics.Mass * impactState.Velocity.LengthSquared();
+                        Console.WriteLine($"Impact Velocity: {impactState.Velocity.Length():F1} m/s");
+                        Console.WriteLine($"Impact Energy: {initialEnergy:F1} Joules\n");
+                        
+                        int voxelsHit = 0;
+                        foreach(var voxel in dummy.Physiology.RootBodyPart.Voxels)
+                        {
+                            var cavitation = voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                            
+                            // If distance > 0, it means it hit the voxel bounding box, even if no radial cavitation was spawned
+                            if (voxel.DepositedEnergy > 0)
+                            {
+                                voxelsHit++;
+                                Console.WriteLine($"[HIT] Voxel at {voxel.Center} (Tissue: {voxel.Organ})");
+                                Console.WriteLine($"  -> Energy Deposited: {voxel.DepositedEnergy:F1} Joules");
+                                
+                                if (cavitation != null)
+                                {
+                                    Console.WriteLine($"  -> Cavitation Radius: {cavitation.Value.Radius * 1000f:F1} mm");
+                                }
+                                
+                                if (voxel.IsDestroyed) 
+                                {
+                                    Console.WriteLine($"  -> [CRITICAL] Tissue destroyed! Permanent cavitation induced.");
+                                }
+                            }
                         }
+                        
+                        Console.WriteLine($"\nTotal Voxels Penetrated: {voxelsHit}");
+                        Console.WriteLine($"Exit Velocity: {impactState.Velocity.Length():F1} m/s");
                     }
                 }
             };
