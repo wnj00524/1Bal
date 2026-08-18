@@ -18,7 +18,15 @@ namespace TacticalSim.Core
         public static MedicalReport AssessTrauma(IActorPhysiology dummy)
         {
             var report = new MedicalReport();
-            var voxels = dummy.RootBodyPart.Voxels;
+            
+            var allVoxels = new List<PhysiologicalVoxel>();
+            void Collect(BodyPart p) {
+                allVoxels.AddRange(p.Voxels);
+                foreach (var c in p.Children) Collect(c);
+            }
+            Collect(dummy.RootBodyPart);
+
+            var voxels = allVoxels;
 
             float totalLungVolume = 0;
             float destroyedLungVolume = 0;

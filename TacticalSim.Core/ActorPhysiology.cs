@@ -256,9 +256,10 @@ namespace TacticalSim.Core.Physiology
                     if (voxel.IsDestroyed) lungDest += 1f;
                 }
             }
-
             foreach (var child in part.Children)
+            {
                 CalculateRespiratoryDamage(child, ref airwayTotal, ref airwayDest, ref lungTotal, ref lungDest);
+            }
         }
 
         private void UpdateCardiovascularState()
