@@ -22,6 +22,13 @@ namespace TacticalSim.ConsoleApp
                 })
                 .Build();
 
+            var knifeAmmo = new AmmunitionProfile
+            {
+                Name = "Combat Knife (Abdomen)",
+                MuzzleVelocity = 15f,
+                Ballistics = new BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new StandardDragCurve(10.0f) }
+            };
+
             Console.WriteLine("======================================");
             Console.WriteLine(" TacticalSim Ammunition Comparison Test");
             Console.WriteLine("======================================\n");
@@ -57,6 +64,7 @@ namespace TacticalSim.ConsoleApp
 
             SimulateTerminalBallistics(dummy, rifleAmmo);
             SimulateTerminalBallistics(dummy, handgunAmmo);
+            SimulateTerminalBallistics(dummy, knifeAmmo);
         }
 
         static void SimulateTerminalBallistics(TacticalEntity dummy, AmmunitionProfile ammo)

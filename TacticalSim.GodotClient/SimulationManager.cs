@@ -103,9 +103,7 @@ namespace TacticalSim.GodotClient
                 // Look for voxel within 1cm
                 foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
                 {
-                    // Fast check using distance squared
-                    float distSq = (localPos - voxel.Center).LengthSquared();
-                    if (distSq < (0.005f * 0.005f)) // 0.5cm radius for 1cm voxel
+                    if (voxel.Contains(localPos))
                     {
                         var localState = impactState;
                         localState.Position = localPos;
@@ -140,6 +138,10 @@ namespace TacticalSim.GodotClient
                     impactState.Velocity = System.Numerics.Vector3.Zero;
                 }
             }
+
+            int destroyedCount = 0;
+            foreach (var v in Dummy.Physiology.RootBodyPart.Voxels) if (v.IsDestroyed) destroyedCount++;
+            System.IO.File.WriteAllText("MedicalReport.txt", $"Knife Debug: Hit {destroyedCount} voxels. Final Pos: {impactState.Position}");
             
             // 4. Apply accumulated cavitation damage to surrounding tissue
             foreach (var cavEvent in cavEvents)
