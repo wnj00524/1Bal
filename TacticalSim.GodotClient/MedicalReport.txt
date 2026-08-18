@@ -4,8 +4,8 @@ ORGAN DAMAGE (Volume Destroyed):
 - Bone: 198.0 cc
 - Muscle: 15.0 cc
 
-SYSTEMIC BLEED RATE: 9549 ml/min
-ESTIMATED TIME TO UNCONSCIOUSNESS: < 1 minute (9 seconds)
+SYSTEMIC BLEED RATE: 187 ml/min
+ESTIMATED TIME TO UNCONSCIOUSNESS: 8.0 minutes
 
 --- LIVE VITALS ---
 Blood Volume: 5.00 L / 5.00 L

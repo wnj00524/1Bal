@@ -118,7 +118,8 @@ namespace TacticalSim.GodotClient
                 if (_simulationManager.Dummy != null)
                 {
                     _simulationManager.Dummy.Physiology.AdministerAnalgesic(0.5f);
-                    OnMedTickPressed(); // Refresh UI
+                    var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
+                    _reportText.Text = report.AssessmentText;
                 }
             };
             
@@ -153,14 +154,30 @@ namespace TacticalSim.GodotClient
             UpdateScrubber(0f);
         }
 
+        private float _postImpactTime = 0f;
+
         private void OnMedTickPressed()
         {
             if (_simulationManager.Dummy != null)
             {
                 _simulationManager.Dummy.Physiology.TickPhysiology(10.0f);
+                _postImpactTime += 10.0f;
+                UpdateTimeLabel();
                 
                 var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
                 _reportText.Text = report.AssessmentText;
+            }
+        }
+
+        private void UpdateTimeLabel()
+        {
+            if (_postImpactTime > 0f)
+            {
+                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s  [+{_postImpactTime:F0}s]";
+            }
+            else
+            {
+                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
             }
         }
 
@@ -181,7 +198,9 @@ namespace TacticalSim.GodotClient
         private void UpdateScrubber(float time)
         {
             _currentPlaybackTime = time;
-            _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
+            _postImpactTime = 0f;
+            UpdateTimeLabel();
+            
             _simulationManager.ScrubToTime(_currentPlaybackTime);
             
             // Generate live medical assessment
