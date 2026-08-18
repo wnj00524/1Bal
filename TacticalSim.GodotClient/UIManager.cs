@@ -17,6 +17,9 @@ namespace TacticalSim.GodotClient
         private float _currentPlaybackTime = 0f;
         private float _maxPlaybackTime = 0.010f; // 10ms to see cavitation collapse
 
+        private RichTextLabel _reportText = null!;
+        private bool _hasExportedReport = false;
+
         public override void _Ready()
         {
             _simulationManager = GetNode<SimulationManager>(SimulationManagerPath);
@@ -28,6 +31,7 @@ namespace TacticalSim.GodotClient
             _timelineSlider.ValueChanged += OnSliderValueChanged;
             
             _timeLabel = GetNode<Label>("Control/Panel/Margin/VBox/HBox/TimeLbl");
+            _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
         }
 
         private void OnPlayPausePressed()
@@ -49,14 +53,32 @@ namespace TacticalSim.GodotClient
             _currentPlaybackTime = time;
             _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
             _simulationManager.ScrubToTime(_currentPlaybackTime);
+            
+            // Generate live medical assessment
+            if (_simulationManager.Dummy != null)
+            {
+                var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
+                _reportText.Text = report.AssessmentText;
+                
+                // Export report when reaching the end of the timeline
+                if (time >= _maxPlaybackTime && !_hasExportedReport)
+                {
+                    System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
+                    _hasExportedReport = true;
+                }
+                else if (time < _maxPlaybackTime)
+                {
+                    _hasExportedReport = false; // Reset if scrubbed backward
+                }
+            }
         }
 
         public override void _Process(double delta)
         {
             if (_isPlaying)
             {
-                // Playback speed: extremely slow motion for 1.5ms flight
-                float nextTime = _currentPlaybackTime + (float)delta * 0.0005f; 
+                // Playback speed: extremely slow motion for 10ms flight/cavitation
+                float nextTime = _currentPlaybackTime + (float)delta * 0.005f; 
                 if (nextTime >= _maxPlaybackTime)
                 {
                     nextTime = _maxPlaybackTime;
