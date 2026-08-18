@@ -123,8 +123,7 @@ namespace TacticalSim.GodotClient
                 _bulletMesh.LookAt(new Godot.Vector3(targetPt.X, targetPt.Y, targetPt.Z), Godot.Vector3.Up);
             }
 
-            _voxelRenderer.RefreshVoxels(Dummy.Physiology);
-            _voxelRenderer.DrawCavities(cavEvents, flightTime, Dummy.Position);
+            _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
         }
     }
 }

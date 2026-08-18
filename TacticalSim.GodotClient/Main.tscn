@@ -81,12 +81,12 @@ text = "Play"
 [node name="Slider" type="HSlider" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3
-max_value = 0.0015
+max_value = 0.01
 step = 1e-05
 
 [node name="TimeLbl" type="Label" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
 layout_mode = 2
-text = "0.0000 / 0.0015 s"
+text = "0.0000 / 0.0100 s"
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 2, 2, 3)

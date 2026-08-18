@@ -54,58 +54,45 @@ namespace TacticalSim.GodotClient
             }
         }
 
-        public void RefreshVoxels(IActorPhysiology dummyPhysiology)
+        public void RefreshVoxels(IActorPhysiology dummyPhysiology, List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime, System.Numerics.Vector3 entityPos)
         {
             var voxels = dummyPhysiology.RootBodyPart.Voxels;
             if (voxels.Count != _voxelMeshes.Count) return;
 
+            float cavityLifetime = 0.005f; // 5ms
+
             for (int i = 0; i < voxels.Count; i++)
             {
-                _voxelMeshes[i].Visible = !voxels[i].IsDestroyed;
-            }
-        }
+                var voxel = voxels[i];
+                if (voxel.IsDestroyed) 
+                {
+                    _voxelMeshes[i].Visible = false;
+                    continue;
+                }
 
-        private List<MeshInstance3D> _cavitySpheres = new List<MeshInstance3D>();
+                bool isTemporarilyDisplaced = false;
+                System.Numerics.Vector3 globalVoxelCenter = entityPos + voxel.Center;
 
-        public void DrawCavities(List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime, System.Numerics.Vector3 entityPos)
-        {
-            // Clear old spheres
-            foreach (var sphere in _cavitySpheres)
-            {
-                sphere.QueueFree();
-            }
-            _cavitySpheres.Clear();
+                foreach (var ev in cavEvents)
+                {
+                    float age = currentTime - ev.Time;
+                    if (age < 0 || age > cavityLifetime) continue;
 
-            // Temporary stretch cavity lasts roughly 5-10ms (0.005 to 0.010 seconds)
-            float cavityLifetime = 0.005f;
+                    // Scale creates a smooth pulse out and back in
+                    float scale = System.MathF.Sin((age / cavityLifetime) * System.MathF.PI);
+                    float currentRadius = ev.Cav.Radius * scale;
+                    
+                    System.Numerics.Vector3 globalOrigin = entityPos + ev.Cav.Origin;
+                    float distSq = (globalVoxelCenter - globalOrigin).LengthSquared();
+                    
+                    if (distSq < (currentRadius * currentRadius))
+                    {
+                        isTemporarilyDisplaced = true;
+                        break;
+                    }
+                }
 
-            foreach (var ev in cavEvents)
-            {
-                float age = currentTime - ev.Time;
-                if (age < 0 || age > cavityLifetime) continue; // Skip if collapsed
-
-                // Scale shrinks from 1.0 down to 0 over cavityLifetime
-                float scale = 1.0f - (age / cavityLifetime);
-
-                var meshInstance = new MeshInstance3D();
-                var sphereMesh = new SphereMesh();
-                
-                float rad = ev.Cav.Radius * scale * 2.0f; // diameter
-                sphereMesh.Radius = rad * 0.5f;
-                sphereMesh.Height = rad;
-
-                var material = new StandardMaterial3D();
-                material.AlbedoColor = new Color(1.0f, 1.0f, 1.0f, 0.3f); // White translucent pulse
-                material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                material.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-                
-                sphereMesh.Material = material;
-                meshInstance.Mesh = sphereMesh;
-                
-                System.Numerics.Vector3 globalOrigin = entityPos + ev.Cav.Origin;
-                meshInstance.Position = new Godot.Vector3(globalOrigin.X, globalOrigin.Y, globalOrigin.Z);
-                AddChild(meshInstance);
-                _cavitySpheres.Add(meshInstance);
+                _voxelMeshes[i].Visible = !isTemporarilyDisplaced;
             }
         }
 

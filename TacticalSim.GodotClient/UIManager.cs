@@ -15,7 +15,7 @@ namespace TacticalSim.GodotClient
         
         private bool _isPlaying = false;
         private float _currentPlaybackTime = 0f;
-        private float _maxPlaybackTime = 0.0015f; // 1.5ms bullet flight time
+        private float _maxPlaybackTime = 0.010f; // 10ms to see cavitation collapse
 
         public override void _Ready()
         {
