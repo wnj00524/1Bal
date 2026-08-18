@@ -1,0 +1,17 @@
+--- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---
+
+ORGAN DAMAGE (Volume Destroyed):
+- Muscle: 4.0 cc
+- Bone: 5.0 cc
+- Airway: 4.0 cc
+
+SYSTEMIC BLEED RATE: 492 ml/min
+ESTIMATED TIME TO UNCONSCIOUSNESS: 3.0 minutes
+
+--- LIVE VITALS ---
+Blood Volume: 5.00 L / 5.00 L
+Blood Pressure (MAP): 93 mmHg
+Heart Rate: 80 BPM
+Hemorrhage Class: Class1
+SpO2 (Oxygenation): 100%
+Consciousness: 100%

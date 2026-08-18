@@ -135,6 +135,15 @@ namespace TacticalSim.Core
             sb.AppendLine($"Hemorrhage Class: {dummy.CurrentHemorrhageClass}");
             sb.AppendLine($"SpO2 (Oxygenation): {(dummy.BloodOxygenation*100f):F0}%");
             
+            sb.AppendLine($"Pain Level: {(dummy.PainLevel*100f):F0}%");
+            if (dummy.ShockLevel > 0f)
+                sb.AppendLine($"Shock Level: {(dummy.ShockLevel*100f):F0}%");
+                
+            if (dummy.PainLevel > 0.8f)
+                sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE AGONY (Accuracy Degraded) <<<");
+            if (dummy.ShockLevel > 0.5f)
+                sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE SHOCK DETECTED <<<");
+            
             if (dummy.ConsciousnessLevel <= 0f)
             {
                 sb.AppendLine("Consciousness: [UNCONSCIOUS]");

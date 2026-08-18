@@ -91,6 +91,17 @@ namespace TacticalSim.GodotClient
             _medTickButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/MedTickBtn");
             _medTickButton.Pressed += OnMedTickPressed;
             
+            var hbox = GetNode<Godot.BoxContainer>("Control/Panel/Margin/VBox/HBox");
+            var analgesicBtn = new Godot.Button { Text = "Give Analgesic" };
+            hbox.AddChild(analgesicBtn);
+            analgesicBtn.Pressed += () => {
+                if (_simulationManager.Dummy != null)
+                {
+                    _simulationManager.Dummy.Physiology.AdministerAnalgesic(0.5f);
+                    OnMedTickPressed(); // Refresh UI
+                }
+            };
+            
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
         }
 

@@ -97,6 +97,10 @@ namespace TacticalSim.Core.Physiology
                     voxel.ApplyKineticEnergy(kineticEnergy, impactPoint);
                 }
             }
+            foreach (var child in Children)
+            {
+                child.ApplyTrauma(impactPoint, kineticEnergy);
+            }
         }
     }
 
@@ -117,6 +121,11 @@ namespace TacticalSim.Core.Physiology
         float AirwayObstruction { get; } // 0.0 to 1.0
         float AlveolarBloodAccumulation { get; } // ml
         
+        // Nervous System
+        float PainLevel { get; }
+        float ShockLevel { get; }
+        void AdministerAnalgesic(float strength);
+        
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -135,6 +144,15 @@ namespace TacticalSim.Core.Physiology
         public float BloodOxygenation { get; private set; } = 1.0f;
         public float AirwayObstruction { get; private set; } = 0.0f;
         public float AlveolarBloodAccumulation { get; private set; } = 0.0f;
+
+        public float PainLevel { get; private set; } = 0.0f;
+        public float ShockLevel { get; private set; } = 0.0f;
+        private float _analgesicLevel = 0.0f;
+
+        public void AdministerAnalgesic(float strength)
+        {
+            _analgesicLevel += strength;
+        }
 
         public void SetRoot(BodyPart root) => RootBodyPart = root;
 
@@ -155,6 +173,7 @@ namespace TacticalSim.Core.Physiology
             TickIschemia(RootBodyPart, dt);
             UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
+            UpdateNervousSystemState(dt);
         }
 
         private float CalculateBleedRate(BodyPart part, out float airwayBleed)
@@ -332,6 +351,43 @@ namespace TacticalSim.Core.Physiology
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f;
             }
+        }
+
+        private void UpdateNervousSystemState(float dt)
+        {
+            float rawPain = CalculateNociception(RootBodyPart);
+            
+            if (_analgesicLevel > 0)
+            {
+                _analgesicLevel -= 0.01f * dt; // Slow decay
+                _analgesicLevel = MathF.Max(0f, _analgesicLevel);
+            }
+            
+            float endorphinBuffer = 0.1f;
+            
+            PainLevel = MathF.Max(0f, rawPain - endorphinBuffer - _analgesicLevel);
+            PainLevel = MathF.Min(1.0f, PainLevel);
+            
+            float bloodLossRatio = (_baselineBloodVolume - TotalBloodVolume) / _baselineBloodVolume;
+            ShockLevel = MathF.Min(1.0f, (PainLevel * 0.5f) + (bloodLossRatio * 2.0f));
+            
+        }
+
+        private float CalculateNociception(BodyPart part)
+        {
+            float pain = 0f;
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.IsDestroyed || voxel.DepositedEnergy > 0)
+                {
+                    pain += (voxel.DepositedEnergy * voxel.Tissue.PainReceptorDensity) * 0.001f;
+                }
+            }
+            foreach (var child in part.Children)
+            {
+                pain += CalculateNociception(child);
+            }
+            return pain;
         }
 
         public void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint)

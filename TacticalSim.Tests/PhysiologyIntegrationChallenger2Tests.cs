@@ -197,10 +197,10 @@ namespace TacticalSim.Tests
 
             dummy.ProcessImpact(Vector3.UnitZ, kineticEnergy, heartHitPoint);
 
-            // Verify arterial bleed rate on root body part increased significantly
-            Assert.True(dummy.RootBodyPart.ArterialBleedRate > 5.0f, "Heart trauma must produce heavy arterial bleeding.");
+            // Verify active bleed rate on root body part increased significantly
+            Assert.True(dummy.RootBodyPart.GetActiveBleedRate() > 5.0f, "Heart trauma must produce heavy arterial bleeding.");
 
-            float initialBleed = dummy.RootBodyPart.ArterialBleedRate;
+            float initialBleed = dummy.RootBodyPart.GetActiveBleedRate();
 
             // Tick 2.0 seconds in resolver
             resolver.Tick(2.0f);

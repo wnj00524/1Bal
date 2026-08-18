@@ -9,6 +9,7 @@ namespace TacticalSim.Core.Physiology
         public float Density; // kg/m^3
         public float Elasticity; // Resistance to permanent tearing from stretch
         public float ShearStrength; // MPa, resistance to permanent tearing
+        public float PainReceptorDensity;
     }
     
     public struct CavitationEvent
