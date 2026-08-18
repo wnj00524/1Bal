@@ -46,5 +46,18 @@ namespace TacticalSim.Core.Physiology
             Elasticity = 0.1f, // Very low elasticity
             ShearStrength = 0.05f
         };
+        public static readonly TissueProperties Heart = new TissueProperties
+        {
+            Density = 1060f,
+            Elasticity = 0.6f, // Muscular but fluid-filled
+            ShearStrength = 0.4f
+        };
+
+        public static readonly TissueProperties Stomach = new TissueProperties
+        {
+            Density = 1000f,
+            Elasticity = 0.5f,
+            ShearStrength = 0.2f
+        };
     }
 }

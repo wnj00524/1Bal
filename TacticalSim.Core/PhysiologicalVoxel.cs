@@ -29,6 +29,7 @@ namespace TacticalSim.Core.Physiology
         public Vector3 MaxBounds { get; }
         
         public TissueProperties Tissue;
+        public OrganType Organ { get; }
         
         // Damage state
         public float DepositedEnergy { get; private set; }
@@ -36,11 +37,12 @@ namespace TacticalSim.Core.Physiology
         public float PermanentCavityVolume { get; private set; }
         public bool IsDestroyed { get; private set; }
         
-        public PhysiologicalVoxel(Vector3 center, float size, TissueProperties tissue)
+        public PhysiologicalVoxel(Vector3 center, float size, TissueProperties tissue, OrganType organ = OrganType.None)
         {
             Center = center;
             Size = size;
             Tissue = tissue;
+            Organ = organ;
             
             float halfSize = size / 2f;
             MinBounds = new Vector3(center.X - halfSize, center.Y - halfSize, center.Z - halfSize);
