@@ -50,7 +50,30 @@ namespace TacticalSim.Core.Physiology
             {
                 return 0f; // Tourniquet completely halts distal bleeding
             }
-            return ArterialBleedRate + VenousBleedRate;
+            
+            float activeRate = ArterialBleedRate + VenousBleedRate;
+            
+            // Dynamically calculate from destroyed voxels
+            foreach (var voxel in Voxels)
+            {
+                if (voxel.IsDestroyed)
+                {
+                    float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
+                    float rate = voxel.Organ switch
+                    {
+                        OrganType.Heart => 10.0f,
+                        OrganType.Liver => 2.0f,
+                        OrganType.Lung => 0.5f,
+                        OrganType.Muscle => 0.05f,
+                        OrganType.Stomach => 0.1f,
+                        OrganType.Bone => 0.8f,
+                        _ => 0.05f
+                    };
+                    activeRate += rate * volCc;
+                }
+            }
+            
+            return activeRate;
         }
 
         private bool IsExtremity(BodyPartType type) =>
@@ -65,33 +88,6 @@ namespace TacticalSim.Core.Physiology
                 if (!voxel.IsDestroyed && Vector3.Distance(voxel.Center, impactPoint) < voxel.Size)
                 {
                     voxel.ApplyKineticEnergy(kineticEnergy, impactPoint);
-
-                    if (voxel.IsDestroyed)
-                    {
-                        float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
-                        
-                        // Hemorrhage routing based on tissue type
-                        float rate = voxel.Organ switch
-                        {
-                            OrganType.Heart => 10.0f,   // Catastrophic arterial
-                            OrganType.Liver => 2.0f,    // Massive arterial/venous
-                            OrganType.Lung => 0.5f,     // Moderate
-                            OrganType.Muscle => 0.05f,  // Minor capillary/venous
-                            OrganType.Stomach => 0.1f,
-                            OrganType.Bone => 0.8f,     // Marrow bleeding
-                            _ => 0.05f
-                        };
-
-                        // Simplified split: deep organs are mostly arterial, superficial is venous
-                        if (voxel.Organ == OrganType.Heart || voxel.Organ == OrganType.Liver || voxel.Organ == OrganType.Lung)
-                        {
-                            ArterialBleedRate += rate * volCc;
-                        }
-                        else
-                        {
-                            VenousBleedRate += rate * volCc;
-                        }
-                    }
                 }
             }
         }
