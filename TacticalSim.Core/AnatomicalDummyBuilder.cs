@@ -7,7 +7,7 @@ namespace TacticalSim.Core
     {
         public static IActorPhysiology BuildDummy()
         {
-            var physiology = new DummyPhysiology();
+            var physiology = new TacticalActorPhysiology();
             
             var root = new BodyPart { Type = BodyPartType.Thorax };
             physiology.SetRoot(root);
@@ -114,42 +114,6 @@ namespace TacticalSim.Core
 
             // Default to bulk Muscle/Fat padding
             return (TissueRegistry.Muscle, OrganType.Muscle);
-        }
-    }
-    
-    // Scaffolding implementation of IActorPhysiology
-    public class DummyPhysiology : IActorPhysiology
-    {
-        public BodyPart RootBodyPart { get; private set; } = null!;
-        public float TotalBloodVolume { get; private set; } = 5000f; // 5L
-        public float ConsciousnessLevel { get; private set; } = 1.0f;
-        
-        public void SetRoot(BodyPart root) => RootBodyPart = root;
-
-        public void TickPhysiology(float dt)
-        {
-            float totalBleedRate = CalculateBleedRate(RootBodyPart);
-            if (totalBleedRate > 0)
-            {
-                TotalBloodVolume -= totalBleedRate * dt;
-                
-                // Simplified MARCH triage consciousness model
-                if (TotalBloodVolume < 4000f)
-                    ConsciousnessLevel = MathF.Max(0, (TotalBloodVolume - 2500f) / 1500f);
-            }
-        }
-        
-        private float CalculateBleedRate(BodyPart part)
-        {
-            float rate = part.CurrentBleedRate;
-            foreach (var child in part.Children)
-                rate += CalculateBleedRate(child);
-            return rate;
-        }
-
-        public void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint)
-        {
-            RootBodyPart.ApplyTrauma(hitPoint, kineticEnergy);
         }
     }
 }

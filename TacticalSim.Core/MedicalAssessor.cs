@@ -40,26 +40,14 @@ namespace TacticalSim.Core
                     
                     report.DestroyedVolumeCc[voxel.Organ] += volCc;
 
-                    // Hemorrhage modeling: Bleed rates (ml / sec per cc destroyed)
-                    float bleedRate = voxel.Organ switch
-                    {
-                        OrganType.Heart => 10.0f,   // Catastrophic
-                        OrganType.Liver => 2.0f,    // Massive
-                        OrganType.Lung => 0.5f,     // Moderate/High
-                        OrganType.Muscle => 0.05f,  // Minor capillary/venous
-                        OrganType.Stomach => 0.1f,
-                        OrganType.Bone => 0.8f,     // Marrow bleeding
-                        _ => 0.05f
-                    };
-
-                    totalBleedRateSec += bleedRate * volCc;
-                    
                     if (voxel.Organ == OrganType.Lung)
                     {
                         destroyedLungVolume += volCc;
                     }
                 }
             }
+            
+            totalBleedRateSec = GetTotalActiveBleedRate(dummy.RootBodyPart);
 
             report.TotalBleedRateMlPerMin = totalBleedRateSec * 60f;
             report.LungCapacityLostPercentage = totalLungVolume > 0 ? (destroyedLungVolume / totalLungVolume) * 100f : 0;
@@ -113,6 +101,14 @@ namespace TacticalSim.Core
 
             report.AssessmentText = sb.ToString();
             return report;
+        }
+
+        private static float GetTotalActiveBleedRate(BodyPart part)
+        {
+            float rate = part.GetActiveBleedRate();
+            foreach (var child in part.Children)
+                rate += GetTotalActiveBleedRate(child);
+            return rate;
         }
     }
 }

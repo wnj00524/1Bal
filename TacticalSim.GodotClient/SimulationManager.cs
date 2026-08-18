@@ -46,7 +46,7 @@ namespace TacticalSim.GodotClient
         public void ScrubToTime(float flightTime)
         {
             // 1. Instantiate a fresh Dummy with full health
-            var actorPhysiology = new DummyPhysiology();
+            var actorPhysiology = new TacticalActorPhysiology();
             actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
             Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -10f), actorPhysiology);
             
