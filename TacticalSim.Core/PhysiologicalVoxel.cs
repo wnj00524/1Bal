@@ -135,14 +135,14 @@ namespace TacticalSim.Core.Physiology
             
             // Temporary cavity volume calculation
             // Energy creates a cavity volume inversely proportional to elasticity and density
-            float stretchFactor = deltaE / (Tissue.Density * Tissue.Elasticity + 1e-4f);
+            float stretchFactor = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
             TemporaryCavityVolume += stretchFactor;
             
             // Calculate spherical radius of the temporary cavity (V = 4/3 * pi * r^3 -> r = cbrt(V / (4/3 * pi)))
             float cavityRadius = MathF.Cbrt(TemporaryCavityVolume / (4f/3f * MathF.PI));
 
             // Permanent cavity occurs when stretch stress exceeds shear strength
-            if (stretchFactor > Tissue.ShearStrength * 0.2f) // Calibrated conversion factor
+            if (stretchFactor > Tissue.ShearStrength * 0.005f) // Calibrated conversion factor
             {
                 PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
                 if (PermanentCavityVolume > (Size * Size * Size)) 
