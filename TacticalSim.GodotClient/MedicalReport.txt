@@ -1,1 +1,9 @@
-Knife Debug: Hit 21 voxels. Final Pos: <0, 1.0927334, 0.23488526>
+--- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---
+
+No significant tissue destruction detected.
+
+--- VITALS ---
+Blood Volume: 5.00 L
+Blood Pressure (MAP): 93 mmHg
+Heart Rate: 80 BPM
+Consciousness: 100%

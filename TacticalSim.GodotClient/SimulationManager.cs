@@ -52,17 +52,28 @@ namespace TacticalSim.GodotClient
             }
         };
 
+        public float TargetDistance { get; private set; } = 10f;
+
         public void ScrubToTime(float flightTime)
         {
+            var ammo = ActiveAmmo;
+            
+            TargetDistance = ammo.Name.Contains("Knife") ? 1.0f : 10.0f;
+
             // 1. Instantiate a fresh Dummy with full health
             var actorPhysiology = new TacticalActorPhysiology();
             actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
-            Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -10f), actorPhysiology);
+            Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -TargetDistance), actorPhysiology);
             
-            var ammo = ActiveAmmo;
-
             var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
             Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
+            
+            // Move the visual shooter circle dynamically
+            var shooterCircle = GetNodeOrNull<Godot.Node3D>("../ShooterCircle");
+            if (shooterCircle != null)
+            {
+                shooterCircle.Position = new Godot.Vector3(0, 0, -TargetDistance);
+            }
             
             // 2. Setup initial bullet state right before impact
             float aimYOffset = 0.25f; // Chest

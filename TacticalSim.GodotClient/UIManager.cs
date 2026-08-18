@@ -112,8 +112,9 @@ namespace TacticalSim.GodotClient
         {
             _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
             
-            // Calculate time to travel 10 meters + a little extra for pass-through/cavitation
-            _maxPlaybackTime = (10.0f / _simulationManager.ActiveAmmo.MuzzleVelocity) + 0.005f;
+            // Calculate time to travel to the target + a little extra for pass-through/cavitation
+            float dist = _simulationManager.ActiveAmmo.Name.Contains("Knife") ? 1.0f : 10.0f;
+            _maxPlaybackTime = (dist / _simulationManager.ActiveAmmo.MuzzleVelocity) + 0.005f;
 
             _timelineSlider.MaxValue = _maxPlaybackTime;
             
