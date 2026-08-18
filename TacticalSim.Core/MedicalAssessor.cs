@@ -93,16 +93,30 @@ namespace TacticalSim.Core
             if (report.LungCapacityLostPercentage > 5f)
                 sb.AppendLine($">>> RESPIRATORY ALARM: {report.LungCapacityLostPercentage:F1}% LUNG CAPACITY LOST (TENSION PNEUMOTHORAX RISK) <<<");
 
-            if (report.DestroyedVolumeCc.ContainsKey(OrganType.Heart) || report.LungCapacityLostPercentage > 5f)
+            if (dummy.AirwayObstruction > 0.1f)
+            {
+                if (dummy.AirwayObstruction >= 1.0f)
+                    sb.AppendLine(">>> ASPHYXIATION ALARM: COMPLETE AIRWAY OBSTRUCTION <<<");
+                else
+                    sb.AppendLine($">>> AIRWAY COMPROMISED: {(dummy.AirwayObstruction*100f):F0}% OBSTRUCTED <<<");
+            }
+            
+            if (dummy.BloodOxygenation < 0.85f)
+                sb.AppendLine($">>> HYPOXIA ALARM: SpO2 DANGEROUSLY LOW ({(dummy.BloodOxygenation*100f):F0}%) <<<");
+
+            if (report.DestroyedVolumeCc.ContainsKey(OrganType.Heart) || report.LungCapacityLostPercentage > 5f || dummy.AirwayObstruction > 0.1f || dummy.BloodOxygenation < 0.85f)
                 sb.AppendLine();
 
             sb.AppendLine($"SYSTEMIC BLEED RATE: {report.TotalBleedRateMlPerMin:F0} ml/min");
             
+            if (dummy.AlveolarBloodAccumulation > 0f)
+                sb.AppendLine($"ALVEOLAR BLOOD ACCUMULATION: {dummy.AlveolarBloodAccumulation:F1} ml");
+
             if (etuMin < 1.0f)
                 sb.AppendLine($"ESTIMATED TIME TO UNCONSCIOUSNESS: < 1 minute ({(etuMin*60f):F0} seconds)");
-            else if (etuMin == float.PositiveInfinity)
+            else if (etuMin == float.PositiveInfinity && dummy.BloodOxygenation >= 0.85f)
                 sb.AppendLine("ESTIMATED TIME TO UNCONSCIOUSNESS: Stable");
-            else
+            else if (etuMin != float.PositiveInfinity)
                 sb.AppendLine($"ESTIMATED TIME TO UNCONSCIOUSNESS: {etuMin:F1} minutes");
 
             sb.AppendLine();
@@ -111,6 +125,7 @@ namespace TacticalSim.Core
             sb.AppendLine($"Blood Pressure (MAP): {dummy.MeanArterialPressureMmhg:F0} mmHg");
             sb.AppendLine($"Heart Rate: {dummy.HeartRateBpm:F0} BPM");
             sb.AppendLine($"Hemorrhage Class: {dummy.CurrentHemorrhageClass}");
+            sb.AppendLine($"SpO2 (Oxygenation): {(dummy.BloodOxygenation*100f):F0}%");
             
             if (dummy.ConsciousnessLevel <= 0f)
             {

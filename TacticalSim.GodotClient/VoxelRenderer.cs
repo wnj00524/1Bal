@@ -40,14 +40,14 @@ namespace TacticalSim.GodotClient
             // 1. Create the Abstract Body Proxy (Capsule)
             _abstractBodyProxy = new MeshInstance3D
             {
-                Mesh = new CapsuleMesh { Radius = 0.25f, Height = 0.8f }, // Approximate torso dimensions
+                Mesh = new CapsuleMesh { Radius = 0.25f, Height = 0.95f }, // Approximate torso+head dimensions
                 MaterialOverride = new StandardMaterial3D
                 {
                     AlbedoColor = new Color(0.3f, 0.5f, 0.8f, 0.2f), // Translucent blue
                     Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                     CullMode = BaseMaterial3D.CullModeEnum.Disabled
                 },
-                Position = new Godot.Vector3(dummy.Position.X, dummy.Position.Y + 0.4f, dummy.Position.Z) // Center torso
+                Position = new Godot.Vector3(dummy.Position.X, dummy.Position.Y + 0.45f, dummy.Position.Z) // Center torso+head
             };
             
             if (RenderMode == VisualRenderMode.Abstract)

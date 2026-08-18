@@ -68,8 +68,11 @@ namespace TacticalSim.GodotClient
             Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
             
             // 2. Setup initial bullet state right before impact
-            // Dummy is at <0, 1.0, 0>. Torso center locally is <0, 0.25, 0>. So global torso center is <0, 1.25, 0>.
-            float aimYOffset = ammo.Name.Contains("Abdomen") ? 0.10f : 0.25f;
+            float aimYOffset = 0.25f; // Chest
+            if (ammo.Name.Contains("Abdomen")) aimYOffset = 0.10f;
+            else if (ammo.Name.Contains("Neck")) aimYOffset = 0.58f;
+            else if (ammo.Name.Contains("Head")) aimYOffset = 0.76f;
+            
             System.Numerics.Vector3 globalTorsoCenter = Dummy.Position + new System.Numerics.Vector3(0, aimYOffset, 0); 
             System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTorsoCenter - new System.Numerics.Vector3(0, globalTorsoCenter.Y, -10f));
             

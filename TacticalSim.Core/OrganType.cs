@@ -12,6 +12,9 @@ namespace TacticalSim.Core.Physiology
         Spleen,
         Kidney,
         Intestines,
+        Airway,
+        Mouth,
+        Eye,
         Brain
     }
 }

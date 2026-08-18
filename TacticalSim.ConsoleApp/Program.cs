@@ -72,7 +72,11 @@ namespace TacticalSim.ConsoleApp
             Console.WriteLine($"--- Terminal Ballistics: {ammo.Name} ---");
             
             // Setup initial bullet state right before impact
-            float aimYOffset = ammo.Name.Contains("Abdomen") ? 0.10f : 0.25f;
+            float aimYOffset = 0.25f; // Chest
+            if (ammo.Name.Contains("Abdomen")) aimYOffset = 0.10f;
+            else if (ammo.Name.Contains("Neck")) aimYOffset = 0.58f;
+            else if (ammo.Name.Contains("Head")) aimYOffset = 0.76f;
+            
             Vector3 globalTorsoCenter = dummy.Position + new Vector3(0, aimYOffset, 0); 
             Vector3 impactDir = Vector3.Normalize(globalTorsoCenter - new Vector3(0, globalTorsoCenter.Y, -10f));
             

@@ -7,6 +7,7 @@ namespace TacticalSim.Core.Physiology
     public enum BodyPartType
     {
         Head,
+        Neck,
         Thorax,
         Abdomen,
         LeftArm,
@@ -70,6 +71,9 @@ namespace TacticalSim.Core.Physiology
                         OrganType.Muscle => 0.05f,
                         OrganType.Stomach => 0.1f,
                         OrganType.Bone => 0.8f,
+                        OrganType.Brain => 5.0f, // Highly vascular, intracranial pressure ignores
+                        OrganType.Airway => 1.0f, // Bleeds into lungs
+                        OrganType.Mouth => 0.5f, // Bleeds into airway
                         _ => 0.05f
                     };
                     activeRate += rate * volCc;
@@ -107,6 +111,11 @@ namespace TacticalSim.Core.Physiology
         float HeartRateBpm { get; }
         float MeanArterialPressureMmhg { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
+
+        // Respiratory System
+        float BloodOxygenation { get; } // 1.0 down to 0.0
+        float AirwayObstruction { get; } // 0.0 to 1.0
+        float AlveolarBloodAccumulation { get; } // ml
         
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
@@ -123,25 +132,53 @@ namespace TacticalSim.Core.Physiology
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
+        public float BloodOxygenation { get; private set; } = 1.0f;
+        public float AirwayObstruction { get; private set; } = 0.0f;
+        public float AlveolarBloodAccumulation { get; private set; } = 0.0f;
+
         public void SetRoot(BodyPart root) => RootBodyPart = root;
 
         public void TickPhysiology(float dt)
         {
-            float totalBleedRate = CalculateBleedRate(RootBodyPart);
+            float totalBleedRate = CalculateBleedRate(RootBodyPart, out float airwayBleedRate);
             if (totalBleedRate > 0)
             {
                 TotalBloodVolume -= totalBleedRate * dt;
             }
 
+            // ABC: Airway bleeding pools into the lungs
+            if (airwayBleedRate > 0)
+            {
+                AlveolarBloodAccumulation += airwayBleedRate * dt;
+            }
+
             TickIschemia(RootBodyPart, dt);
+            UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
         }
 
-        private float CalculateBleedRate(BodyPart part)
+        private float CalculateBleedRate(BodyPart part, out float airwayBleed)
         {
             float rate = part.GetActiveBleedRate();
+            float airwayRate = 0f;
+            
+            // Check for airway/mouth destruction which bleeds into lungs
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.IsDestroyed && (voxel.Organ == OrganType.Airway || voxel.Organ == OrganType.Mouth))
+                {
+                    float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f;
+                    airwayRate += (voxel.Organ == OrganType.Airway ? 1.0f : 0.5f) * volCc;
+                }
+            }
+
             foreach (var child in part.Children)
-                rate += CalculateBleedRate(child);
+            {
+                rate += CalculateBleedRate(child, out float childAirwayBleed);
+                airwayRate += childAirwayBleed;
+            }
+
+            airwayBleed = airwayRate;
             return rate;
         }
 
@@ -157,6 +194,71 @@ namespace TacticalSim.Core.Physiology
             }
             foreach (var child in part.Children)
                 TickIschemia(child, dt);
+        }
+
+        private void UpdateRespiratoryState(float dt)
+        {
+            // 1. Direct Airway Trauma
+            float directObstruction = 0f;
+            float totalAirwayVoxels = 0f;
+            float destroyedAirwayVoxels = 0f;
+            float lungCapacityLost = 0f;
+            float totalLungVoxels = 0f;
+            float destroyedLungVoxels = 0f;
+
+            CalculateRespiratoryDamage(RootBodyPart, ref totalAirwayVoxels, ref destroyedAirwayVoxels, ref totalLungVoxels, ref destroyedLungVoxels);
+
+            if (totalAirwayVoxels > 0)
+                directObstruction = destroyedAirwayVoxels / totalAirwayVoxels;
+
+            // 2. Blood Obstruction
+            // Assume 500ml of blood in lungs causes complete obstruction
+            float bloodObstruction = MathF.Min(1.0f, AlveolarBloodAccumulation / 500f);
+
+            AirwayObstruction = MathF.Max(directObstruction, bloodObstruction);
+
+            // 3. Lung Capacity
+            if (totalLungVoxels > 0)
+                lungCapacityLost = destroyedLungVoxels / totalLungVoxels;
+            float remainingCapacity = 1.0f - lungCapacityLost;
+
+            // 4. Respiration Effectiveness
+            float effectiveness = (1.0f - AirwayObstruction) * remainingCapacity;
+
+            // 5. Hypoxia Calculation
+            if (effectiveness < 0.8f) // Demand threshold
+            {
+                // Deplete oxygen
+                float depletionRate = (0.8f - effectiveness) * 0.05f; // Drops SpO2 over time
+                BloodOxygenation -= depletionRate * dt;
+                BloodOxygenation = MathF.Max(0f, BloodOxygenation);
+            }
+            else
+            {
+                // Recover oxygen
+                BloodOxygenation += 0.05f * dt;
+                BloodOxygenation = MathF.Min(1.0f, BloodOxygenation);
+            }
+        }
+
+        private void CalculateRespiratoryDamage(BodyPart part, ref float airwayTotal, ref float airwayDest, ref float lungTotal, ref float lungDest)
+        {
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.Organ == OrganType.Airway)
+                {
+                    airwayTotal += 1f;
+                    if (voxel.IsDestroyed) airwayDest += 1f;
+                }
+                else if (voxel.Organ == OrganType.Lung)
+                {
+                    lungTotal += 1f;
+                    if (voxel.IsDestroyed) lungDest += 1f;
+                }
+            }
+
+            foreach (var child in part.Children)
+                CalculateRespiratoryDamage(child, ref airwayTotal, ref airwayDest, ref lungTotal, ref lungDest);
         }
 
         private void UpdateCardiovascularState()
@@ -197,6 +299,37 @@ namespace TacticalSim.Core.Physiology
                 HeartRateBpm = 0f;
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f; // Dead
+            }
+
+            // Hypoxia override
+            if (BloodOxygenation < 0.90f)
+            {
+                // Tachycardia from hypoxia
+                HeartRateBpm = MathF.Max(HeartRateBpm, 120f + ((0.90f - BloodOxygenation) / 0.30f) * 40f);
+            }
+
+            if (BloodOxygenation < 0.80f)
+            {
+                ConsciousnessLevel = MathF.Min(ConsciousnessLevel, 0.8f);
+            }
+            if (BloodOxygenation < 0.60f)
+            {
+                ConsciousnessLevel = MathF.Min(ConsciousnessLevel, 0.2f);
+            }
+            if (BloodOxygenation < 0.40f)
+            {
+                // Hypoxic arrest
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+                ConsciousnessLevel = 0f;
+            }
+            
+            // Fatal hemorrhage check ensures dead stats stay zero
+            if (CurrentHemorrhageClass == HemorrhageClass.Fatal)
+            {
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+                ConsciousnessLevel = 0f;
             }
         }
 

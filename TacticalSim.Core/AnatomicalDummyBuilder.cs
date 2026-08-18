@@ -12,19 +12,24 @@ namespace TacticalSim.Core
             var root = new BodyPart { Type = BodyPartType.Thorax };
             physiology.SetRoot(root);
             
-            var head = new BodyPart { Type = BodyPartType.Head, Parent = root };
+            var neck = new BodyPart { Type = BodyPartType.Neck, Parent = root };
+            var head = new BodyPart { Type = BodyPartType.Head, Parent = neck };
+            
             var leftArm = new BodyPart { Type = BodyPartType.LeftArm, Parent = root };
             var rightArm = new BodyPart { Type = BodyPartType.RightArm, Parent = root };
             var leftLeg = new BodyPart { Type = BodyPartType.LeftLeg, Parent = root };
             var rightLeg = new BodyPart { Type = BodyPartType.RightLeg, Parent = root };
             
-            root.Children.Add(head);
+            root.Children.Add(neck);
+            neck.Children.Add(head);
+            
             root.Children.Add(leftArm);
             root.Children.Add(rightArm);
             root.Children.Add(leftLeg);
             root.Children.Add(rightLeg);
             
             PopulateTorsoVoxels(root);
+            PopulateHeadNeckVoxels(neck, head);
             
             return physiology;
         }
@@ -51,7 +56,77 @@ namespace TacticalSim.Core
                 }
             }
         }
+
+        private static void PopulateHeadNeckVoxels(BodyPart neck, BodyPart head)
+        {
+            float voxelSize = 0.01f;
+            
+            // Bounding box for Neck and Head: Y = 0.5f to 0.9f
+            for (float x = -0.15f; x <= 0.15f; x += voxelSize)
+            {
+                for (float y = 0.5f; y <= 0.9f; y += voxelSize)
+                {
+                    for (float z = -0.15f; z <= 0.15f; z += voxelSize)
+                    {
+                        var pos = new Vector3(x, y, z);
+                        var (tissue, organ) = DetermineHeadNeckOrgan(pos);
+                        
+                        if (tissue != null)
+                        {
+                            var voxel = new PhysiologicalVoxel(pos, voxelSize, tissue.Value, organ);
+                            
+                            if (y < 0.65f)
+                                neck.Voxels.Add(voxel);
+                            else
+                                head.Voxels.Add(voxel);
+                        }
+                    }
+                }
+            }
+        }
         
+        private static (TissueProperties?, OrganType) DetermineHeadNeckOrgan(Vector3 pos)
+        {
+            // --- Head Neck Outer Skin/Muscle ---
+            float dNeck = SdfCapsule(pos, new Vector3(0, 0.5f, -0.05f), new Vector3(0, 0.65f, -0.05f), 0.06f);
+            float dHead = SdfEllipsoid(pos - new Vector3(0, 0.76f, -0.02f), new Vector3(0.08f, 0.11f, 0.10f));
+            
+            float dSkin = MathF.Min(dNeck, dHead);
+            if (dSkin > 0) return (null, OrganType.None); // Empty space
+
+            // --- Bones ---
+            float dCervicalSpine = SdfCapsule(pos, new Vector3(0, 0.5f, -0.08f), new Vector3(0, 0.65f, -0.08f), 0.025f);
+            float dSkullInner = SdfEllipsoid(pos - new Vector3(0, 0.77f, -0.03f), new Vector3(0.065f, 0.09f, 0.08f));
+            float dSkullOuter = SdfEllipsoid(pos - new Vector3(0, 0.77f, -0.03f), new Vector3(0.075f, 0.10f, 0.09f));
+            float dSkullShell = MathF.Max(dSkullOuter, -dSkullInner);
+            
+            float dJaw = SdfCapsule(pos, new Vector3(-0.05f, 0.68f, 0.03f), new Vector3(0.05f, 0.68f, 0.03f), 0.02f);
+            float dBones = MathF.Min(MathF.Min(dCervicalSpine, dSkullShell), dJaw);
+
+            // --- Brain ---
+            float dBrain = dSkullInner; // Brain fills inside of the skull
+
+            // --- Eyes ---
+            float dEyeL = SdfEllipsoid(pos - new Vector3(0.03f, 0.76f, 0.06f), new Vector3(0.015f, 0.015f, 0.015f));
+            float dEyeR = SdfEllipsoid(pos - new Vector3(-0.03f, 0.76f, 0.06f), new Vector3(0.015f, 0.015f, 0.015f));
+            float dEyes = MathF.Min(dEyeL, dEyeR);
+
+            // --- Mouth / Oral Cavity ---
+            float dMouth = SdfEllipsoid(pos - new Vector3(0, 0.68f, 0.06f), new Vector3(0.03f, 0.02f, 0.04f));
+
+            // --- Airway (Trachea) ---
+            float dAirway = SdfCapsule(pos, new Vector3(0, 0.5f, -0.03f), new Vector3(0, 0.66f, -0.02f), 0.015f);
+
+            // --- Evaluation Hierarchy (Inner to outer) ---
+            if (dBones <= 0) return (TissueRegistry.Bone, OrganType.Bone);
+            if (dBrain <= 0) return (TissueRegistry.Brain, OrganType.Brain);
+            if (dEyes <= 0) return (TissueRegistry.Eye, OrganType.Eye);
+            if (dAirway <= 0) return (TissueRegistry.Airway, OrganType.Airway);
+            if (dMouth <= 0) return (TissueRegistry.Mouth, OrganType.Mouth);
+
+            return (TissueRegistry.Muscle, OrganType.Muscle); // Soft tissue padding for face/neck
+        }
+
         // --- Signed Distance Field (SDF) Math Functions ---
         private static float SdfEllipsoid(Vector3 p, Vector3 r)
         {

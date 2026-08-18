@@ -80,5 +80,26 @@ namespace TacticalSim.Core.Physiology
             Elasticity = 0.6f, // Somewhat stretchy
             ShearStrength = 0.15f
         };
+
+        public static readonly TissueProperties Airway = new TissueProperties
+        {
+            Density = 600f, // Mix of cartilage and air
+            Elasticity = 0.5f,
+            ShearStrength = 0.3f // Cartilage is tough
+        };
+
+        public static readonly TissueProperties Mouth = new TissueProperties
+        {
+            Density = 1040f,
+            Elasticity = 0.7f,
+            ShearStrength = 0.2f
+        };
+
+        public static readonly TissueProperties Eye = new TissueProperties
+        {
+            Density = 1000f, // Vitreous humor
+            Elasticity = 0.8f,
+            ShearStrength = 0.05f // Pops easily
+        };
     }
 }

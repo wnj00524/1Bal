@@ -54,6 +54,18 @@ namespace TacticalSim.GodotClient
                 Name = "Combat Knife (Abdomen)",
                 MuzzleVelocity = 15f, // Fast stab
                 Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(10.0f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "Combat Knife (Neck)",
+                MuzzleVelocity = 15f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(10.0f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "9x19mm (Head)",
+                MuzzleVelocity = 380f,
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.15f) }
             }
         };
 
