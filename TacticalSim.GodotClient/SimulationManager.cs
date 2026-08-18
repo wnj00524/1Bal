@@ -116,7 +116,18 @@ namespace TacticalSim.GodotClient
 
                         if (cav.HasValue)
                         {
-                            cavEvents.Add((impactState.Time, cav.Value));
+                            if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f)
+                            {
+                                cavEvents.Add((impactState.Time, cav.Value));
+                            }
+                            else
+                            {
+                                var last = cavEvents[cavEvents.Count - 1];
+                                var modifiedCav = last.Cav;
+                                modifiedCav.Energy += cav.Value.Energy;
+                                modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
+                                cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
+                            }
                         }
                         break; 
                     }
@@ -128,8 +139,24 @@ namespace TacticalSim.GodotClient
                     impactState.Velocity = System.Numerics.Vector3.Zero;
                 }
             }
-
-            // 4. Update the visual state
+            
+            // 4. Apply accumulated cavitation damage to surrounding tissue
+            foreach (var cavEvent in cavEvents)
+            {
+                var cav = cavEvent.Cav;
+                foreach (var neighbor in Dummy.Physiology.RootBodyPart.Voxels)
+                {
+                    float dist = (neighbor.Center - cav.Origin).Length();
+                    if (dist > 0 && dist <= cav.Radius)
+                    {
+                        // Linear falloff for blast wave
+                        float energyAtDist = cav.Energy * (1f - (dist / cav.Radius));
+                        neighbor.ApplyKineticEnergy(energyAtDist, cav.Origin, 0f);
+                    }
+                }
+            }
+            
+            var endPos = impactState.Position;
             _bulletMesh.Position = new Godot.Vector3(impactState.Position.X, impactState.Position.Y, impactState.Position.Z);
             
             // Look in the direction of velocity
