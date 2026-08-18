@@ -31,50 +31,88 @@ namespace TacticalSim.Core
         
         private static void PopulateTorsoVoxels(BodyPart torso)
         {
-            float voxelSize = 0.05f; // 5cm voxels for scaffolding
+            float voxelSize = 0.01f; // 1cm voxels for high-res physiological modeling
             
-            // Generate a simple grid for the Torso
-            // X: -0.2 to 0.2, Y: 0.0 to 0.5, Z: -0.1 to 0.1
-            for (float x = -0.2f; x <= 0.2f; x += voxelSize)
+            // Bounding box for Torso
+            for (float x = -0.22f; x <= 0.22f; x += voxelSize)
             {
                 for (float y = 0.0f; y <= 0.5f; y += voxelSize)
                 {
-                    for (float z = -0.1f; z <= 0.1f; z += voxelSize)
+                    for (float z = -0.15f; z <= 0.15f; z += voxelSize)
                     {
                         var pos = new Vector3(x, y, z);
                         var (tissue, organ) = DetermineOrganAtPosition(pos);
-                        var voxel = new PhysiologicalVoxel(pos, voxelSize, tissue, organ);
-                        torso.Voxels.Add(voxel);
+                        if (tissue != null)
+                        {
+                            var voxel = new PhysiologicalVoxel(pos, voxelSize, tissue.Value, organ);
+                            torso.Voxels.Add(voxel);
+                        }
                     }
                 }
             }
         }
         
-        private static (TissueProperties, OrganType) DetermineOrganAtPosition(Vector3 pos)
+        // --- Signed Distance Field (SDF) Math Functions ---
+        private static float SdfEllipsoid(Vector3 p, Vector3 r)
         {
-            // Simple geometric layout within the torso
-            // Heart: left-center of upper chest
-            if (pos.X > 0.0f && pos.X < 0.1f && pos.Y > 0.3f && pos.Y < 0.45f && pos.Z > -0.05f && pos.Z < 0.05f)
-            {
-                return (TissueRegistry.Heart, OrganType.Heart);
-            }
-            // Lungs: either side of the heart
-            else if (MathF.Abs(pos.X) < 0.15f && pos.Y > 0.2f && pos.Y < 0.5f && pos.Z > -0.08f && pos.Z < 0.08f)
-            {
-                return (TissueRegistry.Lung, OrganType.Lung);
-            }
-            // Liver: lower right
-            else if (pos.X < -0.05f && pos.X > -0.15f && pos.Y > 0.1f && pos.Y < 0.25f)
-            {
-                return (TissueRegistry.Liver, OrganType.Liver);
-            }
-            // Stomach: lower left
-            else if (pos.X > 0.05f && pos.X < 0.15f && pos.Y > 0.1f && pos.Y < 0.2f)
-            {
-                return (TissueRegistry.Stomach, OrganType.Stomach);
-            }
+            float k0 = (p / r).Length();
+            float k1 = (p / (r * r)).Length();
+            return k0 * (k0 - 1.0f) / k1;
+        }
+
+        private static float SdfCapsule(Vector3 p, Vector3 a, Vector3 b, float r)
+        {
+            Vector3 pa = p - a, ba = b - a;
+            float h = MathF.Max(0f, MathF.Min(1f, Vector3.Dot(pa, ba) / Vector3.Dot(ba, ba)));
+            return (pa - ba * h).Length() - r;
+        }
+
+        private static (TissueProperties?, OrganType) DetermineOrganAtPosition(Vector3 pos)
+        {
+            // --- Torso Skin/Muscle Outline ---
+            float dTorsoOuter = SdfEllipsoid(pos - new Vector3(0, 0.25f, 0), new Vector3(0.2f, 0.24f, 0.13f));
+            if (dTorsoOuter > 0) return (null, OrganType.None); // Empty space outside dummy
+
+            // --- Bones ---
+            float dSpine = SdfCapsule(pos, new Vector3(0, 0.0f, -0.08f), new Vector3(0, 0.5f, -0.08f), 0.025f);
             
-            // Default to Muscle/Tissue
+            // Ribcage (Hollow ellipsoid with horizontal periodic cuts)
+            Vector3 chestCenter = new Vector3(0, 0.28f, 0.0f);
+            float dOuterRibs = SdfEllipsoid(pos - chestCenter, new Vector3(0.16f, 0.18f, 0.11f));
+            float dInnerRibs = SdfEllipsoid(pos - chestCenter, new Vector3(0.14f, 0.16f, 0.09f));
+            float dRibShell = MathF.Max(dOuterRibs, -dInnerRibs); // Hollow shell
+            float dRibCuts = MathF.Sin(pos.Y * 200f) - 0.2f; // Periodic cuts to make horizontal ribs
+            float dRibs = MathF.Max(dRibShell, dRibCuts);
+            
+            // Sternum (solid front piece)
+            float dSternum = SdfCapsule(pos, new Vector3(0, 0.15f, 0.11f), new Vector3(0, 0.40f, 0.11f), 0.02f);
+            
+            float dBone = MathF.Min(MathF.Min(dSpine, dRibs), dSternum);
+
+            // --- Internal Organs ---
+            // Heart (Left side of chest)
+            float dHeart = SdfEllipsoid(pos - new Vector3(0.04f, 0.28f, 0.04f), new Vector3(0.05f, 0.06f, 0.05f));
+
+            // Lungs (Wrapping around heart, inside ribcage)
+            float dLungL = SdfEllipsoid(pos - new Vector3(0.08f, 0.28f, -0.02f), new Vector3(0.06f, 0.12f, 0.07f));
+            float dLungR = SdfEllipsoid(pos - new Vector3(-0.08f, 0.28f, -0.02f), new Vector3(0.06f, 0.12f, 0.07f));
+            float dLungs = MathF.Min(dLungL, dLungR);
+            dLungs = MathF.Max(dLungs, -dHeart); // Lungs yield to heart
+
+            // Liver (Lower right side, massive)
+            float dLiver = SdfEllipsoid(pos - new Vector3(-0.06f, 0.15f, 0.02f), new Vector3(0.08f, 0.06f, 0.07f));
+
+            // Stomach (Lower left side)
+            float dStomach = SdfEllipsoid(pos - new Vector3(0.05f, 0.12f, 0.02f), new Vector3(0.05f, 0.04f, 0.05f));
+
+            // --- Evaluation Hierarchy (Inner to outer) ---
+            if (dBone <= 0) return (TissueRegistry.Bone, OrganType.Bone);
+            if (dHeart <= 0) return (TissueRegistry.Heart, OrganType.Heart);
+            if (dLungs <= 0) return (TissueRegistry.Lung, OrganType.Lung);
+            if (dLiver <= 0) return (TissueRegistry.Liver, OrganType.Liver);
+            if (dStomach <= 0) return (TissueRegistry.Stomach, OrganType.Stomach);
+
+            // Default to bulk Muscle/Fat padding
             return (TissueRegistry.Muscle, OrganType.Muscle);
         }
     }

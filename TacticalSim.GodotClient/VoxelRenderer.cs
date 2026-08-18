@@ -8,9 +8,12 @@ namespace TacticalSim.GodotClient
     {
         [Export]
         public NodePath SimulationManagerPath { get; set; } = null!;
+        [Export] 
+        public bool DebugHighlightDestroyed { get; set; } = true;
         
         private SimulationManager _simulationManager = null!;
-        private List<MeshInstance3D> _voxelMeshes = new();
+        private MultiMeshInstance3D _multiMeshInstance = null!;
+        private MultiMesh _multiMesh = null!;
 
         public override void _Ready()
         {
@@ -22,71 +25,70 @@ namespace TacticalSim.GodotClient
         {
             var dummy = _simulationManager.Dummy;
             if (dummy == null) return;
+            var voxels = dummy.Physiology.RootBodyPart.Voxels;
+            if (voxels.Count == 0) return;
 
-            foreach (var voxel in dummy.Physiology.RootBodyPart.Voxels)
+            _multiMesh = new MultiMesh
             {
-                var meshInstance = new MeshInstance3D();
-                var boxMesh = new BoxMesh();
-                float visualSize = voxel.Size * 0.9f; // 10% gap to see internal organs
-                boxMesh.Size = new Godot.Vector3(visualSize, visualSize, visualSize);
-                meshInstance.Mesh = boxMesh;
-                
-                // Map C# System.Numerics.Vector3 to Godot Vector3 and apply entity global position
-                System.Numerics.Vector3 globalPos = dummy.Position + voxel.Center;
-                meshInstance.Position = new Godot.Vector3(globalPos.X, globalPos.Y, globalPos.Z);
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = true,
+                InstanceCount = voxels.Count
+            };
 
-                var material = new StandardMaterial3D
+            float visualSize = voxels[0].Size * 0.9f; // 10% gap
+            _multiMesh.Mesh = new BoxMesh { Size = new Godot.Vector3(visualSize, visualSize, visualSize) };
+
+            for (int i = 0; i < voxels.Count; i++)
+            {
+                var voxel = voxels[i];
+                System.Numerics.Vector3 globalPos = dummy.Position + voxel.Center;
+                
+                _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Godot.Vector3(globalPos.X, globalPos.Y, globalPos.Z)));
+                _multiMesh.SetInstanceColor(i, GetColorForOrgan(voxel.Organ));
+            }
+
+            _multiMeshInstance = new MultiMeshInstance3D
+            {
+                Multimesh = _multiMesh,
+                MaterialOverride = new StandardMaterial3D
                 {
                     Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                    AlbedoColor = GetColorForOrgan(voxel.Organ)
-                };
-                
-                meshInstance.MaterialOverride = material;
-                
-                // If voxel was destroyed in the simulation run, hide it
-                if (voxel.IsDestroyed)
-                {
-                    meshInstance.Visible = false;
+                    VertexColorUseAsAlbedo = true
                 }
+            };
 
-                AddChild(meshInstance);
-                _voxelMeshes.Add(meshInstance);
-            }
+            AddChild(_multiMeshInstance);
         }
-
-        [Export] public bool DebugHighlightDestroyed { get; set; } = true;
 
         public void RefreshVoxels(IActorPhysiology dummyPhysiology, List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime, System.Numerics.Vector3 entityPos)
         {
             var voxels = dummyPhysiology.RootBodyPart.Voxels;
-            if (voxels.Count != _voxelMeshes.Count) return;
+            if (_multiMesh == null || voxels.Count != _multiMesh.InstanceCount) return;
 
             float cavityLifetime = 0.005f; // 5ms
 
             for (int i = 0; i < voxels.Count; i++)
             {
                 var voxel = voxels[i];
-                var mesh = _voxelMeshes[i];
-                var mat = (StandardMaterial3D)mesh.MaterialOverride;
+                var baseColor = GetColorForOrgan(voxel.Organ);
 
                 if (voxel.IsDestroyed) 
                 {
                     if (DebugHighlightDestroyed)
                     {
-                        mesh.Visible = true;
-                        mat.AlbedoColor = new Color(1.0f, 1.0f, 0.0f, 1.0f); // Solid yellow
-                        mat.Transparency = BaseMaterial3D.TransparencyEnum.Disabled;
+                        _multiMesh.SetInstanceColor(i, new Color(1.0f, 1.0f, 0.0f, 1.0f)); // Solid yellow
+                        System.Numerics.Vector3 pos = entityPos + voxel.Center;
+                        _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Godot.Vector3(pos.X, pos.Y, pos.Z)));
                     }
                     else
                     {
-                        mesh.Visible = false;
+                        // Hide by scaling to zero
+                        _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Godot.Vector3.Zero), Godot.Vector3.Zero));
                     }
                     continue;
                 }
 
-                // Restore normal material properties in case we scrubbed backward
-                mat.AlbedoColor = GetColorForOrgan(voxel.Organ);
-                mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                _multiMesh.SetInstanceColor(i, baseColor);
 
                 bool isTemporarilyDisplaced = false;
                 System.Numerics.Vector3 globalVoxelCenter = entityPos + voxel.Center;
@@ -96,7 +98,6 @@ namespace TacticalSim.GodotClient
                     float age = currentTime - ev.Time;
                     if (age < 0 || age > cavityLifetime) continue;
 
-                    // Scale creates a smooth pulse out and back in
                     float scale = System.MathF.Sin((age / cavityLifetime) * System.MathF.PI);
                     float currentRadius = ev.Cav.Radius * scale;
                     
@@ -110,7 +111,15 @@ namespace TacticalSim.GodotClient
                     }
                 }
 
-                _voxelMeshes[i].Visible = !isTemporarilyDisplaced;
+                if (isTemporarilyDisplaced)
+                {
+                    _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Godot.Vector3.Zero), Godot.Vector3.Zero));
+                }
+                else
+                {
+                    System.Numerics.Vector3 pos = entityPos + voxel.Center;
+                    _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Godot.Vector3(pos.X, pos.Y, pos.Z)));
+                }
             }
         }
 
@@ -118,7 +127,7 @@ namespace TacticalSim.GodotClient
         {
             return organ switch
             {
-                OrganType.Muscle => new Color(0.8f, 0.2f, 0.2f, 0.4f),
+                OrganType.Muscle => new Color(0.8f, 0.2f, 0.2f, 0.2f), // Slightly more transparent so we can see inside!
                 OrganType.Lung => new Color(0.9f, 0.6f, 0.6f, 0.5f),
                 OrganType.Heart => new Color(0.9f, 0.1f, 0.1f, 0.9f),
                 OrganType.Liver => new Color(0.6f, 0.1f, 0.1f, 0.9f),
