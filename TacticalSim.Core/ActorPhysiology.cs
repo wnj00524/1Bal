@@ -63,7 +63,10 @@ namespace TacticalSim.Core.Physiology
                     {
                         OrganType.Heart => 10.0f,
                         OrganType.Liver => 2.0f,
+                        OrganType.Spleen => 3.0f, // Highly vascular
+                        OrganType.Kidney => 2.5f, // Renal artery/vein
                         OrganType.Lung => 0.5f,
+                        OrganType.Intestines => 0.2f, // Moderate bleeding
                         OrganType.Muscle => 0.05f,
                         OrganType.Stomach => 0.1f,
                         OrganType.Bone => 0.8f,

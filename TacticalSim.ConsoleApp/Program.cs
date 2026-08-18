@@ -71,14 +71,15 @@ namespace TacticalSim.ConsoleApp
         {
             Console.WriteLine($"--- Terminal Ballistics: {ammo.Name} ---");
             
-            // Transform ray to dummy local space for the voxel check. 
-            Vector3 torsoCenter = new Vector3(0, 0.25f, 0); 
-            Vector3 impactDir = Vector3.Normalize(torsoCenter - new Vector3(0, 0.25f, -10f));
+            // Setup initial bullet state right before impact
+            float aimYOffset = ammo.Name.Contains("Abdomen") ? 0.10f : 0.25f;
+            Vector3 globalTorsoCenter = dummy.Position + new Vector3(0, aimYOffset, 0); 
+            Vector3 impactDir = Vector3.Normalize(globalTorsoCenter - new Vector3(0, globalTorsoCenter.Y, -10f));
             
             var impactState = new ProjectileState 
             {
-                Position = torsoCenter - (impactDir * 0.5f), // 0.5m in front
-                Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f), // Simulate 10% velocity loss in air
+                Position = globalTorsoCenter - (impactDir * 0.15f),
+                Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
                 Time = 0f
             };
             
@@ -87,6 +88,7 @@ namespace TacticalSim.ConsoleApp
             Console.WriteLine($"Impact Energy: {initialEnergy:F1} Joules\n");
             
             int voxelsHit = 0;
+            var hitVoxels = new System.Collections.Generic.HashSet<TacticalSim.Core.Physiology.PhysiologicalVoxel>();
             
             // Create a fresh dummy for the test so we don't accumulate damage across runs
             var testDummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
@@ -94,19 +96,28 @@ namespace TacticalSim.ConsoleApp
             
             foreach(var voxel in testDummy.Physiology.RootBodyPart.Voxels)
             {
-                var cavitation = voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                var localState = impactState;
+                localState.Position -= testDummy.Position; // Convert to local space
+                
+                var cavitation = voxel.ProcessPenetration(ref localState, ammo.Ballistics);
                 
                 if (voxel.DepositedEnergy > 0)
                 {
-                    voxelsHit++;
-                    Console.WriteLine($"[HIT] Voxel at {voxel.Center} (Tissue: {voxel.Organ})");
-                    Console.WriteLine($"  -> Energy Deposited: {voxel.DepositedEnergy:F1} Joules");
-                    
-                    if (cavitation != null)
+                    if (voxel.IsDestroyed && !hitVoxels.Contains(voxel))
                     {
-                        Console.WriteLine($"  -> Cavitation Radius: {cavitation.Value.Radius * 1000f:F1} mm");
+                        hitVoxels.Add(voxel);
+                        voxelsHit++;
+                        Console.WriteLine($"[HIT] Voxel at {voxel.Center} (Tissue: {voxel.Organ})");
+                        Console.WriteLine($"  -> Energy Deposited: {voxel.DepositedEnergy:F1} Joules");
+                        
+                        if (cavitation != null)
+                        {
+                            Console.WriteLine($"  -> Cavitation Radius: {cavitation.Value.Radius * 1000f:F1} mm");
+                        }
                     }
                 }
+                
+                impactState.Velocity = localState.Velocity;
             }
             
             Console.WriteLine($"\nTotal Voxels Penetrated: {voxelsHit}");

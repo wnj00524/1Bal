@@ -87,7 +87,12 @@ namespace TacticalSim.Core
             // Sternum (solid front piece)
             float dSternum = SdfCapsule(pos, new Vector3(0, 0.15f, 0.11f), new Vector3(0, 0.40f, 0.11f), 0.02f);
             
-            float dBone = MathF.Min(MathF.Min(dSpine, dRibs), dSternum);
+            // Pelvis (Hollow bowl structure at the base)
+            float dPelvisOuter = SdfEllipsoid(pos - new Vector3(0, 0.04f, -0.02f), new Vector3(0.14f, 0.06f, 0.10f));
+            float dPelvisInner = SdfEllipsoid(pos - new Vector3(0, 0.04f, -0.02f), new Vector3(0.10f, 0.08f, 0.07f));
+            float dPelvis = MathF.Max(dPelvisOuter, -dPelvisInner);
+
+            float dBone = MathF.Min(MathF.Min(MathF.Min(dSpine, dRibs), dSternum), dPelvis);
 
             // --- Internal Organs ---
             // Heart (Left side of chest)
@@ -100,17 +105,35 @@ namespace TacticalSim.Core
             dLungs = MathF.Max(dLungs, -dHeart); // Lungs yield to heart
 
             // Liver (Lower right side, massive)
-            float dLiver = SdfEllipsoid(pos - new Vector3(-0.06f, 0.15f, 0.02f), new Vector3(0.08f, 0.06f, 0.07f));
+            float dLiver = SdfEllipsoid(pos - new Vector3(-0.06f, 0.16f, 0.02f), new Vector3(0.08f, 0.07f, 0.07f));
 
             // Stomach (Lower left side)
-            float dStomach = SdfEllipsoid(pos - new Vector3(0.05f, 0.12f, 0.02f), new Vector3(0.05f, 0.04f, 0.05f));
+            float dStomach = SdfEllipsoid(pos - new Vector3(0.05f, 0.14f, 0.03f), new Vector3(0.05f, 0.05f, 0.05f));
+
+            // Spleen (Far left, behind stomach)
+            float dSpleen = SdfEllipsoid(pos - new Vector3(0.10f, 0.14f, -0.03f), new Vector3(0.03f, 0.04f, 0.03f));
+
+            // Kidneys (Left and Right, posterior)
+            float dKidneyL = SdfEllipsoid(pos - new Vector3(0.05f, 0.12f, -0.05f), new Vector3(0.03f, 0.05f, 0.02f));
+            float dKidneyR = SdfEllipsoid(pos - new Vector3(-0.05f, 0.12f, -0.05f), new Vector3(0.03f, 0.05f, 0.02f));
+            float dKidneys = MathF.Min(dKidneyL, dKidneyR);
+
+            // Intestines (Lower abdomen, filling space)
+            float dIntestines = SdfEllipsoid(pos - new Vector3(0.0f, 0.07f, 0.02f), new Vector3(0.11f, 0.06f, 0.08f));
+            // Ensure intestines don't overlap with liver/stomach or pelvis
+            dIntestines = MathF.Max(dIntestines, -dLiver);
+            dIntestines = MathF.Max(dIntestines, -dStomach);
+            dIntestines = MathF.Max(dIntestines, -dPelvis);
 
             // --- Evaluation Hierarchy (Inner to outer) ---
             if (dBone <= 0) return (TissueRegistry.Bone, OrganType.Bone);
             if (dHeart <= 0) return (TissueRegistry.Heart, OrganType.Heart);
             if (dLungs <= 0) return (TissueRegistry.Lung, OrganType.Lung);
             if (dLiver <= 0) return (TissueRegistry.Liver, OrganType.Liver);
+            if (dSpleen <= 0) return (TissueRegistry.Spleen, OrganType.Spleen);
+            if (dKidneys <= 0) return (TissueRegistry.Kidney, OrganType.Kidney);
             if (dStomach <= 0) return (TissueRegistry.Stomach, OrganType.Stomach);
+            if (dIntestines <= 0) return (TissueRegistry.Intestines, OrganType.Intestines);
 
             // Default to bulk Muscle/Fat padding
             return (TissueRegistry.Muscle, OrganType.Muscle);

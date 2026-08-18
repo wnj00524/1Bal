@@ -9,6 +9,9 @@ namespace TacticalSim.Core.Physiology
         Heart,
         Liver,
         Stomach,
+        Spleen,
+        Kidney,
+        Intestines,
         Brain
     }
 }

@@ -59,5 +59,26 @@ namespace TacticalSim.Core.Physiology
             Elasticity = 0.5f,
             ShearStrength = 0.2f
         };
+
+        public static readonly TissueProperties Spleen = new TissueProperties
+        {
+            Density = 1060f,
+            Elasticity = 0.2f, // Very fragile
+            ShearStrength = 0.1f
+        };
+
+        public static readonly TissueProperties Kidney = new TissueProperties
+        {
+            Density = 1050f,
+            Elasticity = 0.4f,
+            ShearStrength = 0.2f
+        };
+
+        public static readonly TissueProperties Intestines = new TissueProperties
+        {
+            Density = 1000f,
+            Elasticity = 0.6f, // Somewhat stretchy
+            ShearStrength = 0.15f
+        };
     }
 }
