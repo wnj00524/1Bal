@@ -82,6 +82,18 @@ namespace TacticalSim.GodotClient
             };
 
             var allVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart);
+            
+            // Build spatial index for O(1) voxel lookup
+            // Extent bounds mapped to grid coordinates: X[-30..30]->[0..60], Y[0..100]->[0..100], Z[-30..30]->[0..60]
+            var voxelGrid = new PhysiologicalVoxel[60, 100, 60]; 
+            foreach (var v in allVoxels)
+            {
+                int vx = (int)MathF.Round(v.Center.X * 100f) + 30;
+                int vy = (int)MathF.Round(v.Center.Y * 100f);
+                int vz = (int)MathF.Round(v.Center.Z * 100f) + 30;
+                if (vx >= 0 && vx < 60 && vy >= 0 && vy < 100 && vz >= 0 && vz < 60)
+                    voxelGrid[vx, vy, vz] = v;
+            }
 
             var cavEvents = new List<(float Time, CavitationEvent Cav)>();
             
@@ -112,12 +124,17 @@ namespace TacticalSim.GodotClient
                 // Update local position after step
                 localPos = impactState.Position - Dummy.Position;
 
-                // Only check 40,000 voxels if we are physically close to the dummy
+                // O(1) spatial grid lookup instead of looping 40,000 voxels
                 if (isNearTarget)
                 {
-                    foreach (var voxel in allVoxels)
+                    int bx = (int)MathF.Round(localPos.X * 100f) + 30;
+                    int by = (int)MathF.Round(localPos.Y * 100f);
+                    int bz = (int)MathF.Round(localPos.Z * 100f) + 30;
+                    
+                    if (bx >= 0 && bx < 60 && by >= 0 && by < 100 && bz >= 0 && bz < 60)
                     {
-                        if (voxel.Contains(localPos))
+                        var voxel = voxelGrid[bx, by, bz];
+                        if (voxel != null && voxel.Contains(localPos))
                         {
                             var localState = impactState;
                             localState.Position = localPos;
@@ -142,7 +159,6 @@ namespace TacticalSim.GodotClient
                                     cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
                                 }
                             }
-                            break; 
                         }
                     }
                 }
@@ -158,18 +174,37 @@ namespace TacticalSim.GodotClient
             foreach (var v in allVoxels) if (v.IsDestroyed) destroyedCount++;
             System.IO.File.WriteAllText("MedicalReport.txt", $"Knife Debug: Hit {destroyedCount} voxels. Final Pos: {impactState.Position}");
             
-            // 4. Apply accumulated cavitation damage to surrounding tissue
+            // 4. Apply accumulated cavitation damage to surrounding tissue using spatial grid
             foreach (var cavEvent in cavEvents)
             {
                 var cav = cavEvent.Cav;
-                foreach (var neighbor in allVoxels)
+                
+                int radCells = (int)MathF.Ceiling(cav.Radius * 100f);
+                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 30;
+                int cy = (int)MathF.Round(cav.Origin.Y * 100f);
+                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 30;
+
+                for (int x = cx - radCells; x <= cx + radCells; x++)
                 {
-                    float dist = (neighbor.Center - cav.Origin).Length();
-                    if (dist > 0 && dist <= cav.Radius)
+                    for (int y = cy - radCells; y <= cy + radCells; y++)
                     {
-                        // Linear falloff for blast wave
-                        float energyAtDist = cav.Energy * (1f - (dist / cav.Radius));
-                        neighbor.ApplyKineticEnergy(energyAtDist, cav.Origin, 0f);
+                        for (int z = cz - radCells; z <= cz + radCells; z++)
+                        {
+                            if (x >= 0 && x < 60 && y >= 0 && y < 100 && z >= 0 && z < 60)
+                            {
+                                var neighbor = voxelGrid[x, y, z];
+                                if (neighbor != null)
+                                {
+                                    float dist = (neighbor.Center - cav.Origin).Length();
+                                    if (dist > 0 && dist <= cav.Radius)
+                                    {
+                                        // Linear falloff for blast wave
+                                        float energyAtDist = cav.Energy * (1f - (dist / cav.Radius));
+                                        neighbor.ApplyKineticEnergy(energyAtDist, cav.Origin, 0f);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
