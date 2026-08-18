@@ -20,49 +20,14 @@ namespace TacticalSim.GodotClient
         public override void _Ready()
         {
             _simulationManager = GetNode<SimulationManager>(SimulationManagerPath);
-            BuildUI();
-        }
-
-        private void BuildUI()
-        {
-            var panel = new PanelContainer();
-            panel.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-            panel.CustomMinimumSize = new Godot.Vector2(0, 100);
-            AddChild(panel);
-
-            var margin = new MarginContainer();
-            margin.AddThemeConstantOverride("margin_left", 20);
-            margin.AddThemeConstantOverride("margin_right", 20);
-            margin.AddThemeConstantOverride("margin_top", 10);
-            margin.AddThemeConstantOverride("margin_bottom", 10);
-            panel.AddChild(margin);
-
-            var vbox = new VBoxContainer();
-            margin.AddChild(vbox);
-
-            var header = new Label { Text = "TacticalSim - Bullet Time Scrubber" };
-            vbox.AddChild(header);
-
-            var hbox = new HBoxContainer();
-            vbox.AddChild(hbox);
-
-            _playPauseButton = new Button { Text = "Play" };
+            
+            _playPauseButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/PlayBtn");
             _playPauseButton.Pressed += OnPlayPausePressed;
-            hbox.AddChild(_playPauseButton);
-
-            _timelineSlider = new HSlider
-            {
-                MinValue = 0,
-                MaxValue = _maxPlaybackTime,
-                Step = 0.0005, // 0.5ms steps
-                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-                CustomMinimumSize = new Godot.Vector2(0, 30)
-            };
+            
+            _timelineSlider = GetNode<HSlider>("Control/Panel/Margin/VBox/HBox/Slider");
             _timelineSlider.ValueChanged += OnSliderValueChanged;
-            hbox.AddChild(_timelineSlider);
-
-            _timeLabel = new Label { Text = "0.000 / 0.030 s" };
-            hbox.AddChild(_timeLabel);
+            
+            _timeLabel = GetNode<Label>("Control/Panel/Margin/VBox/HBox/TimeLbl");
         }
 
         private void OnPlayPausePressed()
