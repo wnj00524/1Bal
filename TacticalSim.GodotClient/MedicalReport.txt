@@ -1,11 +1,11 @@
 --- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---
 
 ORGAN DAMAGE (Volume Destroyed):
-- Bone: 6.0 cc
-- Muscle: 2.0 cc
+- Brain: 25.0 cc
+- Bone: 1.0 cc
 
-SYSTEMIC BLEED RATE: 294 ml/min
-ESTIMATED TIME TO UNCONSCIOUSNESS: 5.1 minutes
+SYSTEMIC BLEED RATE: 7548 ml/min
+ESTIMATED TIME TO UNCONSCIOUSNESS: < 1 minute (12 seconds)
 
 --- LIVE VITALS ---
 Blood Volume: 5.00 L / 5.00 L

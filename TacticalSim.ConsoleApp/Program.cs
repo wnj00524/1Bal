@@ -89,6 +89,10 @@ class Program
                 int cx = (int)MathF.Round(cav.Origin.X * 100f) + 50;
                 int cy = (int)MathF.Round(cav.Origin.Y * 100f) + 100;
                 int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 50;
+                
+                float cavVolume = (4f/3f) * MathF.PI * cav.Radius * cav.Radius * cav.Radius;
+                float peakEnergyDensity = cavVolume > 0 ? 4f * (cav.Energy / cavVolume) : 0f;
+                float voxelVolume = 0.01f * 0.01f * 0.01f;
 
                 for (int x = cx - radCells; x <= cx + radCells; x++)
                     for (int y = cy - radCells; y <= cy + radCells; y++)
@@ -99,7 +103,12 @@ class Program
                                 if (neighbor != null)
                                 {
                                     float dist = (neighbor.Center - cav.Origin).Length();
-                                    if (dist > 0 && dist <= cav.Radius) neighbor.ApplyKineticEnergy(cav.Energy * (1f - (dist / cav.Radius)), cav.Origin, 0f);
+                                    if (dist > 0 && dist <= cav.Radius)
+                                    {
+                                        float energyDensityAtDist = peakEnergyDensity * (1f - (dist / cav.Radius));
+                                        float energyToVoxel = energyDensityAtDist * voxelVolume;
+                                        neighbor.ApplyKineticEnergy(energyToVoxel, cav.Origin, 0f);
+                                    }
                                 }
                             }
             }

@@ -173,42 +173,50 @@ namespace TacticalSim.Core.Physiology
             if (IsDestroyed) return null;
 
             DepositedEnergy += deltaE;
-            
-            // Temporary cavity volume calculation
-            // Energy creates a cavity volume inversely proportional to elasticity and density
-            float stretchFactor = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
-            TemporaryCavityVolume += stretchFactor;
-            
-            // Calculate spherical radius of the temporary cavity (V = 4/3 * pi * r^3 -> r = cbrt(V / (4/3 * pi)))
-            float cavityRadius = MathF.Cbrt(TemporaryCavityVolume / (4f/3f * MathF.PI));
-
-            // Permanent damage consists of direct crush + stretch tearing
             PermanentCavityVolume += directCrushVolume;
 
-            // Permanent cavity from stretch occurs when accumulated stretch stress exceeds shear strength
-            // The threshold scales linearly with Voxel Size since smaller voxels receive proportionally less of the bullet's continuous energy dump
-            if (TemporaryCavityVolume > Tissue.ShearStrength * 0.1f * Size) 
+            CavitationEvent? result = null;
+
+            if (directCrushVolume > 0f)
             {
-                PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
-            }
-            
-            if (PermanentCavityVolume > (Size * Size * Size * 0.5f)) // Destroyed if 50% of volume is carved out
-            {
-                IsDestroyed = true;
-            }
-            
-            // If cavity radius exceeds half voxel size, we need to propagate
-            if (cavityRadius > (Size * 0.5f))
-            {
-                return new CavitationEvent
+                // This is a direct hit from the bullet.
+                // Calculate the macroscopic temporary cavity created by this energy dump.
+                float macroscopicStretch = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
+                float cavityRadius = MathF.Cbrt(macroscopicStretch / (4f/3f * MathF.PI));
+                
+                result = new CavitationEvent
                 {
                     Origin = originPoint,
-                    Radius = cavityRadius,
-                    Energy = deltaE * 0.5f // Dissipate energy radially
+                    Energy = deltaE,
+                    Radius = cavityRadius
                 };
             }
+            else
+            {
+                // This is a neighbor receiving energy from the blast wave.
+                // We calculate the local stretch volume created by THIS voxel's share of the energy.
+                float localStretchVolume = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
+                float voxelVolume = Size * Size * Size;
+                
+                // If the local stretch exceeds the shear limits of the tissue, it tears permanently.
+                // The threshold is based on ShearStrength. Brittle tissues (liver, brain, bone) tear easily.
+                float tearThreshold = Tissue.ShearStrength * 0.1f * voxelVolume;
+                
+                if (localStretchVolume > tearThreshold)
+                {
+                    // 10% of the over-stretched volume becomes permanent tearing
+                    PermanentCavityVolume += localStretchVolume * 0.1f;
+                }
+            }
             
-            return null;
+            // If the voxel has accumulated enough permanent tearing/crush (50% of its volume), it is destroyed.
+            if (PermanentCavityVolume > (Size * Size * Size * 0.5f))
+            {
+                IsDestroyed = true;
+                PermanentCavityVolume = Size * Size * Size;
+            }
+
+            return result;
         }
     }
 }
