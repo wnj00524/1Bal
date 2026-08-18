@@ -110,7 +110,7 @@ namespace TacticalSim.GodotClient
             }
 
             _voxelRenderer.RefreshVoxels(Dummy.Physiology);
-            _voxelRenderer.DrawCavities(cavEvents, flightTime);
+            _voxelRenderer.DrawCavities(cavEvents, flightTime, Dummy.Position);
         }
     }
 }

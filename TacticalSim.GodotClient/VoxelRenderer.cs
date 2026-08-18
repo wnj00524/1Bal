@@ -31,8 +31,9 @@ namespace TacticalSim.GodotClient
                 boxMesh.Size = new Godot.Vector3(visualSize, visualSize, visualSize);
                 meshInstance.Mesh = boxMesh;
                 
-                // Map C# System.Numerics.Vector3 to Godot Vector3
-                meshInstance.Position = new Godot.Vector3(voxel.Center.X, voxel.Center.Y, voxel.Center.Z);
+                // Map C# System.Numerics.Vector3 to Godot Vector3 and apply entity global position
+                System.Numerics.Vector3 globalPos = dummy.Position + voxel.Center;
+                meshInstance.Position = new Godot.Vector3(globalPos.X, globalPos.Y, globalPos.Z);
 
                 var material = new StandardMaterial3D
                 {
@@ -66,7 +67,7 @@ namespace TacticalSim.GodotClient
 
         private List<MeshInstance3D> _cavitySpheres = new List<MeshInstance3D>();
 
-        public void DrawCavities(List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime)
+        public void DrawCavities(List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime, System.Numerics.Vector3 entityPos)
         {
             // Clear old spheres
             foreach (var sphere in _cavitySpheres)
@@ -101,7 +102,8 @@ namespace TacticalSim.GodotClient
                 sphereMesh.Material = material;
                 meshInstance.Mesh = sphereMesh;
                 
-                meshInstance.Position = new Godot.Vector3(ev.Cav.Origin.X, ev.Cav.Origin.Y, ev.Cav.Origin.Z);
+                System.Numerics.Vector3 globalOrigin = entityPos + ev.Cav.Origin;
+                meshInstance.Position = new Godot.Vector3(globalOrigin.X, globalOrigin.Y, globalOrigin.Z);
                 AddChild(meshInstance);
                 _cavitySpheres.Add(meshInstance);
             }
