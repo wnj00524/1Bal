@@ -1,38 +1,39 @@
-# BRIEFING — 2026-08-17T21:22:00Z
+# BRIEFING — 2026-08-18T12:38:55Z
 
 ## Mission
-Analyze and map all domain requirements, interfaces, data structures, and integration points for Issue #3: Fractionated TU Turn Resolver in TacticalSim.Core.
+Investigate TacticalSim codebase for simultaneous turn resolution with fractionated TU increments, action representations, scheduling, deterministic interleaving, and physiological state-machine integration.
 
 ## 🔒 My Identity
-- Archetype: explorer
-- Roles: domain investigator, software architect analyst
-- Working directory: c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_2
-- Original parent: dcc35bc9-ece6-4ccd-b521-a7b68d811606
-- Milestone: Issue #3 Survey & Domain Analysis
+- Archetype: teamwork_preview_explorer
+- Roles: explorer, investigator, analyst
+- Working directory: c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_2\
+- Original parent: f199596d-8a51-4d30-8a7a-d8593620ad77
+- Milestone: initial_survey
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement
-- Analyze simultaneous turn resolution, global timeline, fractionated TU increments, lifecycle/states, determinism, time discretization, event emission, error handling
-- Output structured analysis and handoff report in .agents/explorer_survey_2/
+- Scope: TacticalSim.Core actions, turn resolution, fractionated TU increments, scheduling, deterministic interleaving
+- Write artifacts in .agents/explorer_survey_2/
 
 ## Current Parent
-- Conversation ID: dcc35bc9-ece6-4ccd-b521-a7b68d811606
-- Updated: not yet
+- Conversation ID: f199596d-8a51-4d30-8a7a-d8593620ad77
+- Updated: 2026-08-18T12:38:55Z
 
 ## Investigation State
-- **Explored paths**: `ORIGINAL_REQUEST.md`, `agents.md`, `TacticalSim.Core/TurnResolution.cs`, `TacticalSim.Core/ActorPhysiology.cs`, `TacticalSim.Core/BallisticSolver.cs`, `TacticalSim.Tests/BallisticSolverTests.cs`, `TacticalSim.Core.csproj`, `TacticalSim.Tests.csproj`
+- **Explored paths**: `TacticalSim.Core/Simulation/`, `TacticalSim.Core/Entities/`, `TacticalSim.Core/Physiology/`, `TacticalSim.Core/DependencyInjection/`, `TacticalSim.Tests/`
 - **Key findings**:
-  - `TurnResolution.cs` defines basic scaffolding (`TacticalAction` abstract class and `ITurnResolver` interface).
-  - Need robust simultaneous turn resolver: global timeline, concurrent scheduling per actor, fractionated TU sub-stepping and interleaving, complete action lifecycle (Pending, InProgress/Executing, Completed, Cancelled, Failed), strict determinism (stable actor sorting), event emission (ActionStarted, ActionProgressed, ActionCompleted, ActionCancelled, TimeAdvanced), robust error handling.
-  - DI registration via `Microsoft.Extensions.DependencyInjection` in `TacticalSim.Core`.
-  - Comprehensive programmatic xUnit tests in `TacticalSim.Tests` covering multi-entity concurrency, varying TU costs, sub-tick interleaving, action cancellation, and event sequence verification.
-- **Unexplored areas**: None for survey scope.
+  1. `TurnResolver` implements deterministic actor ordering (`OrderBy(id => id)`) and per-actor sub-tick carryover (`while remainingDt > Epsilon`).
+  2. `TacticalAction` encapsulates lifecycle states (`Pending`, `Executing`, `Completed`, `Cancelled`, `Failed`), normalized progress, and completion time.
+  3. Redundant `ExecutionProgress` increment noted in `ShootTacticalAction.cs:32`.
+  4. Integration with `IActorPhysiology.TickPhysiology(dt)` requires extending `ITurnResolver` with `RegisterEntity(IEntity)` / `UnregisterEntity(Guid)` to tick physiology and auto-cancel actions on fatal hemorrhage/incapacitation (`ConsciousnessLevel <= 0`).
+  5. 232 test cases currently pass with zero warnings.
+- **Unexplored areas**: None within the requested scope.
 
 ## Key Decisions Made
-- Detailed comprehensive architectural specification for `TurnResolver`, `TacticalAction`, lifecycle state machine, event models, error handling, and test matrix.
+- Structured complete handoff report with 5 standard sections (Observation, Logic Chain, Caveats, Conclusion, Verification Method) in `handoff.md`.
 
 ## Artifact Index
-- DISPATCH.md — Task prompt log
-- BRIEFING.md — Persistent working memory
-- progress.md — Progress heartbeat
+- DISPATCH.md — Dispatch log
+- BRIEFING.md — Situational awareness
+- progress.md — Liveness & progress tracker
 - handoff.md — Final handoff report

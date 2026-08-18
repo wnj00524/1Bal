@@ -1,234 +1,250 @@
-# Handoff Report: Fractionated TU Turn Resolver (Issue #3)
+# Architectural Analysis & Investigation Report: Simultaneous Turn Resolution & Fractionated TU Simulation
+
+**Author:** explorer_survey_2 (Teamwork Explorer)  
+**Date:** 2026-08-18  
+**Scope:** `TacticalSim.Core.Simulation`, `TacticalSim.Core.Entities`, `TacticalSim.Core.Physiology`, `TacticalSim.Core.DependencyInjection`
+
+---
 
 ## 1. Observation
 
-### 1.1 Project & Solution Baseline
-- **Build Status**: Solution builds cleanly with .NET 8.0 SDK.
-- **Test Status**: `dotnet test` executes 2 tests passing in `TacticalSim.Tests/BallisticSolverTests.cs` (0 failed, 2 passed).
-- **Core Dependencies**: `TacticalSim.Core.csproj` includes `Microsoft.Extensions.DependencyInjection` (v10.0.11), target framework `net8.0`, with `<Nullable>enable</Nullable>`.
-- **Existing Scaffolding**: `TacticalSim.Core/TurnResolution.cs` currently contains initial stub definitions:
-```csharp
-namespace TacticalSim.Core.Simulation
-{
-    /// <summary>
-    /// Represents an action that consumes Time Units (TUs) within the simulation.
-    /// </summary>
-    public abstract class TacticalAction
-    {
-        public Guid ActorId { get; set; }
-        public float TUCost { get; set; }
-        public float ExecutionProgress { get; set; }
-        
-        /// <summary>
-        /// Advances the action execution by fractionated timesteps.
-        /// </summary>
-        public abstract void Execute(float dt);
-        public bool IsComplete => ExecutionProgress >= TUCost;
-    }
+### 1.1 Solution & Project Structure
+The solution `TacticalSim.slnx` contains two primary projects targeting `.NET 8.0`:
+1. `TacticalSim.Core/TacticalSim.Core.csproj`: Core simulation library with dependency injection (`Microsoft.Extensions.DependencyInjection` v10.0.11).
+2. `TacticalSim.Tests/TacticalSim.Tests.csproj`: xUnit test suite (`xunit` v2.5.3, `Microsoft.NET.Test.Sdk` v17.8.0, `coverlet.collector` v6.0.0).
 
-    /// <summary>
-    /// Interface for managing the Simultaneous Turn Resolution system.
-    /// </summary>
-    public interface ITurnResolver
-    {
-        /// <summary>
-        /// Current global time in the simulation.
-        /// </summary>
-        float GlobalTime { get; }
+All 232 existing tests currently compile with zero warnings and pass (`dotnet test` duration: ~280ms).
 
-        /// <summary>
-        /// Schedules an action for an actor.
-        /// </summary>
-        void ScheduleAction(TacticalAction action);
+---
 
-        /// <summary>
-        /// Advances the simulation by a fractionated timestep, executing all concurrent actions.
-        /// </summary>
-        void Tick(float dt);
-    }
-}
-```
+### 1.2 Existing Action Representations & Command Structures
+Direct observation of `TacticalSim.Core/Simulation/TacticalAction.cs` and `TacticalSim.Core/Simulation/TacticalActionState.cs`:
 
-### 1.2 User Requirements (from `ORIGINAL_REQUEST.md`)
-- **R1**: Create a simultaneous turn resolution system that manages a global timeline. It must be capable of scheduling concurrent actions from multiple entities and advancing their execution state based on fractionated Time Unit (TU) increments.
-- **R3**: Isolated within `TacticalSim.Core`, registered via `Microsoft.Extensions.DependencyInjection`, conforming to `agents.md`.
-- **Acceptance Criteria**: Programmatic xUnit tests in `TacticalSim.Tests` verifying multiple concurrent actions interleaved and resolved across fractionated time steps; clean compile; all tests pass.
+- **Action Lifecycle States (`TacticalActionState`)**:
+  - `Pending` (0): Registered and enqueued, awaiting execution.
+  - `Executing` (1): Actively executing in the resolver loop.
+  - `Completed` (2): Fully consumed its required Time Units (`ExecutionProgress >= TUCost`).
+  - `Cancelled` (3): Aborted prior to completion via explicit cancellation or actor purge.
+  - `Failed` (4): Threw an unhandled exception during execution; isolated from other actors.
+
+- **`TacticalAction` Base Class (`TacticalAction.cs:11-113`)**:
+  ```csharp
+  public abstract class TacticalAction
+  {
+      public Guid Id { get; set; } = Guid.NewGuid();
+      public Guid ActorId { get; set; }
+      public float TUCost { get; set; }
+      public float ExecutionProgress { get; set; }
+      public TacticalActionState State { get; internal set; } = TacticalActionState.Pending;
+      public float StartTime { get; internal set; }
+      public float? CompletionTime { get; internal set; }
+      public Exception? FailureException { get; internal set; }
+      public float RemainingTU => MathF.Max(0f, TUCost - ExecutionProgress);
+      public float NormalizedProgress => TUCost > 0f ? Math.Clamp(ExecutionProgress / TUCost, 0f, 1f) : 1f;
+      public bool IsComplete => State == TacticalActionState.Completed || ExecutionProgress >= TUCost;
+
+      public abstract void Execute(float dt);
+      public virtual void OnStart() { }
+      public virtual void OnComplete() { }
+      public virtual void OnCancel() { }
+      public virtual void OnFail(Exception ex) { }
+  }
+  ```
+
+- **Concrete Tactical Actions (`TacticalSim.Core/Simulation/Actions/`)**:
+  - `GenericTacticalAction`: Delegate-driven action with `Action<float>? OnExecuteCallback`, `Action? OnStartCallback`, `Action? OnCompleteCallback`, `Action? OnCancelCallback`, and `Action<Exception>? OnFailCallback`.
+  - `MoveTacticalAction`: Spatial translation across 3D coordinates (`Vector3 StartPosition`, `TargetPosition`). During `Execute(dt)`, updates `CurrentPosition = Vector3.Lerp(StartPosition, TargetPosition, NormalizedProgress)`.
+  - `AimTacticalAction`: Continuous precision accumulation targeting `Guid TargetId` (`CurrentAimBonus = MaxAimBonus * NormalizedProgress`).
+  - `WaitTacticalAction`: Idle waiting for a specified TU duration with an empty `Execute(dt)` body.
+  - `ShootTacticalAction`: Ballistic firing simulation when TU duration completes (`BallisticSolver.StepRK4` integration).
+    *Observation Note*: In `ShootTacticalAction.cs:32`, line 32 contains `ExecutionProgress += dt;` and line 62 contains `State = TacticalActionState.Completed;`. Because `TurnResolver.Tick` *already* increments `ExecutionProgress` before invoking `Execute(dt)`, `ShootTacticalAction` contains a redundant duplicate increment.
+
+---
+
+### 1.3 Turn Resolver Architecture & Event Loop
+Direct observation of `TacticalSim.Core/Simulation/TurnResolver.cs` and `ITurnResolver.cs`:
+
+- **Internal Storage**:
+  - `_globalTime`: `float` simulation timeline clock.
+  - `_activeActions`: `Dictionary<Guid, TacticalAction>` mapping each `ActorId` to its currently executing action.
+  - `_actorQueues`: `Dictionary<Guid, Queue<TacticalAction>>` mapping each `ActorId` to a FIFO queue of subsequent actions.
+
+- **Scheduling & Queueing (`ScheduleAction`, lines 50-84)**:
+  - Validates `action != null`, `action.ActorId != Guid.Empty`, `action.TUCost > 0f` (finite, positive), and `action.State == TacticalActionState.Pending`.
+  - If `_activeActions` does not contain `ActorId`, action is immediately placed in `_activeActions`.
+  - If `_activeActions` already has an action for `ActorId`, action is pushed into `_actorQueues[ActorId]`.
+  - Fires `ActionScheduled?.Invoke(this, new ActionEventArgs(action, _globalTime))`.
+
+- **Cancellation (`CancelAction`, `CancelActorActions`, lines 87-194)**:
+  - If an active action is cancelled, it transitions to `TacticalActionState.Cancelled`, calls `action.OnCancel()`, fires `ActionCancelled`, and immediately promotes the next queued action for that actor from `_actorQueues` into `_activeActions`.
+
+- **Tick Loop & Sub-Stepping (`Tick(float dt)`, lines 224-368)**:
+  ```csharp
+  // 1. Snapshot active actor IDs sorted deterministically
+  var actorIds = _activeActions.Keys.OrderBy(id => id).ToList();
+
+  // 2. Iterate each actor independently with sub-tick carryover
+  foreach (var actorId in actorIds)
+  {
+      float remainingDt = dt;
+      while (remainingDt > Epsilon)
+      {
+          // Retrieve or promote action
+          // If Pending -> transition to Executing, set StartTime, fire ActionStarted
+          // Check if neededTU <= remainingDt + Epsilon:
+          //   - If completing: set ExecutionProgress = TUCost, State = Completed,
+          //     call Execute(stepDt), OnComplete(), fire ActionProgressed & ActionCompleted,
+          //     remainingDt -= stepDt, remove from active actions -> loop promotes next queued action!
+          //   - If partial: ExecutionProgress += remainingDt, call Execute(remainingDt),
+          //     fire ActionProgressed, remainingDt = 0f -> break
+      }
+  }
+
+  // 3. Advance global timeline clock
+  _globalTime += dt;
+  TimeAdvanced?.Invoke(this, new TimeAdvancedEventArgs(dt, prevTime, _globalTime));
+  ```
+
+- **Observability Events (`TurnResolverEvents.cs:1-128`)**:
+  - `ActionScheduled`, `ActionStarted`, `ActionProgressed`, `ActionCompleted`, `ActionCancelled`, `ActionFailed`, `TimeAdvanced`.
+
+---
+
+### 1.4 Entities & Physiology State Machine
+Direct observation of `TacticalSim.Core/Entities/` and `TacticalSim.Core/ActorPhysiology.cs`:
+
+- **`IEntity` / `TacticalEntity` (`TacticalSim.Core/Entities/IEntity.cs`)**:
+  ```csharp
+  public interface IEntity
+  {
+      Guid Id { get; }
+      Vector3 Position { get; set; }
+      IActorPhysiology Physiology { get; }
+      WeaponProfile? EquippedWeapon { get; set; }
+  }
+  ```
+- **`IActorPhysiology` & `TacticalActorPhysiology` (`TacticalSim.Core/ActorPhysiology.cs:103-205`)**:
+  - Exposes `BodyPart RootBodyPart`, `float TotalBloodVolume` (5000 mL baseline), `float ConsciousnessLevel` (0.0 to 1.0), `HemorrhageClass CurrentHemorrhageClass`, `HeartRateBpm`, `MeanArterialPressureMmhg`.
+  - Exposes `void TickPhysiology(float dt)`:
+    1. Aggregates bleed rates from all body parts: `TotalBloodVolume -= totalBleedRate * dt`.
+    2. Updates tourniquet ischemia duration: `part.IschemiaDuration += dt` (flags necrosis if $> 7200\text{ s}$).
+    3. Updates cardiovascular state & consciousness level based on percentage blood loss:
+       - $< 15\%$ loss $\to$ Class 1, consciousness = 1.0
+       - $15\% - 30\%$ loss $\to$ Class 2, consciousness = 0.9
+       - $30\% - 40\%$ loss $\to$ Class 3, consciousness = 0.6
+       - $40\% - 50\%$ loss $\to$ Class 4, consciousness = 0.2
+       - $> 50\%$ loss $\to$ Fatal, consciousness = 0.0
+- **Current Observation**: `TurnResolver` currently operates solely on `Guid ActorId` and `TacticalAction`. It does not currently register `IEntity` or invoke `IActorPhysiology.TickPhysiology(dt)` during `Tick(dt)`.
 
 ---
 
 ## 2. Logic Chain
 
-### 2.1 Domain Model Analysis for Simultaneous Turn Resolution
+### 2.1 Analysis of Simultaneous Fractionated TU Turn Resolution Patterns
 
-#### 2.1.1 Global Timeline & Fractionated Time Units (TU)
-- **Time Unit (TU)**: Standardized simulation time quantity representing duration. All actions define a `TUCost > 0`.
-- **Global Time ($T_g$)**: Monotonically advancing simulation clock ($T_g \ge 0$).
-- **Fractionated Timestep ($\Delta t$)**: Discrete delta time by which the simulation timeline advances per `Tick(dt)`.
-- **Time Discretization & Floating-Point Stability**:
-  - Because `dt` and `TUCost` are floating-point values, standard rounding drift can occur (e.g. $0.1 + 0.1 + 0.1 \ne 0.3$).
-  - An epsilon tolerance ($\epsilon = 1 \times 10^{-5}\text{f}$) must be used for completion comparison: `ExecutionProgress + epsilon >= TUCost`.
-  - On action completion, `ExecutionProgress` is clamped exactly to `TUCost` to prevent arithmetic overshoot.
-
-#### 2.1.2 Concurrency & Multi-Entity Scheduling
-- **Entity Model**: Each action is associated with an actor identified by `Guid ActorId` (and unique `Guid Id` for the action).
-- **Per-Actor Queuing vs Multi-Actor Concurrency**:
-  - Each individual actor maintains an ordered FIFO queue of pending actions.
-  - Across different actors ($A_1, A_2, \dots, A_N$), active actions execute **concurrently** (simultaneously in parallel timeline progress).
-  - When `ScheduleAction(action)` is called:
-    - If the actor has no active action, the action becomes the actor's currently active action (transitioning to `Pending` / ready to start on next tick).
-    - If the actor already has an active action, the action is enqueued in that actor's pending action queue.
-- **Action Cancellation & Interruption**:
-  - Actions can be cancelled individually via `CancelAction(Guid actionId)` or per actor via `CancelActorActions(Guid actorId)`.
-  - When an active action is cancelled, the next queued action for that actor (if any) is promoted to active status.
-
-#### 2.1.3 Sub-Tick Interleaving & Fractional Carryover
-When `Tick(float dt)` is called with a step $\Delta t$:
-1. For each actor with an active action, let $\text{remainingTU} = \text{action.TUCost} - \text{action.ExecutionProgress}$.
-2. If $\text{remainingTU} \ge \Delta t$:
-   - The action executes for the full step: `action.Execute(dt)`.
-   - `action.ExecutionProgress += dt`.
-3. If $\text{remainingTU} < \Delta t$:
-   - The action executes for the remaining duration: `action.Execute(remainingTU)`.
-   - `action.ExecutionProgress = action.TUCost`.
-   - The action transitions to `Completed` and fires completion hooks/events.
-   - Let $\Delta t_{\text{carryover}} = \Delta t - \text{remainingTU}$.
-   - If the actor has a queued action in its queue, the next action is dequeued, started at $T_g + \text{remainingTU}$, and immediately executed for $\Delta t_{\text{carryover}}$ within the same tick (or recursively sub-stepped).
-4. All active actions across all actors are updated consistently, advancing the global timeline by $\Delta t$.
-
-#### 2.1.4 Action Lifecycle State Machine
-```
-   [ ScheduleAction ]
-          │
-          ▼
-   ┌──────────────┐
-   │   Pending    │ ──(Cancel)──> ┌─────────────┐
-   └──────────────┘               │  Cancelled  │
-          │ (Tick start)          └─────────────┘
-          ▼                              ▲
-   ┌──────────────┐                      │
-   │  Executing   │ ──(Cancel/Interrupt)─┘
-   └──────────────┘
-     │          │
-     │          └──(Uncaught Exception)──> ┌─────────────┐
-     ▼ (Progress >= TUCost)                │   Failed    │
-   ┌──────────────┐                        └─────────────┘
-   │  Completed   │
-   └──────────────┘
-```
-
-States (`TacticalActionState`):
-- `Pending`: Registered with the resolver, awaiting initial tick or queued behind another action.
-- `Executing`: Active action currently progressing on the timeline.
-- `Completed`: Action reached `ExecutionProgress >= TUCost`.
-- `Cancelled`: Action was aborted before completion.
-- `Failed`: Action threw an exception during execution.
-
-#### 2.1.5 Strict Determinism & Reproducibility
-- To guarantee determinism across runs, platforms, and thread scheduling:
-  - Turn resolution is single-threaded and sequentially evaluates active actors in a stable sort order (e.g. sorted by `ActorId`, then `Action.Id`).
-  - No unordered collection iteration (such as standard `Dictionary.Values` / `HashSet`) is allowed to dictate execution order.
-  - Given an initial state and identical scheduled actions/tick deltas, state and events are bit-for-bit reproducible.
-
-#### 2.1.6 Event Emission & Decoupled Observability
-Events enable external systems (ballistics triggers, physiological updates, UI animations, logging) to react cleanly without tight coupling:
-- `ActionScheduled(TacticalAction action, float globalTime)`
-- `ActionStarted(TacticalAction action, float globalTime)`
-- `ActionProgressed(TacticalAction action, float dt, float executionProgress, float globalTime)`
-- `ActionCompleted(TacticalAction action, float globalTime)`
-- `ActionCancelled(TacticalAction action, float globalTime)`
-- `TimeAdvanced(float previousTime, float newTime, float dt)`
-
-#### 2.1.7 Robust Error Handling & Input Validation
-- **Validation**:
-  - `dt <= 0`, `float.IsNaN(dt)`, `float.IsInfinity(dt)` $\to$ `ArgumentException` / `ArgumentOutOfRangeException`.
-  - `action == null` $\to$ `ArgumentNullException`.
-  - `action.TUCost <= 0` $\to$ `ArgumentException("TUCost must be strictly positive.")`.
-  - `action.ActorId == Guid.Empty` $\to$ `ArgumentException("ActorId cannot be empty.")`.
-- **Fault Isolation**:
-  - If a specific `TacticalAction.Execute(dt)` throws, the turn resolver catches the exception, transitions the action to `TacticalActionState.Failed`, records `Exception`, fires an `ActionFailed` event, and continues ticking remaining concurrent actors without corrupting the global timeline.
+| Pattern | Mechanism | Strengths | Weaknesses | Fit for TacticalSim |
+|---|---|---|---|---|
+| **A. Per-Actor Sliced Sub-Stepping (Current Implementation)** | Outer loop over actors (sorted by `ActorId`); inner `while (remainingDt > 0)` exhausts actor's time budget $\Delta t$, promoting queued actions and executing fractional carryover. | • Extremely fast $O(N \cdot K)$ where $N$ = active actors, $K$ = actions per tick.<br>• Exact sub-tick timestamps.<br>• Zero temporal drift across ticks.<br>• Perfect deterministic reproducibility. | • Actor A processes its entire $[t, t+\Delta t]$ time budget before Actor B begins its $[t, t+\Delta t]$ budget within the tick. If Actor A's action at $t+0.2$ impacts Actor B, Actor B's state during that same tick was not yet updated at $t+0.2$ unless resolved via global event slices. | **Current Production Pattern** (solid baseline, handles concurrent multi-actor queues and carryover). |
+| **B. Global Discrete Event Min-Heap (Priority Queue)** | Future action completion events ($T_{\text{completion}} = T_{\text{start}} + \text{TUCost}$) placed in a global min-heap sorted by $(T_{\text{time}}, \text{Priority}, \text{ActorId})$. Resolver pops earliest event, jumps $T_{\text{global}} \to T_{\text{event}}$, and triggers completion. | • Strict global temporal ordering across all actors.<br>• Clean event-driven scheduling. | • Clunky for continuous-time processes (e.g. continuous motion interpolation, physiology bleed rates $d(\text{Blood})/dt$, sensor queries) which require continuous sampling rather than jumping between sparse discrete events. | **Poor fit for continuous ballistics and continuous physiology integration.** |
+| **C. Synchronized Micro-Slice Stepping (Enhanced Hybrid)** | Fixed macro-tick `Tick(dt)` divided into dynamic micro-slices $\delta t = \min_{a}(\text{RemainingTU}_a, \text{remainingDt})$. All actors and continuous systems (physiology) advance in synchronized $\delta t$ slices. | • Combines continuous time integration with strict cross-actor temporal interleaving.<br>• Immediate reaction/opportunity fire and damage response at the exact micro-slice where impact occurs. | • Higher overhead when actors have heavily disparate, non-aligned fractionated costs (multiple micro-iterations per tick). | **Optimal for future interactive tactical reaction loops.** |
 
 ---
 
-### 2.2 Detailed Class and Interface Design
+### 2.2 Deterministic Concurrency & Interleaving Architecture
 
-```
-TacticalSim.Core/
-└── Simulation/
-    ├── TacticalActionState.cs    // Enum: Pending, Executing, Completed, Cancelled, Failed
-    ├── TacticalAction.cs         // Base abstract class with full lifecycle & progress tracking
-    ├── ITurnResolver.cs          // Interface with timeline, scheduling, cancellation, queries, events
-    ├── TurnResolver.cs           // Concrete deterministic simultaneous turn resolver implementation
-    ├── TurnResolverEvents.cs     // EventArgs for all turn resolver lifecycle events
-    └── Actions/                  // Concrete standard tactical actions for simulation & testing
-        ├── GenericTacticalAction.cs // Delegate-backed action
-        ├── MoveTacticalAction.cs    // Position interpolation over TUs
-        ├── AimTacticalAction.cs     // Precision ramp-up over TUs
-        └── WaitTacticalAction.cs    // Idle delay action
-```
+To achieve 100% deterministic simulation across platforms, threads, and runs:
+1. **Canonical Actor Ordering**:
+   - `TurnResolver.cs:232` sorts actors deterministically: `_activeActions.Keys.OrderBy(id => id).ToList()`.
+   - For domain-specific initiative (e.g., Agility or Reaction stats), the sort key can be generalized to `(InitiativePriority, ActorId)` so that higher initiative actors are processed first, with `ActorId` breaking any ties.
+2. **Sub-Tick Carryover Mechanics**:
+   - If Actor 1 has Action A (cost: 0.3 TU) and Action B (cost: 0.5 TU), and `Tick(1.0f)` is called:
+     - Sub-step 1: Action A executes $0.3$ TU, completes at $T_{\text{global}} + 0.3$.
+     - Sub-step 2: Remaining time $\Delta t_{\text{rem}} = 0.7$ TU. Action B is dequeued, starts at $T_{\text{global}} + 0.3$, consumes $0.5$ TU, and completes at $T_{\text{global}} + 0.8$.
+     - Sub-step 3: Remaining time $\Delta t_{\text{rem}} = 0.2$ TU. No further queued actions; actor becomes idle.
+     - Final state: Both actions completed in a single tick; zero lost time; exact completion timestamps recorded.
+3. **Fault Isolation**:
+   - If an action throws during `Execute(dt)`, `TurnResolver` catches the exception, transitions that action to `TacticalActionState.Failed`, fires `ActionFailed`, and purges that actor's active action without terminating or corrupting other actors' executions.
 
-#### Proposed `TacticalAction.cs` Signature:
-```csharp
-namespace TacticalSim.Core.Simulation
-{
-    public enum TacticalActionState
-    {
-        Pending,
-        Executing,
-        Completed,
-        Cancelled,
-        Failed
-    }
+---
 
-    public abstract class TacticalAction
-    {
-        public Guid Id { get; set; } = Guid.NewGuid();
-        public Guid ActorId { get; set; }
-        public float TUCost { get; set; }
-        public float ExecutionProgress { get; set; }
-        public TacticalActionState State { get; internal set; } = TacticalActionState.Pending;
-        
-        public float StartTime { get; internal set; }
-        public float? CompletionTime { get; internal set; }
-        public Exception? FailureException { get; internal set; }
+### 2.3 Entity Registration & Physiological Integration Architecture
 
-        public float RemainingTU => MathF.Max(0f, TUCost - ExecutionProgress);
-        public float NormalizedProgress => TUCost > 0f ? Math.Clamp(ExecutionProgress / TUCost, 0f, 1f) : 1f;
-        public bool IsComplete => State == TacticalActionState.Completed || ExecutionProgress >= TUCost;
+Per `ORIGINAL_REQUEST.md` (R2 - Physiological Integration):
+*"The Turn Resolver must have a mechanism to invoke `IActorPhysiology.TickPhysiology(dt)` on all active entities in the simulation as the timeline advances, ensuring bleeding and ischemia effects resolve properly over the game's duration."*
 
-        /// <summary>
-        /// Advances the action execution by fractionated timesteps.
-        /// </summary>
-        public abstract void Execute(float dt);
+To satisfy this requirement with strict architectural decoupling:
+1. **Entity Management in `ITurnResolver`**:
+   - `ITurnResolver` should provide registration/unregistration for entities:
+     ```csharp
+     void RegisterEntity(IEntity entity);
+     bool UnregisterEntity(Guid entityId);
+     IReadOnlyCollection<IEntity> GetRegisteredEntities();
+     ```
+2. **Physiology Ticking in `Tick(float dt)`**:
+   - During each `Tick(dt)` invocation:
+     ```csharp
+     // Advance physiology for all registered entities
+     foreach (var entity in _registeredEntities.Values.OrderBy(e => e.Id))
+     {
+         entity.Physiology.TickPhysiology(dt);
 
-        public virtual void OnStart() { }
-        public virtual void OnComplete() { }
-        public virtual void OnCancel() { }
-        public virtual void OnFail(Exception ex) { }
-    }
-}
-```
+         // Automatic Invalidation on Incapacitation:
+         // If entity consciousness reaches 0 (dead or unconscious), abort ongoing actions
+         if (entity.Physiology.ConsciousnessLevel <= 0f)
+         {
+             CancelActorActions(entity.Id);
+         }
+     }
+     ```
+3. **Decoupled DI Composition**:
+   - `AddSimulationServices` in `TacticalSim.Core.DependencyInjection.ServiceCollectionExtensions` registers `ITurnResolver` $\to$ `TurnResolver` as `Transient` or `Scoped`.
+   - Factory or DI resolution provides clean instantiation without hardcoded singleton dependencies.
 
-#### Proposed `ITurnResolver.cs` Signature:
+---
+
+## 3. Caveats
+
+1. **`ShootTacticalAction` Redundant Progress Increment**:
+   - In `ShootTacticalAction.cs:32`, `ExecutionProgress += dt;` is executed inside `Execute(dt)`. Because `TurnResolver.Tick` already modifies `ExecutionProgress` before calling `Execute`, concrete action implementations should not directly modify `ExecutionProgress` unless executing outside `TurnResolver`.
+2. **Action Interruption Granularity**:
+   - In the current per-actor sliced model, if Actor A shoots Actor B at $t = 0.3$ TU, Actor B's action in that same tick may have already completed if Actor B's ID was sorted before Actor A. If sub-tick real-time reactivity (e.g. bullet flight interrupting mid-movement) is required, the solver will need micro-slice synchronization or delayed event commitment.
+3. **Physiology Performance at Scale**:
+   - Voxel-level trauma (`AnatomicalDummyBuilder` generates ~15,000 voxels per torso dummy) is processed only on impact (`ProcessImpact`). `TickPhysiology(dt)` only aggregates tree-level bleed rates and ischemia timers across ~7 `BodyPart` nodes, running in under $1\,\mu\text{s}$ per entity.
+
+---
+
+## 4. Conclusion & Architectural Recommendations
+
+### 4.1 Recommended Interface Enhancements for `ITurnResolver`
 ```csharp
 namespace TacticalSim.Core.Simulation
 {
     public interface ITurnResolver
     {
+        // Timeline & State
         float GlobalTime { get; }
         bool HasActiveActions { get; }
         int ActiveActorCount { get; }
 
+        // Entity Registration (R2 Physiological Integration)
+        void RegisterEntity(IEntity entity);
+        bool UnregisterEntity(Guid entityId);
+        IReadOnlyCollection<IEntity> GetRegisteredEntities();
+        IEntity? GetEntity(Guid entityId);
+
+        // Action Management
         void ScheduleAction(TacticalAction action);
         bool CancelAction(Guid actionId);
         int CancelActorActions(Guid actorId);
-
         IReadOnlyList<TacticalAction> GetActiveActions();
         IReadOnlyList<TacticalAction> GetQueuedActions(Guid actorId);
         TacticalAction? GetCurrentAction(Guid actorId);
 
+        // Timeline Progression
         void Tick(float dt);
         void Reset();
 
+        // Lifecycle & Observability Events
         event EventHandler<ActionEventArgs>? ActionScheduled;
         event EventHandler<ActionEventArgs>? ActionStarted;
         event EventHandler<ActionProgressEventArgs>? ActionProgressed;
@@ -236,81 +252,42 @@ namespace TacticalSim.Core.Simulation
         event EventHandler<ActionEventArgs>? ActionCancelled;
         event EventHandler<ActionFailedEventArgs>? ActionFailed;
         event EventHandler<TimeAdvancedEventArgs>? TimeAdvanced;
+        event EventHandler<EntityEventArgs>? EntityRegistered;
+        event EventHandler<EntityEventArgs>? EntityUnregistered;
     }
 }
 ```
 
-#### Proposed DI Registration (`TacticalSim.Core/DependencyInjection/ServiceCollectionExtensions.cs`):
-```csharp
-namespace TacticalSim.Core.DependencyInjection
-{
-    public static class ServiceCollectionExtensions
-    {
-        public static IServiceCollection AddTacticalSimulation(this IServiceCollection services)
-        {
-            services.AddSingleton<ITurnResolver, TurnResolver>();
-            return services;
-        }
-    }
-}
-```
-
----
-
-### 2.3 Proposed Test Coverage Matrix (`TacticalSim.Tests/TurnResolverTests.cs`)
-
-1. **Deterministic Timeline Advancement**:
-   - Verify `GlobalTime` starts at 0.0 and increments accurately across multiple fractionated `Tick(dt)` steps.
-   - Reject invalid `dt` ($\le 0$, `NaN`, `Infinity`).
-2. **Single Actor Action Execution**:
-   - Schedule action with $TU = 1.0$, tick $0.5 \to$ progress = $0.5$, state = `Executing`.
-   - Tick $0.5 \to$ progress = $1.0$, state = `Completed`, `IsComplete = true`.
-3. **Multi-Actor Simultaneous Execution**:
-   - Actor 1 ($TU = 1.0$), Actor 2 ($TU = 1.0$), Actor 3 ($TU = 2.0$).
-   - Tick $1.0 \to$ Actor 1 and 2 complete simultaneously; Actor 3 is at 50% progress ($1.0 / 2.0$).
-4. **Fractionated Sub-Tick Interleaving**:
-   - Actor A has Action A1 ($TU = 0.3$) and queued Action A2 ($TU = 0.5$).
-   - Actor B has Action B1 ($TU = 1.0$).
-   - Tick $0.5 \to$ Action A1 completes at +0.3 TU; Action A2 starts and consumes remaining 0.2 TU (progress = 0.2/0.5). Action B1 reaches 0.5/1.0.
-5. **Action Queueing & FIFO Ordering**:
-   - Schedule multiple actions for the same actor; verify sequential execution as prior actions complete.
-6. **Action Cancellation**:
-   - Cancel currently executing action $\to$ transitions to `Cancelled`, dequeues next pending action.
-   - Cancel all actions for an actor $\to$ clears active and queued actions for that actor.
-7. **Event Emission Verification**:
-   - Verify all events (`ActionScheduled`, `ActionStarted`, `ActionProgressed`, `ActionCompleted`, `ActionCancelled`, `TimeAdvanced`) fire with exact timestamps and arguments in correct temporal sequence.
-8. **Fault Tolerance / Exception Handling**:
-   - Action throwing exception inside `Execute` transitions to `Failed`; resolver continues executing other concurrent actors.
-9. **DI Integration Verification**:
-   - Build `ServiceCollection`, register `AddTacticalSimulation()`, resolve `ITurnResolver` via `ServiceProvider`, execute simulation ticks.
-
----
-
-## 3. Caveats
-- `TacticalSim.Core/TurnResolution.cs` currently has stub definitions that should be evolved in-place to preserve backwards compatibility while adding the full lifecycle and event infrastructure.
-- In multi-actor actions that interact with spatial geometry (e.g. moving actors crossing paths), spatial collision is handled by higher-level movement validation; the Turn Resolver is strictly responsible for temporal scheduling, state transitions, and fractionated TU advancement.
-
----
-
-## 4. Conclusion
-The requirements for Issue #3 (Fractionated TU Turn Resolver) are fully mapped. The system requires:
-1. `TurnResolver` implementing `ITurnResolver` with deterministic multi-entity scheduling, per-actor queues, and fractionated sub-tick interleaving.
-2. `TacticalAction` lifecycle state machine (`Pending`, `Executing`, `Completed`, `Cancelled`, `Failed`) with clamped floating-point progress and precision safeguards.
-3. Event-driven decoupled observability (`ActionEventArgs`, `TimeAdvancedEventArgs`).
-4. DI service registration via `Microsoft.Extensions.DependencyInjection`.
-5. Comprehensive xUnit test suite validating all concurrency, interleaving, cancellation, and determinism properties.
+### 4.2 Proposed Implementation Blueprint for `TurnResolver.cs`
+1. Maintain `Dictionary<Guid, IEntity> _registeredEntities = new();`.
+2. In `RegisterEntity(IEntity entity)`: validate non-null, store by `entity.Id`.
+3. In `Tick(float dt)`:
+   - Advance action execution queues for active actors with deterministic sub-tick carryover.
+   - Advance physiology for all registered entities via `entity.Physiology.TickPhysiology(dt)`.
+   - If `entity.Physiology.ConsciousnessLevel <= 0f`, automatically invoke `CancelActorActions(entity.Id)` to cleanly abort actions for incapacitated or deceased entities.
+   - Advance `_globalTime += dt` and fire `TimeAdvanced`.
+4. In `Reset()`: clear `_activeActions`, `_actorQueues`, `_registeredEntities`, and reset `_globalTime = 0f`.
 
 ---
 
 ## 5. Verification Method
 
-To verify the survey findings and ensure the repository baseline is valid:
-1. **Run Current Test Suite**:
-   ```bash
-   dotnet test
+### 5.1 Verification Commands
+1. **Compilation Check (Zero Warnings/Errors)**:
+   ```pwsh
+   dotnet build TacticalSim.slnx --configuration Debug
    ```
-   *Expected*: 2 tests pass in `TacticalSim.Tests`.
-2. **Inspect Scaffolding**:
-   Check `TacticalSim.Core/TurnResolution.cs` to confirm existing stubs and compatibility requirements.
-3. **Verify DI Package Reference**:
-   Check `TacticalSim.Core/TacticalSim.Core.csproj` to confirm `Microsoft.Extensions.DependencyInjection` is present.
+   *Expected*: `Build succeeded. 0 Warning(s), 0 Error(s).`
+
+2. **Test Suite Execution**:
+   ```pwsh
+   dotnet test TacticalSim.slnx --verbosity normal
+   ```
+   *Expected*: All 232 existing tests pass.
+
+### 5.2 Specific xUnit Verification Scenarios for Issue #3 & Physiological Integration
+When implementing the recommended changes, verify with the following dedicated test cases:
+1. `TurnResolver_RegistersAndTracksEntities`: Verifies `RegisterEntity`, `UnregisterEntity`, and `GetRegisteredEntities`.
+2. `TurnResolver_Tick_InvokesTickPhysiology_OnAllRegisteredEntities`: Registers entities with active bleed rates, advances timeline with `resolver.Tick(1.0f)`, and verifies `TotalBloodVolume` decreases by exactly `totalBleedRate * 1.0f`.
+3. `TurnResolver_IncapacitatedEntity_AutomaticallyCancelsActiveAndQueuedActions`: Inflicts lethal/incapacitating trauma (reducing consciousness to 0.0), calls `resolver.Tick(0.5f)`, and asserts that active and queued actions transition to `TacticalActionState.Cancelled`.
+4. `TurnResolver_ConcurrentMultiActorCarryover_MaintainsExactTimestamps`: Verifies multiple actors with fractional action chains (e.g., $0.35 + 0.65$ TU) resolve concurrently within a $1.0$ TU tick with exact `CompletionTime` values and no temporal drift.

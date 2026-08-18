@@ -1,12 +1,13 @@
-# Progress — explorer_survey_2
+# Progress Log
 
-Last visited: 2026-08-17T21:22:00Z
+Last visited: 2026-08-18T12:38:50Z
 
-- [x] Initialized workspace files (DISPATCH.md, BRIEFING.md, progress.md)
-- [x] Read ORIGINAL_REQUEST.md and project documentation
-- [x] Explore existing repository structure and TacticalSim.Core
-- [x] Map all requirements for Issue #3 (Fractionated TU Turn Resolver)
-- [x] Analyze simultaneous turn resolution, timeline scheduling, lifecycle, determinism, time discretization, events, error handling
-- [x] Define interfaces, abstractions, data models, state machines
-- [x] Synthesize findings into handoff.md
-- [x] Send completion message to parent
+- [x] Initialized DISPATCH.md and BRIEFING.md
+- [x] Read ORIGINAL_REQUEST.md
+- [x] Surveyed TacticalSim file structure & verified test suite (232 tests passing)
+- [x] Investigated existing action representations, queues, command structures, event loops
+- [x] Analyzed design patterns for fractionated TU increments & discrete timeline slices
+- [x] Analyzed multi-actor simultaneous scheduling, deterministic interleaving, entity tracking & physiological integration
+- [x] Written handoff.md report
+- [x] Updated BRIEFING.md
+- [ ] Notify parent via send_message

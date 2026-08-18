@@ -1,46 +1,45 @@
-# BRIEFING — 2026-08-17T21:23:00Z
+# BRIEFING — 2026-08-18T12:38:00Z
 
 ## Mission
-Perform comprehensive codebase survey of TacticalSim project for parent orchestrator.
+Explore TacticalSim codebase to survey Actor/Physiology models, TickPhysiology, Time/TU scaling, DI registrations, and architectural conventions to support upcoming tasks.
 
 ## 🔒 My Identity
-- Archetype: explorer
-- Roles: explorer
-- Working directory: c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_1
-- Original parent: dcc35bc9-ece6-4ccd-b521-a7b68d811606
-- Milestone: baseline_survey
+- Archetype: teamwork_preview_explorer
+- Roles: codebase explorer, synthesis reporter
+- Working directory: c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_1\
+- Original parent: f199596d-8a51-4d30-8a7a-d8593620ad77
+- Milestone: codebase_survey
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement source code
-- Files for content delivery, Messages for coordination
+- Read-only investigation — do NOT implement changes to source code
+- Files for content delivery; messages for coordination
 - Self-contained 5-component handoff report
 
 ## Current Parent
-- Conversation ID: dcc35bc9-ece6-4ccd-b521-a7b68d811606
-- Updated: not yet
+- Conversation ID: f199596d-8a51-4d30-8a7a-d8593620ad77
+- Updated: 2026-08-18T12:36:14Z
 
 ## Investigation State
 - **Explored paths**:
-  - `c:\Users\jdwil\source\repos\Codex\1bal\ORIGINAL_REQUEST.md`
-  - `c:\Users\jdwil\source\repos\Codex\1bal\agents.md`
-  - `c:\Users\jdwil\source\repos\Codex\1bal\TacticalSim.slnx`
-  - `c:\Users\jdwil\source\repos\Codex\1bal\TacticalSim.Core\` (all .cs and .csproj)
-  - `c:\Users\jdwil\source\repos\Codex\1bal\TacticalSim.Tests\` (all .cs and .csproj)
+  - `TacticalSim.Core/Entities/` (`IEntity.cs`, `TacticalEntity.cs`, `WeaponProfile.cs`, `AmmunitionProfile.cs`)
+  - `TacticalSim.Core/` (`ActorPhysiology.cs`, `PhysiologicalVoxel.cs`, `TissueRegistry.cs`, `OrganType.cs`, `MedicalAssessor.cs`, `AnatomicalDummyBuilder.cs`, `BallisticSolver.cs`, `DragModels.cs`, `Environment.cs`)
+  - `TacticalSim.Core/Simulation/` (`ITurnResolver.cs`, `TurnResolver.cs`, `TacticalAction.cs`, `TacticalActionState.cs`, `TurnResolverEvents.cs`, `Actions/*`)
+  - `TacticalSim.Core/Materials/` (`IMaterialPenetrationSystem.cs`, `MaterialPenetrationSystem.cs`, `IMaterialRegistry.cs`, `MaterialRegistry.cs`, `MaterialProperties.cs`, `MaterialType.cs`, `PenetrationResult.cs`)
+  - `TacticalSim.Core/DependencyInjection/` (`ServiceCollectionExtensions.cs`)
+  - `TacticalSim.Tests/` (All test suites, total 232 passing xUnit tests)
+  - `ORIGINAL_REQUEST.md`, `PROJECT.md`, `agents.md`, `TEST_INFRA.md`, `TEST_READY.md`
 - **Key findings**:
-  - Solution targets .NET 8.0 with C# nullable enabled.
-  - Core has Microsoft.Extensions.DependencyInjection v10.0.11.
-  - Tests have xUnit v2.5.3, coverlet.collector v6.0.0, Microsoft.NET.Test.Sdk v17.8.0.
-  - Ballistics (RK4 solver, drag curves, ICAO atmosphere) and Physiology (Voxel raycast, tissue registry) are scaffolded.
-  - `ITurnResolver` and `TacticalAction` defined in `TacticalSim.Core.Simulation`, but no concrete resolver implementation exists.
-  - No material penetration models/solvers exist for environmental cover (Wood, Concrete, Steel).
-  - No ServiceCollection registration extensions exist yet.
-  - CS8618 nullable warning exists in `ActorPhysiology.cs:24`.
-- **Unexplored areas**: None. Full codebase surveyed.
+  - `IEntity` exposes `IActorPhysiology Physiology { get; }`.
+  - `TacticalActorPhysiology` implements `TickPhysiology(float dt)` where `dt` is seconds, calculating active hemorrhage blood volume deductions, tourniquet ischemia necrosis timers, and cardiovascular compensation stages.
+  - `TurnResolver` currently manages timeline and action queues by `Guid ActorId`, but has NO entity registration or `TickPhysiology` invocation mechanism.
+  - 1 Time Unit (TU) corresponds to 1 second of simulation time across actions and physics.
+  - DI extensions are located in `TacticalSim.Core.DependencyInjection.ServiceCollectionExtensions`.
+- **Unexplored areas**: None within scope.
 
 ## Key Decisions Made
-- Fully documented codebase structure, mathematical physics formulas, DI conventions, and architectural recommendations for Issue #3 and Issue #4 in handoff.md.
+- Fully documented codebase structure, physiological model, turn resolver mechanics, time scaling, DI registrations, and identified R2 integration requirements in `handoff.md`.
 
 ## Artifact Index
-- `c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_1\handoff.md` — Survey handoff report
-- `c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_1\progress.md` — Progress tracker
-- `c:\Users\jdwil\source\repos\Codex\1bal\.agents\explorer_survey_1\DISPATCH.md` — Initial dispatch prompt
+- DISPATCH.md — Dispatch log
+- progress.md — Liveness heartbeat and progress log
+- handoff.md — Final handoff report

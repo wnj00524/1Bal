@@ -1,4 +1,5 @@
 using System;
+using TacticalSim.Core.Entities;
 
 namespace TacticalSim.Core.Simulation
 {
@@ -122,6 +123,28 @@ namespace TacticalSim.Core.Simulation
             DeltaTime = deltaTime;
             PreviousGlobalTime = previousGlobalTime;
             CurrentGlobalTime = currentGlobalTime;
+        }
+    }
+
+    /// <summary>
+    /// Event arguments for entity registration and unregistration lifecycle events.
+    /// </summary>
+    public class EntityEventArgs : EventArgs
+    {
+        /// <summary>
+        /// The entity associated with this event.
+        /// </summary>
+        public IEntity Entity { get; }
+
+        /// <summary>
+        /// Global simulation time when this event occurred.
+        /// </summary>
+        public float Timestamp { get; }
+
+        public EntityEventArgs(IEntity entity, float timestamp)
+        {
+            Entity = entity ?? throw new ArgumentNullException(nameof(entity));
+            Timestamp = timestamp;
         }
     }
 }

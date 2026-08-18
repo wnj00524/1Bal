@@ -1,15 +1,17 @@
-# Progress - Explorer Survey 1
+# Progress Log — explorer_survey_1
 
-Last visited: 2026-08-17T21:23:30Z
-Status: Completed
+- **Last visited**: 2026-08-18T12:37:45Z
+- **Current Milestone**: codebase_survey
+- **Status**: IN_PROGRESS -> COMPLETED
 
-## Completed Tasks
-- [x] Initialized DISPATCH.md, BRIEFING.md, and progress.md
-- [x] Read ORIGINAL_REQUEST.md and agents.md
-- [x] Surveyed project files, solution structure, .csproj settings, and NuGet dependencies
-- [x] Inspected all source files in TacticalSim.Core and TacticalSim.Tests
-- [x] Executed dotnet test / dotnet build and identified baseline status and compiler warning (CS8618)
-- [x] Analyzed requirements and architecture for Issue #3 (Fractionated TU Turn Resolver) and Issue #4 (Material Penetration System)
-- [x] Updated BRIEFING.md
-- [x] Written comprehensive 5-component handoff report in handoff.md
-- [x] Notified parent orchestrator via send_message
+## Tasks Completed
+- [x] Read `ORIGINAL_REQUEST.md`, `PROJECT.md`, `agents.md`, `TEST_INFRA.md`, `TEST_READY.md`.
+- [x] Surveyed `TacticalSim.Core` codebase:
+  - Actor & Entity models (`IEntity`, `TacticalEntity`, `WeaponProfile`, `AmmunitionProfile`).
+  - Physiology state machine (`IActorPhysiology`, `TacticalActorPhysiology`, `BodyPart`, `PhysiologicalVoxel`, `TissueRegistry`, `MedicalAssessor`, `AnatomicalDummyBuilder`).
+  - Turn resolution and action execution (`ITurnResolver`, `TurnResolver`, `TacticalAction`, `TacticalActionState`, `TurnResolverEvents`, action subclasses).
+  - Material penetration & ballistics (`IMaterialPenetrationSystem`, `MaterialPenetrationSystem`, `IMaterialRegistry`, `MaterialRegistry`, `BallisticSolver`, `DragModels`, `Environment`).
+  - DI registration (`ServiceCollectionExtensions`).
+- [x] Surveyed `TacticalSim.Tests` structure and executed test suite (`dotnet test`: 232 tests passing).
+- [x] Identified gap for Follow-up R2: `TurnResolver` currently manages only action queues by `Guid ActorId` and lacks entity/physiology registration and `TickPhysiology(dt)` invocation loop.
+- [x] Compiled comprehensive handoff report in `handoff.md`.

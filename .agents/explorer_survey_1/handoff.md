@@ -1,188 +1,152 @@
-# Codebase Survey and Technical Architecture Report
+# Exploration & Codebase Survey Report: TacticalSim Architecture & Physiology Integration
 
 ## 1. Observation
 
-### 1.1 Project Structure and Build Configuration
-The solution is located at `c:\Users\jdwil\source\repos\Codex\1bal` using the new XML solution format `TacticalSim.slnx`:
-```xml
-<Solution>
-  <Project Path="TacticalSim.Core/TacticalSim.Core.csproj" />
-  <Project Path="TacticalSim.Tests/TacticalSim.Tests.csproj" />
-</Solution>
-```
+### 1.1 Requirements & Directives
+- **Authoritative Request File**: `ORIGINAL_REQUEST.md` (lines 35-66)
+  - **Issue #3 / R1 (Fractionated TU Turn Resolver)**: Simultaneous turn resolution system managing a global timeline, scheduling concurrent actions across multiple entities, and advancing execution state in fractionated Time Unit (TU) increments.
+  - **Issue #3 Follow-up / R2 (Physiological Integration)**:
+    > "The Turn Resolver must have a mechanism to invoke `IActorPhysiology.TickPhysiology(dt)` on all active entities in the simulation as the timeline advances, ensuring bleeding and ischemia effects resolve properly over the game's duration."
+  - **R3 (Architectural Decoupling)**: Strict isolation within `TacticalSim.Core`, utilizing `Microsoft.Extensions.DependencyInjection` conforming to `agents.md`.
+  - **Acceptance Criteria**: xUnit test verification in `TacticalSim.Tests` for concurrent action interleaving, `TickPhysiology` invocation on entities during turn progression, zero compiler warnings/errors, and 100% test pass rate.
 
-- **Target Framework**: `.NET 8.0` (`net8.0`) across all projects.
-- **Language Settings**: `<ImplicitUsings>enable</ImplicitUsings>`, `<Nullable>enable</Nullable>`.
-- **TacticalSim.Core Dependencies**:
-  - `Microsoft.Extensions.DependencyInjection` (Version 10.0.11)
-- **TacticalSim.Tests Dependencies**:
-  - `xunit` (Version 2.5.3)
-  - `xunit.runner.visualstudio` (Version 2.5.3)
-  - `Microsoft.NET.Test.Sdk` (Version 17.8.0)
-  - `coverlet.collector` (Version 6.0.0)
-  - Project reference to `TacticalSim.Core`
+### 1.2 Entity and Actor Models
+- **`IEntity` interface** (`TacticalSim.Core/Entities/IEntity.cs`, lines 7-13):
+  ```csharp
+  public interface IEntity
+  {
+      Guid Id { get; }
+      Vector3 Position { get; set; }
+      IActorPhysiology Physiology { get; }
+      WeaponProfile? EquippedWeapon { get; set; }
+  }
+  ```
+- **`TacticalEntity` class** (`TacticalSim.Core/Entities/TacticalEntity.cs`, lines 7-20):
+  - Implements `IEntity`.
+  - Constructor: `public TacticalEntity(Vector3 position, IActorPhysiology physiology)` initializes `Id = Guid.NewGuid()`, sets `Position`, `Physiology`, and optional `EquippedWeapon`.
+- **`WeaponProfile` & `AmmunitionProfile` records** (`TacticalSim.Core/Entities/`):
+  - `WeaponProfile.cs` (lines 3-8): `Name`, `LoadedAmmunition`, `BaseTUCostToFire` (defaults to `15f`).
+  - `AmmunitionProfile.cs` (lines 5-11): `Name`, `MuzzleVelocity`, `Ballistics` (`BallisticProfile`).
 
-### 1.2 Existing Source Inventory
+### 1.3 Physiology Interface and State Machine
+- **`IActorPhysiology` interface** (`TacticalSim.Core/ActorPhysiology.cs`, lines 103-111):
+  ```csharp
+  public interface IActorPhysiology
+  {
+      BodyPart RootBodyPart { get; }
+      float TotalBloodVolume { get; }
+      float ConsciousnessLevel { get; } // 0.0 to 1.0
+      
+      void TickPhysiology(float dt);
+      void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
+  }
+  ```
+- **`TacticalActorPhysiology` class** (`TacticalSim.Core/ActorPhysiology.cs`, lines 113-205):
+  - Baseline state: `_baselineBloodVolume = 5000f` ml, `TotalBloodVolume = 5000f` ml, `HeartRateBpm = 80f`, `MeanArterialPressureMmhg = 93f`, `ConsciousnessLevel = 1.0f`, `CurrentHemorrhageClass = HemorrhageClass.Class1`.
+  - **`TickPhysiology(float dt)` implementation** (lines 126-136):
+    ```csharp
+    public void TickPhysiology(float dt)
+    {
+        float totalBleedRate = CalculateBleedRate(RootBodyPart);
+        if (totalBleedRate > 0)
+        {
+            TotalBloodVolume -= totalBleedRate * dt;
+        }
 
-#### TacticalSim.Core:
-1. `ActorPhysiology.cs` (`namespace TacticalSim.Core.Physiology`):
-   - Defines `BodyPartType` enum (`Head`, `Thorax`, `Abdomen`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`).
-   - Defines `BodyPart` class (lines 21-52). Line 24 contains property `public BodyPart Parent { get; set; }` which triggers compiler warning CS8618.
-   - Defines `IActorPhysiology` interface (lines 58-74) with `TickPhysiology(float dt)` and `ProcessImpact(...)`.
-2. `BallisticSolver.cs` (`namespace TacticalSim.Core.Ballistics`):
-   - Defines `ProjectileState` struct (`Position`, `Velocity`, `Time`) using `System.Numerics.Vector3`.
-   - Defines `BallisticProfile` struct (`Mass`, `CrossSectionalArea`, `IDragModel`).
-   - Defines static class `BallisticSolver` with RK4 integrator `StepRK4(in ProjectileState state, in BallisticProfile profile, IEnvironmentModel environment, float dt)`. Calculates aerodynamic drag $F_d = \frac{1}{2} \rho v^2 C_d A$ and gravity.
-3. `DragModels.cs` (`namespace TacticalSim.Core.Ballistics`):
-   - Defines `IDragModel` interface (`float GetDragCoefficient(float mach)`).
-   - Implements `StandardDragCurve` with transonic drag rise between Mach 0.8 and 1.2.
-4. `Environment.cs` (`namespace TacticalSim.Core.Ballistics`):
-   - Defines `EnvironmentState` struct (`WindVelocity`, `Gravity`, `AirDensity`, `SpeedOfSound`).
-   - Defines `IEnvironmentModel` interface (`EnvironmentState GetConditionsAt(Vector3 position)`).
-   - Implements `ICAOStandardAtmosphere` using barometric and adiabatic lapse equations.
-5. `PhysiologicalVoxel.cs` (`namespace TacticalSim.Core.Physiology`):
-   - Defines `TissueProperties` struct (`Density`, `Elasticity`, `ShearStrength`).
-   - Defines `CavitationEvent` struct (`Origin`, `Radius`, `Energy`).
-   - Defines `PhysiologicalVoxel` class with AABB slab ray intersection (`CalculateIntersectionDistance`), energy dissipation ($\Delta E = F_d \cdot d$), exit velocity calculation ($v = \sqrt{2 E_{rem} / m}$), and cavitation volume tracking.
-6. `TissueRegistry.cs` (`namespace TacticalSim.Core.Physiology`):
-   - Static registry providing `Muscle`, `Bone`, `Lung`, `Liver`, and `Brain` presets.
-7. `TurnResolution.cs` (`namespace TacticalSim.Core.Simulation`):
-   - Defines `TacticalAction` abstract class (lines 9-20) with `Guid ActorId`, `float TUCost`, `float ExecutionProgress`, `abstract void Execute(float dt)`, and `bool IsComplete => ExecutionProgress >= TUCost`.
-   - Defines `ITurnResolver` interface (lines 25-41) with `float GlobalTime { get; }`, `void ScheduleAction(TacticalAction action);`, `void Tick(float dt);`.
-   - **Note**: There is currently NO implementation of `ITurnResolver`.
+        TickIschemia(RootBodyPart, dt);
+        UpdateCardiovascularState();
+    }
+    ```
+  - **Hemorrhage Calculation** (lines 138-144): Traverses `BodyPart` hierarchy recursively via `part.GetActiveBleedRate()`. In `BodyPart.cs` (lines 47-54): If `HasTourniquet && IsExtremity(Type)` returns `0f`, else returns `ArterialBleedRate + VenousBleedRate`.
+  - **Tourniquet Ischemia Progression** (lines 146-158): Increments `part.IschemiaDuration += dt` when `HasTourniquet == true`. If `IschemiaDuration > 7200f` (2 hours), marks `part.IsNecrotic = true`.
+  - **Cardiovascular & Consciousness State Machine** (`UpdateCardiovascularState`, lines 160-199):
+    - `lostPercent < 0.15f` (Class 1): HR 80–100 bpm, MAP 93 mmHg, Consciousness 1.0.
+    - `0.15f <= lostPercent < 0.30f` (Class 2): HR 100–120 bpm, MAP drops to 80 mmHg, Consciousness 0.9.
+    - `0.30f <= lostPercent < 0.40f` (Class 3): HR 120–140 bpm, MAP drops to 60 mmHg, Consciousness 0.6.
+    - `0.40f <= lostPercent < 0.50f` (Class 4): HR drops to 100 bpm (decompensation), MAP drops to 30 mmHg, Consciousness 0.2.
+    - `lostPercent >= 0.50f` (Fatal): HR 0 bpm, MAP 0 mmHg, Consciousness 0.0 (Death).
+- **`BodyPart`, `PhysiologicalVoxel`, `TissueRegistry`, `AnatomicalDummyBuilder`**:
+  - `BodyPart` (`ActorPhysiology.cs`, lines 30-98): Tree structure of extremities and organs (`Thorax`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`), contains `List<PhysiologicalVoxel> Voxels`.
+  - `PhysiologicalVoxel` (`PhysiologicalVoxel.cs`, lines 24-204): 3D cubic voxels with `TissueProperties` and `OrganType`, processes penetration drag work $\Delta E_k$, temporary cavity expansion, and permanent cavity tissue destruction.
+  - `AnatomicalDummyBuilder` (`AnatomicalDummyBuilder.cs`, lines 6-118): Generates dummy with thoracic organs (Bone, Heart, Lungs, Liver, Stomach, Muscle) via Signed Distance Field math.
 
-#### TacticalSim.Tests:
-1. `BallisticSolverTests.cs` (`namespace TacticalSim.Tests`):
-   - Tests `VacuumTrajectory_FollowsParabolicKinematics` and `AtmosphericTrajectory_ExhibitsNonLinearDrag`.
+### 1.4 Time, Time Units (TU), and Delta Time Representation
+- **Standard Physics Units** (`agents.md`, lines 26-36):
+  - Distance: Meters (m).
+  - Mass: Kilograms (kg).
+  - Time: Seconds (s) internally.
+  - Hemorrhage / Bleed Rates: Milliliters per second (ml/s) internally, reported in ml/min.
+- **Simulation Time Units (TU)**:
+  - In `TacticalAction.cs` (lines 26-66): `TUCost`, `ExecutionProgress`, and `RemainingTU` are `float` values.
+  - In `ITurnResolver.cs` and `TurnResolver.cs` (lines 15, 224-368): `GlobalTime` and `Tick(float dt)` operate in fractional floating-point units where $1 \text{ TU} = 1.0 \text{ s}$.
+  - In `MoveTacticalAction.cs`: `MovementSpeed` is in meters/TU; `TUCost = Distance / MovementSpeed`.
+  - In `AimTacticalAction.cs`: Bonus scales linearly with normalized execution progress ($P_{norm} = \text{ExecutionProgress} / \text{TUCost}$).
+  - In `BallisticSolver.cs`: RK4 integration sub-steps use seconds `dt` (e.g. `0.01f` s or `0.00001f` s in Godot voxel collision).
 
-### 1.3 Baseline Build and Test Execution
-Execution of `dotnet test --verbosity normal`:
-- Tests: 2 Passed, 0 Failed. Total time: ~1.9s.
-- Compiler Warnings: 1 warning:
-  `ActorPhysiology.cs(24,25): warning CS8618: Non-nullable property 'Parent' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable.`
+### 1.5 Current Turn Resolver Implementation & Registration Gap
+- **`ITurnResolver` / `TurnResolver`** (`TacticalSim.Core/Simulation/`):
+  - Current members: `GlobalTime`, `HasActiveActions`, `ActiveActorCount`, `ScheduleAction(TacticalAction)`, `CancelAction(Guid)`, `CancelActorActions(Guid)`, `GetActiveActions()`, `GetQueuedActions(Guid)`, `GetCurrentAction(Guid)`, `Tick(float dt)`, `Reset()`, and event hooks (`ActionScheduled`, `ActionStarted`, `ActionProgressed`, `ActionCompleted`, `ActionCancelled`, `ActionFailed`, `TimeAdvanced`).
+  - **Key Architectural Gap Observed**: `TurnResolver` currently manages internal dictionaries only for actions indexed by `Guid ActorId` (`Dictionary<Guid, TacticalAction> _activeActions`, `Dictionary<Guid, Queue<TacticalAction>> _actorQueues`).
+  - **There is currently NO mechanism to register `IEntity` / `IActorPhysiology` instances with `ITurnResolver` / `TurnResolver`, and `TurnResolver.Tick(float dt)` does NOT invoke `IActorPhysiology.TickPhysiology(dt)`.**
+
+### 1.6 Dependency Injection Registration
+- **`ServiceCollectionExtensions`** (`TacticalSim.Core/DependencyInjection/ServiceCollectionExtensions.cs`, lines 13-60):
+  - `AddTacticalSimCore(this IServiceCollection services)`: Chained registration of materials, simulation, and singleton ballistics models (`IDragModel`, `IEnvironmentModel`).
+  - `AddMaterialPenetration(this IServiceCollection services)`: `IMaterialRegistry` (Singleton), `IMaterialPenetrationSystem` (Transient).
+  - `AddSimulationServices(this IServiceCollection services)`: `ITurnResolver` (Transient `TurnResolver`).
+- **DI Tests** (`TacticalSim.Tests/DependencyInjectionTests.cs`): Verifies service resolutions, singleton/transient lifetimes, modular chaining, and container isolation.
+
+### 1.7 Current Test Suite Status
+- **Test execution command**: `dotnet test`
+- **Result**: `Passed! - Failed: 0, Passed: 232, Skipped: 0, Total: 232, Duration: 212 ms`
+- Zero compiler warnings, zero compiler errors.
 
 ---
 
 ## 2. Logic Chain
 
-### 2.1 Requirements Analysis from ORIGINAL_REQUEST.md and agents.md
-1. **Issue #3: Fractionated TU Turn Resolver**:
-   - Must implement a simultaneous turn resolution system that manages a global timeline (`GlobalTime`).
-   - Must schedule concurrent actions from multiple entities (`ScheduleAction(TacticalAction)`).
-   - Must advance their execution states concurrently in fractionated Time Unit (`TU`) increments (`Tick(float dt)`).
-   - Must handle action lifecycle (advancement until `IsComplete`, removal/completion notification, multi-actor interleaving).
-
-2. **Issue #4: Material Penetration System**:
-   - Must implement environmental cover material penetration (terminal ballistics).
-   - Materials required: at least Wood, Concrete, Steel (with defined densities $\rho$, resistance / thickness metrics).
-   - Mathematical model: Calculate projectile velocity loss and kinetic energy transfer during intersection based on material density $\rho$, cross-sectional area $A$, drag coefficient / resistance factor, and penetration thickness $d$:
-     - Initial kinetic energy: $E_0 = \frac{1}{2} m v_0^2$
-     - Drag / penetration resistance force: $F_{\text{drag}} = \frac{1}{2} \rho_{\text{material}} v^2 C_d A$ (or material resistance work)
-     - Energy lost through thickness $d$: $\Delta E = F_{\text{drag}} \cdot d$
-     - Exit energy: $E_{\text{exit}} = \max(0, E_0 - \Delta E)$
-     - Exit velocity: $v_{\text{exit}} = \sqrt{\frac{2 E_{\text{exit}}}{m}}$
-     - Energy transfer to material: $E_{\text{transferred}} = E_0 - E_{\text{exit}}$
-     - If $E_0 \le \Delta E$, the projectile is stopped / captured inside the material ($v_{\text{exit}} = 0$).
-   - Integration: Can be designed as a dedicated terminal ballistics solver/service (e.g. `IMaterialPenetrationSolver` / `MaterialPenetrationSolver` or `MaterialProperties` + `MaterialRegistry`) and/or material cover voxel/volume representation.
-
-3. **Architectural Decoupling and Dependency Injection (R3)**:
-   - Must remain strictly decoupled inside `TacticalSim.Core`.
-   - Must provide DI service registration using `Microsoft.Extensions.DependencyInjection` (e.g., `TacticalSimServiceExtensions.AddTacticalSimCore(...)`) to register turn resolver, ballistic solvers, drag models, environment models, and penetration solvers.
-
-4. **Zero Compiler Warnings Requirement**:
-   - ORIGINAL_REQUEST.md Acceptance Criteria: "The full solution (`dotnet build`) compiles without errors or warnings."
-   - Fix required: `BodyPart.Parent` in `ActorPhysiology.cs:24` should be made nullable (`BodyPart? Parent`).
+1. **Premise 1 (Follow-up Requirement R2)**:
+   The updated prompt and `ORIGINAL_REQUEST.md` (lines 53-55) require that the turn resolver advance `IActorPhysiology.TickPhysiology(dt)` on all active entities in the simulation as the timeline advances.
+2. **Premise 2 (Physiology Subsystem Capability)**:
+   `TacticalActorPhysiology.TickPhysiology(float dt)` is fully implemented in `TacticalSim.Core/ActorPhysiology.cs` and computes blood volume loss from active hemorrhages, tourniquet ischemia necrosis durations, and cardiovascular state changes over time delta `dt`.
+3. **Premise 3 (Current Resolver Limitation)**:
+   Inspection of `TacticalSim.Core/Simulation/TurnResolver.cs` reveals that `TurnResolver` only maintains `_activeActions` and `_actorQueues` keyed by `Guid ActorId`. It does not hold references to `IEntity` or `IActorPhysiology`, nor does `TurnResolver.Tick(float dt)` iterate through any registered entities or physiologies.
+4. **Premise 4 (Time Scale Consistency)**:
+   In `agents.md` (lines 27-30), simulation time is standard seconds ($s$). In `ActorPhysiology.cs`, hemorrhage rates are in ml/s and ischemia duration is in seconds. In `TurnResolver.cs`, `dt` represents elapsed fractionated TUs (1 TU = 1 s). Therefore, passing `dt` from `TurnResolver.Tick(dt)` directly into `IActorPhysiology.TickPhysiology(dt)` maintains 100% physical and mathematical consistency without unit conversion factors.
+5. **Premise 5 (Decoupled Architectural Extension)**:
+   In accordance with `agents.md` guidelines, extending `ITurnResolver` / `TurnResolver` to support entity/physiology tracking (e.g. `RegisterEntity(IEntity entity)`, `UnregisterEntity(Guid entityId)`, `IReadOnlyCollection<IEntity> RegisteredEntities`, and/or `RegisterPhysiology(Guid actorId, IActorPhysiology physiology)`) will enable the resolver to invoke `TickPhysiology(dt)` during each simulation tick step while keeping `TacticalSim.Core` decoupled and cleanly registered in `AddSimulationServices`.
 
 ---
 
 ## 3. Caveats
 
-- No UI or presentation engine exists or should be created; all simulation logic is isolated in `TacticalSim.Core`.
-- Existing `PhysiologicalVoxel` addresses soft tissue cavitation for biological actors (Phase 2), whereas Issue #4 addresses environmental cover materials (Wood, Concrete, Steel) (Phase 1/Core Ballistics). The terminal ballistics physics for materials should be clean, modular, and reusable.
-- The `TacticalAction` abstract class defines `public abstract void Execute(float dt);`. Concrete actions for test scenarios (e.g., `MoveAction`, `AimAction`, `FireAction`, or mock action) need to increment `ExecutionProgress += dt` (or appropriate fractionated TU delta).
+- **No Caveats on Codebase Exploration**: The entire codebase, interfaces, tests, DI extension methods, and client scaffolding were inspected and fully mapped.
+- **Assumptions on Entity Registration API**: While `ORIGINAL_REQUEST.md` mandates that the resolver invoke `IActorPhysiology.TickPhysiology(dt)` on all active entities in the simulation, the exact method signatures for entity registration on `ITurnResolver` (e.g. `RegisterEntity(IEntity entity)` vs `RegisterActor(IEntity entity)` vs `RegisterPhysiology(Guid actorId, IActorPhysiology physiology)`) are open to design by the team during specification and implementation phases.
 
 ---
 
-## 4. Conclusion & Architectural Blueprint
+## 4. Conclusion
 
-### 4.1 Recommended Design for Issue #3 (Turn Resolver)
-- **Class**: `TurnResolver : ITurnResolver` in `TacticalSim.Core.Simulation` (or `TacticalSim.Core.Simulation.TurnResolver`).
-- **State**:
-  - `private float _globalTime;`
-  - `private readonly List<TacticalAction> _activeActions;` (thread-safe or deterministic collection)
-- **Methods**:
-  - `GlobalTime => _globalTime;`
-  - `ScheduleAction(TacticalAction action)`: validates and adds to active actions.
-  - `Tick(float dt)`:
-    1. Advances `_globalTime += dt`.
-    2. Iterates over active actions snapshot and invokes `action.Execute(dt)`.
-    3. Prunes completed actions (`action.IsComplete`).
-    4. Optional events/callbacks: `ActionCompleted`, `TurnTicked` for decoupled observability.
-
-### 4.2 Recommended Design for Issue #4 (Material Penetration System)
-- **Namespace**: `TacticalSim.Core.Ballistics` (or `TacticalSim.Core.Ballistics.Materials`)
-- **Data Structures**:
-  - `MaterialProperties`:
-    - `string Name`
-    - `float Density` ($\text{kg/m}^3$) — e.g., Wood $\approx 600\text{ kg/m}^3$, Concrete $\approx 2400\text{ kg/m}^3$, Steel $\approx 7850\text{ kg/m}^3$.
-    - `float ResistanceFactor` or specific drag coefficient $C_d$.
-  - `MaterialRegistry`:
-    - Static or injectable registry offering standard presets: `Wood`, `Concrete`, `Steel`, `BallisticGlass`, `Kevlar`.
-  - `PenetrationResult`:
-    - `bool Penetrated`
-    - `float ExitSpeed` ($v_{\text{exit}}$)
-    - `Vector3 ExitVelocity`
-    - `float EnergyLost` ($\Delta E$)
-    - `float RemainingEnergy` ($E_{\text{exit}}$)
-    - `float PenetrationDepth` (actual depth traversed or stopped depth)
-- **Interface & Implementation**:
-  - `IMaterialPenetrationSolver`:
-    - `PenetrationResult CalculatePenetration(in ProjectileState projectile, in BallisticProfile profile, MaterialProperties material, float thicknessMeters)`
-  - `MaterialPenetrationSolver : IMaterialPenetrationSolver`:
-    - Implements hydrodynamic/ballistic resistance calculation based on density $\rho$, thickness $d$, mass $m$, and area $A$.
-
-### 4.3 Dependency Injection Setup
-- **Class**: `ServiceCollectionExtensions` (in `TacticalSim.Core`)
-  - `public static IServiceCollection AddTacticalSimCore(this IServiceCollection services)`
-  - Registers:
-    - `ITurnResolver` $\rightarrow$ `TurnResolver` (Transient or Singleton / Scoped)
-    - `IMaterialPenetrationSolver` $\rightarrow$ `MaterialPenetrationSolver` (Singleton / Transient)
-    - `IDragModel` $\rightarrow$ `StandardDragCurve`
-    - `IEnvironmentModel` $\rightarrow$ `ICAOStandardAtmosphere` (with standard defaults)
-
-### 4.4 Test Coverage Blueprint in TacticalSim.Tests
-1. `TurnResolverTests.cs`:
-   - `ScheduleAction_IncreasesActiveActionCount`
-   - `Tick_AdvancesGlobalTime_ByFractionatedStep`
-   - `Tick_ExecutesMultipleConcurrentActions_Interleaved`
-   - `Tick_CompletesActions_WhenTUCostReached`
-   - `SimultaneousActions_WithDifferentTUCosts_CompleteAtExpectedGlobalTimes`
-2. `MaterialPenetrationTests.cs`:
-   - `Wood_AllowsHighVelocityPenetration_WithCalculatedVelocityLoss`
-   - `Concrete_CausesHigherVelocityLoss_ThanWood`
-   - `ThickSteel_CompletelyStopsProjectile_ZeroExitVelocity`
-   - `KineticEnergyTransfer_MatchesTheoreticalDelta`
-   - `PenetrationLoss_ProportionalToDensityAndThickness`
-3. `DependencyInjectionTests.cs`:
-   - `AddTacticalSimCore_ResolvesAllRequiredServices`
+1. **Current System Maturity**:
+   - The fractionated TU action execution state machine, sub-tick carryover, concurrent multi-actor scheduling, fault isolation, observability events, material penetration physics, and DI containers are fully operational with 232 passing xUnit tests.
+   - `IActorPhysiology` and `TacticalActorPhysiology` are fully implemented with accurate hemorrhage and ischemia modeling.
+2. **Key Actionable Integration Item**:
+   - `ITurnResolver` and `TurnResolver` must be enhanced with entity/physiology registration capabilities and an iteration loop inside `TurnResolver.Tick(float dt)` that invokes `physiology.TickPhysiology(dt)` on all active registered entities/physiologies as global time advances.
+   - Comprehensive unit and integration tests in `TacticalSim.Tests` should be added to verify entity registration, unregistration, time advancement, active bleeding blood volume depletion over turns, and tourniquet ischemia progression during turn resolver progression.
 
 ---
 
 ## 5. Verification Method
 
-To verify the codebase and future implementations independently:
+### 5.1 Independent Code Verification
+- Inspect `TacticalSim.Core/Entities/IEntity.cs` to verify the `IActorPhysiology Physiology { get; }` contract.
+- Inspect `TacticalSim.Core/ActorPhysiology.cs` (lines 103-159) to confirm `TickPhysiology(float dt)` mechanics.
+- Inspect `TacticalSim.Core/Simulation/TurnResolver.cs` (lines 224-368) to verify that `Tick(float dt)` currently only steps active actions and does not yet invoke `TickPhysiology`.
+- Inspect `TacticalSim.Core/DependencyInjection/ServiceCollectionExtensions.cs` to verify DI bindings.
 
-1. **Build Solution (with zero warnings/errors)**:
-   ```pwsh
-   dotnet build --configuration Debug
-   ```
-   *Expected*: Build succeeded with 0 Warning(s) and 0 Error(s).
-
-2. **Run All xUnit Tests**:
-   ```pwsh
-   dotnet test --verbosity normal
-   ```
-   *Expected*: All tests pass (including existing ballistic tests and new turn resolver + material penetration tests).
-
-3. **Verify DI Container Resolution**:
-   Execute programmatic xUnit tests creating a `ServiceCollection`, invoking `AddTacticalSimCore()`, building the `ServiceProvider`, and resolving `ITurnResolver` and `IMaterialPenetrationSolver`.
+### 5.2 Test Execution
+Run the full test suite using PowerShell/dotnet CLI:
+```pwsh
+dotnet test --configuration Debug --verbosity normal
+```
+Verify that all 232 existing tests pass with 0 errors and 0 warnings.

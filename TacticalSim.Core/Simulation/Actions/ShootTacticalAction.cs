@@ -18,49 +18,68 @@ namespace TacticalSim.Core.Simulation.Actions
             IEntity shooter,
             Vector3 targetDirection,
             IEnvironmentModel environment) 
-            : base(shooter.Id, shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f)
+            : base(shooter?.Id ?? throw new ArgumentNullException(nameof(shooter)), shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f)
         {
             _shooter = shooter;
-            _targetDirection = Vector3.Normalize(targetDirection);
-            _environment = environment;
+            _targetDirection = targetDirection.LengthSquared() > 0f ? Vector3.Normalize(targetDirection) : Vector3.UnitZ;
+            _environment = environment ?? throw new ArgumentNullException(nameof(environment));
         }
 
         public override void Execute(float dt)
         {
-            if (State == TacticalActionState.Cancelled || State == TacticalActionState.Failed) return;
-
-            ExecutionProgress += dt;
+            if (State == TacticalActionState.Cancelled || State == TacticalActionState.Failed)
+            {
+                return;
+            }
 
             // When action TU is fully consumed, the shot is fired.
-            if (ExecutionProgress >= TUCost)
+            if (IsComplete || ExecutionProgress >= TUCost)
             {
-                if (_shooter.EquippedWeapon?.LoadedAmmunition == null)
-                {
-                    throw new InvalidOperationException("Cannot shoot without a weapon or ammunition.");
-                }
-
-                var ammo = _shooter.EquippedWeapon.LoadedAmmunition;
-                
-                var currentState = new ProjectileState
-                {
-                    Position = _shooter.Position,
-                    Velocity = _targetDirection * ammo.MuzzleVelocity,
-                    Time = 0f
-                };
-
-                // For scaffolding, we just step it forward a bit (e.g. 1 second of flight)
-                // In Vertical Slice, the world manager will handle collisions step by step.
-                float simulationTimeStep = 0.01f;
-                float maxFlightTime = 1.0f; 
-                
-                while (currentState.Time < maxFlightTime)
-                {
-                    currentState = BallisticSolver.StepRK4(currentState, ammo.Ballistics, _environment, simulationTimeStep);
-                }
-                
-                FinalState = currentState;
-                State = TacticalActionState.Completed;
+                FireShot();
             }
+        }
+
+        public override void OnComplete()
+        {
+            base.OnComplete();
+            if (FinalState == null)
+            {
+                FireShot();
+            }
+        }
+
+        private void FireShot()
+        {
+            if (FinalState != null)
+            {
+                return;
+            }
+
+            if (_shooter.EquippedWeapon?.LoadedAmmunition == null)
+            {
+                throw new InvalidOperationException("Cannot shoot without a weapon or ammunition.");
+            }
+
+            var ammo = _shooter.EquippedWeapon.LoadedAmmunition;
+            
+            var currentState = new ProjectileState
+            {
+                Position = _shooter.Position,
+                Velocity = _targetDirection * ammo.MuzzleVelocity,
+                Time = 0f
+            };
+
+            // For scaffolding, we just step it forward a bit (e.g. 1 second of flight)
+            // In Vertical Slice, the world manager will handle collisions step by step.
+            float simulationTimeStep = 0.01f;
+            float maxFlightTime = 1.0f; 
+            
+            while (currentState.Time < maxFlightTime)
+            {
+                currentState = BallisticSolver.StepRK4(currentState, ammo.Ballistics, _environment, simulationTimeStep);
+            }
+            
+            FinalState = currentState;
         }
     }
 }

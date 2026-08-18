@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TacticalSim.Core.Entities;
 
 namespace TacticalSim.Core.Simulation
 {
@@ -22,6 +23,31 @@ namespace TacticalSim.Core.Simulation
         /// Gets the count of actors currently executing actions.
         /// </summary>
         int ActiveActorCount { get; }
+
+        /// <summary>
+        /// Registers an entity in the simulation for tracking and physiological progression.
+        /// </summary>
+        /// <param name="entity">The entity to register.</param>
+        void RegisterEntity(IEntity entity);
+
+        /// <summary>
+        /// Unregisters an entity from the simulation.
+        /// </summary>
+        /// <param name="entityId">The ID of the entity to unregister.</param>
+        /// <returns>True if the entity was found and removed; otherwise false.</returns>
+        bool UnregisterEntity(Guid entityId);
+
+        /// <summary>
+        /// Gets all entities currently registered in the simulation.
+        /// </summary>
+        IReadOnlyCollection<IEntity> GetRegisteredEntities();
+
+        /// <summary>
+        /// Gets a registered entity by ID, or null if not found.
+        /// </summary>
+        /// <param name="entityId">The ID of the entity to retrieve.</param>
+        /// <returns>The registered entity or null.</returns>
+        IEntity? GetEntity(Guid entityId);
 
         /// <summary>
         /// Schedules a tactical action for an actor. If the actor already has an active action,
@@ -108,5 +134,15 @@ namespace TacticalSim.Core.Simulation
         /// Fired when the global timeline advances by dt.
         /// </summary>
         event EventHandler<TimeAdvancedEventArgs>? TimeAdvanced;
+
+        /// <summary>
+        /// Fired when an entity is registered with the turn resolver.
+        /// </summary>
+        event EventHandler<EntityEventArgs>? EntityRegistered;
+
+        /// <summary>
+        /// Fired when an entity is unregistered from the turn resolver.
+        /// </summary>
+        event EventHandler<EntityEventArgs>? EntityUnregistered;
     }
 }
