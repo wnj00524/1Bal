@@ -103,6 +103,9 @@ namespace TacticalSim.GodotClient
             };
             
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+            
+            // Initialize with default ammo to set slider bounds correctly
+            OnAmmoSelected(0);
         }
 
         private void OnAmmoSelected(long index)
