@@ -48,6 +48,12 @@ namespace TacticalSim.GodotClient
                 Name = "12 Gauge Slug",
                 MuzzleVelocity = 480f,
                 Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.0283f, CrossSectionalArea = 0.00025f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.5f) }
+            },
+            new TacticalSim.Core.Entities.AmmunitionProfile
+            {
+                Name = "Combat Knife (Abdomen)",
+                MuzzleVelocity = 15f, // Fast stab
+                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(10.0f) }
             }
         };
 
