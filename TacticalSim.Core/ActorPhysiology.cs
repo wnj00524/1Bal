@@ -101,6 +101,9 @@ namespace TacticalSim.Core.Physiology
         BodyPart RootBodyPart { get; }
         float TotalBloodVolume { get; }
         float ConsciousnessLevel { get; } // 0.0 to 1.0
+        float HeartRateBpm { get; }
+        float MeanArterialPressureMmhg { get; }
+        HemorrhageClass CurrentHemorrhageClass { get; }
         
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);

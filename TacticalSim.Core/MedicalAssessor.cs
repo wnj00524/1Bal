@@ -70,6 +70,12 @@ namespace TacticalSim.Core
             if (report.DestroyedVolumeCc.Count == 0)
             {
                 sb.AppendLine("No significant tissue destruction detected.");
+                sb.AppendLine();
+                sb.AppendLine("--- VITALS ---");
+                sb.AppendLine($"Blood Volume: {(dummy.TotalBloodVolume/1000f):F2} L");
+                sb.AppendLine($"Blood Pressure (MAP): {dummy.MeanArterialPressureMmhg:F0} mmHg");
+                sb.AppendLine($"Heart Rate: {dummy.HeartRateBpm:F0} BPM");
+                sb.AppendLine($"Consciousness: {(dummy.ConsciousnessLevel*100f):F0}%");
                 report.AssessmentText = sb.ToString();
                 return report;
             }
@@ -98,6 +104,22 @@ namespace TacticalSim.Core
                 sb.AppendLine("ESTIMATED TIME TO UNCONSCIOUSNESS: Stable");
             else
                 sb.AppendLine($"ESTIMATED TIME TO UNCONSCIOUSNESS: {etuMin:F1} minutes");
+
+            sb.AppendLine();
+            sb.AppendLine("--- LIVE VITALS ---");
+            sb.AppendLine($"Blood Volume: {(dummy.TotalBloodVolume/1000f):F2} L / 5.00 L");
+            sb.AppendLine($"Blood Pressure (MAP): {dummy.MeanArterialPressureMmhg:F0} mmHg");
+            sb.AppendLine($"Heart Rate: {dummy.HeartRateBpm:F0} BPM");
+            sb.AppendLine($"Hemorrhage Class: {dummy.CurrentHemorrhageClass}");
+            
+            if (dummy.ConsciousnessLevel <= 0f)
+            {
+                sb.AppendLine("Consciousness: [UNCONSCIOUS]");
+            }
+            else
+            {
+                sb.AppendLine($"Consciousness: {(dummy.ConsciousnessLevel*100f):F0}%");
+            }
 
             report.AssessmentText = sb.ToString();
             return report;
