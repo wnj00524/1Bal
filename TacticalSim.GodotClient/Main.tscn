@@ -92,6 +92,9 @@ layout_mode = 2
 [node name="AmmoSelect" type="OptionButton" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
 layout_mode = 2
 
+[node name="TargetSelect" type="OptionButton" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+layout_mode = 2
+
 [node name="PlayBtn" type="Button" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
 layout_mode = 2
 text = "Play"

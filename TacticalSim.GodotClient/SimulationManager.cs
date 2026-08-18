@@ -52,6 +52,8 @@ namespace TacticalSim.GodotClient
             }
         };
 
+        public string ActiveTarget { get; set; } = "Chest";
+        
         public float TargetDistance { get; private set; } = 10f;
 
         public void ScrubToTime(float flightTime)
@@ -76,14 +78,24 @@ namespace TacticalSim.GodotClient
             }
             
             // 2. Setup initial bullet state right before impact
+            float aimXOffset = 0f;
             float aimYOffset = 0.25f; // Chest
-            if (ammo.Name.Contains("Abdomen")) aimYOffset = 0.10f;
-            else if (ammo.Name.Contains("Neck")) aimYOffset = 0.58f;
-            else if (ammo.Name.Contains("Head")) aimYOffset = 0.76f;
             
-            System.Numerics.Vector3 globalTorsoCenter = Dummy.Position + new System.Numerics.Vector3(0, aimYOffset, 0); 
-            System.Numerics.Vector3 muzzlePoint = Shooter.Position + new System.Numerics.Vector3(0, aimYOffset, 0);
-            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTorsoCenter - muzzlePoint);
+            switch (ActiveTarget)
+            {
+                case "Head": aimYOffset = 0.76f; break;
+                case "Neck": aimYOffset = 0.58f; break;
+                case "Chest": aimYOffset = 0.25f; break;
+                case "Abdomen": aimYOffset = 0.10f; break;
+                case "Left Arm": aimXOffset = -0.3f; aimYOffset = 0.25f; break;
+                case "Right Arm": aimXOffset = 0.3f; aimYOffset = 0.25f; break;
+                case "Left Leg": aimXOffset = -0.1f; aimYOffset = -0.4f; break;
+                case "Right Leg": aimXOffset = 0.1f; aimYOffset = -0.4f; break;
+            }
+            
+            System.Numerics.Vector3 globalTargetCenter = Dummy.Position + new System.Numerics.Vector3(aimXOffset, aimYOffset, 0); 
+            System.Numerics.Vector3 muzzlePoint = Shooter.Position + new System.Numerics.Vector3(aimXOffset, aimYOffset, 0);
+            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTargetCenter - muzzlePoint);
             
             var impactState = new ProjectileState 
             {

@@ -22,6 +22,19 @@ namespace TacticalSim.GodotClient
         private bool _hasExportedReport = false;
 
         private OptionButton _ammoSelectButton = null!;
+        private OptionButton _targetSelectButton = null!;
+        
+        private readonly string[] _targetProfiles = new[]
+        {
+            "Chest",
+            "Head",
+            "Neck",
+            "Abdomen",
+            "Left Arm",
+            "Right Arm",
+            "Left Leg",
+            "Right Leg"
+        };
         
         private readonly System.Collections.Generic.List<TacticalSim.Core.Entities.AmmunitionProfile> _ammoProfiles = new()
         {
@@ -80,6 +93,13 @@ namespace TacticalSim.GodotClient
             }
             _ammoSelectButton.ItemSelected += OnAmmoSelected;
             
+            _targetSelectButton = GetNode<OptionButton>("Control/Panel/Margin/VBox/HBox/TargetSelect");
+            foreach (var target in _targetProfiles)
+            {
+                _targetSelectButton.AddItem(target);
+            }
+            _targetSelectButton.ItemSelected += OnTargetSelected;
+            
             _playPauseButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/PlayBtn");
             _playPauseButton.Pressed += OnPlayPausePressed;
             
@@ -104,8 +124,17 @@ namespace TacticalSim.GodotClient
             
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
             
-            // Initialize with default ammo to set slider bounds correctly
+            // Initialize with default ammo and target to set bounds correctly
+            OnTargetSelected(0);
             OnAmmoSelected(0);
+        }
+
+        private void OnTargetSelected(long index)
+        {
+            _simulationManager.ActiveTarget = _targetProfiles[(int)index];
+            _currentPlaybackTime = 0f;
+            _timelineSlider.Value = 0f;
+            UpdateScrubber(0f);
         }
 
         private void OnAmmoSelected(long index)
