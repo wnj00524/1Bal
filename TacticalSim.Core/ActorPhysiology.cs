@@ -21,7 +21,7 @@ namespace TacticalSim.Core.Physiology
     public class BodyPart
     {
         public BodyPartType Type { get; set; }
-        public BodyPart Parent { get; set; }
+        public BodyPart? Parent { get; set; }
         public List<BodyPart> Children { get; set; } = new List<BodyPart>();
         
         // In a full implementation, this would be the root of an Octree.
