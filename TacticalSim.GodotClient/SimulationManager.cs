@@ -66,12 +66,13 @@ namespace TacticalSim.GodotClient
             Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
             
             // 2. Setup initial bullet state right before impact
-            System.Numerics.Vector3 torsoCenter = new System.Numerics.Vector3(0, 0.25f, 0); 
-            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(torsoCenter - new System.Numerics.Vector3(0, 0.25f, -10f));
+            // Dummy is at <0, 1.0, 0>. Torso center locally is <0, 0.25, 0>. So global torso center is <0, 1.25, 0>.
+            System.Numerics.Vector3 globalTorsoCenter = Dummy.Position + new System.Numerics.Vector3(0, 0.25f, 0); 
+            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTorsoCenter - new System.Numerics.Vector3(0, globalTorsoCenter.Y, -10f));
             
             var impactState = new ProjectileState 
             {
-                Position = torsoCenter - (impactDir * 0.5f),
+                Position = globalTorsoCenter - (impactDir * 0.5f),
                 Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
                 Time = 0f
             };
@@ -91,7 +92,16 @@ namespace TacticalSim.GodotClient
                 // Process terminal ballistics against dummy
                 foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
                 {
-                    var cav = voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                    // Convert to local space for voxel intersection
+                    var localState = impactState;
+                    localState.Position -= Dummy.Position;
+                    
+                    var cav = voxel.ProcessPenetration(ref localState, ammo.Ballistics);
+                    
+                    // Sync state back
+                    impactState.Position = localState.Position + Dummy.Position;
+                    impactState.Velocity = localState.Velocity;
+
                     if (cav.HasValue)
                     {
                         cavEvents.Add((impactState.Time, cav.Value));
