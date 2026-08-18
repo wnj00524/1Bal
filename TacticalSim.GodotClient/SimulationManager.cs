@@ -7,6 +7,7 @@ using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core;
+using TacticalSim.Core.Physiology;
 using System.Numerics;
 
 namespace TacticalSim.GodotClient
@@ -79,6 +80,9 @@ namespace TacticalSim.GodotClient
             
             // 3. Step physics until target time
             float simTimeStep = 0.00001f; // 10 microsecond steps to prevent voxel tunneling
+            
+            var cavEvents = new List<(float Time, CavitationEvent Cav)>();
+
             while (impactState.Time < flightTime)
             {
                 // Advance flight path
@@ -87,7 +91,11 @@ namespace TacticalSim.GodotClient
                 // Process terminal ballistics against dummy
                 foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
                 {
-                    voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                    var cav = voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                    if (cav.HasValue)
+                    {
+                        cavEvents.Add((impactState.Time, cav.Value));
+                    }
                 }
             }
 
@@ -102,6 +110,7 @@ namespace TacticalSim.GodotClient
             }
 
             _voxelRenderer.RefreshVoxels(Dummy.Physiology);
+            _voxelRenderer.DrawCavities(cavEvents, flightTime);
         }
     }
 }

@@ -26,10 +26,9 @@ namespace TacticalSim.GodotClient
             foreach (var voxel in dummy.Physiology.RootBodyPart.Voxels)
             {
                 var meshInstance = new MeshInstance3D();
-                var boxMesh = new BoxMesh
-                {
-                    Size = new Godot.Vector3(voxel.Size, voxel.Size, voxel.Size)
-                };
+                var boxMesh = new BoxMesh();
+                float visualSize = voxel.Size * 0.9f; // 10% gap to see internal organs
+                boxMesh.Size = new Godot.Vector3(visualSize, visualSize, visualSize);
                 meshInstance.Mesh = boxMesh;
                 
                 // Map C# System.Numerics.Vector3 to Godot Vector3
@@ -62,6 +61,49 @@ namespace TacticalSim.GodotClient
             for (int i = 0; i < voxels.Count; i++)
             {
                 _voxelMeshes[i].Visible = !voxels[i].IsDestroyed;
+            }
+        }
+
+        private List<MeshInstance3D> _cavitySpheres = new List<MeshInstance3D>();
+
+        public void DrawCavities(List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime)
+        {
+            // Clear old spheres
+            foreach (var sphere in _cavitySpheres)
+            {
+                sphere.QueueFree();
+            }
+            _cavitySpheres.Clear();
+
+            // Temporary stretch cavity lasts roughly 5-10ms (0.005 to 0.010 seconds)
+            float cavityLifetime = 0.005f;
+
+            foreach (var ev in cavEvents)
+            {
+                float age = currentTime - ev.Time;
+                if (age < 0 || age > cavityLifetime) continue; // Skip if collapsed
+
+                // Scale shrinks from 1.0 down to 0 over cavityLifetime
+                float scale = 1.0f - (age / cavityLifetime);
+
+                var meshInstance = new MeshInstance3D();
+                var sphereMesh = new SphereMesh();
+                
+                float rad = ev.Cav.Radius * scale * 2.0f; // diameter
+                sphereMesh.Radius = rad * 0.5f;
+                sphereMesh.Height = rad;
+
+                var material = new StandardMaterial3D();
+                material.AlbedoColor = new Color(1.0f, 1.0f, 1.0f, 0.3f); // White translucent pulse
+                material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                material.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+                
+                sphereMesh.Material = material;
+                meshInstance.Mesh = sphereMesh;
+                
+                meshInstance.Position = new Godot.Vector3(ev.Cav.Origin.X, ev.Cav.Origin.Y, ev.Cav.Origin.Z);
+                AddChild(meshInstance);
+                _cavitySpheres.Add(meshInstance);
             }
         }
 

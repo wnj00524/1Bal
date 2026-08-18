@@ -142,7 +142,7 @@ namespace TacticalSim.Core.Physiology
             float cavityRadius = MathF.Cbrt(TemporaryCavityVolume / (4f/3f * MathF.PI));
 
             // Permanent cavity occurs when stretch stress exceeds shear strength
-            if (stretchFactor > Tissue.ShearStrength * 1000f) // Simplified conversion factor
+            if (stretchFactor > Tissue.ShearStrength * 0.2f) // Calibrated conversion factor
             {
                 PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
                 if (PermanentCavityVolume > (Size * Size * Size)) 
