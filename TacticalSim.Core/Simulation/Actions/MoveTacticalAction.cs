@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using TacticalSim.Core.Entities;
 
 namespace TacticalSim.Core.Simulation.Actions
 {
@@ -19,22 +20,29 @@ namespace TacticalSim.Core.Simulation.Actions
         {
         }
 
-        public MoveTacticalAction(Guid actorId, Vector3 startPosition, Vector3 targetPosition, float tuCost)
-            : base(actorId, tuCost)
+        public MoveTacticalAction(IEntity actor, Vector3 startPosition, Vector3 targetPosition, float tuCost)
+            : base(actor.Id, tuCost)
         {
             StartPosition = startPosition;
             TargetPosition = targetPosition;
             CurrentPosition = startPosition;
-            MovementSpeed = tuCost > 0f ? Distance / tuCost : 0f;
+            
+            float mobility = actor.Physiology.MobilityLevel;
+            float baseSpeed = tuCost > 0f ? Distance / tuCost : 0f;
+            MovementSpeed = baseSpeed * mobility;
         }
 
-        public MoveTacticalAction(Guid actorId, Vector3 startPosition, Vector3 targetPosition, float movementSpeed, bool computeCostFromSpeed)
-            : base(actorId, (computeCostFromSpeed && movementSpeed > 0f) ? MathF.Max(0.001f, Vector3.Distance(startPosition, targetPosition) / movementSpeed) : 1f)
+        public MoveTacticalAction(IEntity actor, Vector3 startPosition, Vector3 targetPosition, float baseMovementSpeed, bool computeCostFromSpeed)
+            : base(actor.Id, 1f)
         {
             StartPosition = startPosition;
             TargetPosition = targetPosition;
             CurrentPosition = startPosition;
-            MovementSpeed = movementSpeed;
+            
+            float mobility = actor.Physiology.MobilityLevel;
+            MovementSpeed = baseMovementSpeed * mobility;
+            
+            TUCost = (computeCostFromSpeed && MovementSpeed > 0f) ? MathF.Max(0.001f, Distance / MovementSpeed) : 1f;
         }
 
         public override void Execute(float dt)

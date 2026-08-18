@@ -124,8 +124,12 @@ namespace TacticalSim.Core.Physiology
         // Nervous System
         float PainLevel { get; }
         float ShockLevel { get; }
-        void AdministerAnalgesic(float strength);
         
+        // Motor System
+        float MobilityLevel { get; } // 1.0 down to 0.0
+        float WeaponHandlingLevel { get; } // 1.0 down to 0.0
+        
+        void AdministerAnalgesic(float strength);
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -142,19 +146,26 @@ namespace TacticalSim.Core.Physiology
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
-        public float AirwayObstruction { get; private set; } = 0.0f;
-        public float AlveolarBloodAccumulation { get; private set; } = 0.0f;
+        public float AirwayObstruction { get; private set; } = 0f;
+        public float AlveolarBloodAccumulation { get; private set; } = 0f;
 
-        public float PainLevel { get; private set; } = 0.0f;
-        public float ShockLevel { get; private set; } = 0.0f;
-        private float _analgesicLevel = 0.0f;
+        public float PainLevel { get; private set; } = 0f;
+        public float ShockLevel { get; private set; } = 0f;
+        
+        public float MobilityLevel { get; private set; } = 1.0f;
+        public float WeaponHandlingLevel { get; private set; } = 1.0f;
+
+        private float _analgesicLevel = 0f;
+
+        public void SetRoot(BodyPart root)
+        {
+            RootBodyPart = root;
+        }
 
         public void AdministerAnalgesic(float strength)
         {
-            _analgesicLevel += strength;
+            _analgesicLevel = MathF.Min(1.0f, _analgesicLevel + strength);
         }
-
-        public void SetRoot(BodyPart root) => RootBodyPart = root;
 
         public void TickPhysiology(float dt)
         {
@@ -174,6 +185,60 @@ namespace TacticalSim.Core.Physiology
             UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
             UpdateNervousSystemState(dt);
+            UpdateMotorState();
+        }
+
+        private void UpdateMotorState()
+        {
+            float legBoneTotal = 0, legBoneDest = 0;
+            float armBoneTotal = 0, armBoneDest = 0;
+            float legMuscleTotal = 0, legMuscleDest = 0;
+            float armMuscleTotal = 0, armMuscleDest = 0;
+
+            CalculateMotorDamage(RootBodyPart, ref legBoneTotal, ref legBoneDest, ref legMuscleTotal, ref legMuscleDest, ref armBoneTotal, ref armBoneDest, ref armMuscleTotal, ref armMuscleDest);
+
+            if (legBoneTotal > 0)
+            {
+                float boneLoss = legBoneDest / legBoneTotal;
+                float muscleLoss = legMuscleTotal > 0 ? (legMuscleDest / legMuscleTotal) : 0f;
+                // 20% bone destruction or 50% muscle destruction will completely disable the limb
+                MobilityLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+            }
+            
+            if (armBoneTotal > 0)
+            {
+                float boneLoss = armBoneDest / armBoneTotal;
+                float muscleLoss = armMuscleTotal > 0 ? (armMuscleDest / armMuscleTotal) : 0f;
+                WeaponHandlingLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+            }
+        }
+
+        private void CalculateMotorDamage(BodyPart part, ref float lbTotal, ref float lbDest, ref float lmTotal, ref float lmDest, ref float abTotal, ref float abDest, ref float amTotal, ref float amDest)
+        {
+            bool isLeg = (part.Type == BodyPartType.LeftLeg || part.Type == BodyPartType.RightLeg);
+            bool isArm = (part.Type == BodyPartType.LeftArm || part.Type == BodyPartType.RightArm);
+            
+            if (isLeg || isArm)
+            {
+                foreach (var voxel in part.Voxels)
+                {
+                    if (voxel.Organ == OrganType.Bone)
+                    {
+                        if (isLeg) { lbTotal += 1f; if (voxel.IsDestroyed) lbDest += 1f; }
+                        else       { abTotal += 1f; if (voxel.IsDestroyed) abDest += 1f; }
+                    }
+                    else if (voxel.Organ == OrganType.Muscle)
+                    {
+                        if (isLeg) { lmTotal += 1f; if (voxel.IsDestroyed) lmDest += 1f; }
+                        else       { amTotal += 1f; if (voxel.IsDestroyed) amDest += 1f; }
+                    }
+                }
+            }
+            
+            foreach (var child in part.Children)
+            {
+                CalculateMotorDamage(child, ref lbTotal, ref lbDest, ref lmTotal, ref lmDest, ref abTotal, ref abDest, ref amTotal, ref amDest);
+            }
         }
 
         private float CalculateBleedRate(BodyPart part, out float airwayBleed)

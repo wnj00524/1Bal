@@ -30,8 +30,54 @@ namespace TacticalSim.Core
             
             PopulateTorsoVoxels(root);
             PopulateHeadNeckVoxels(neck, head);
+            PopulateLimbVoxels(leftArm, new Vector3(-0.3f, 0.25f, 0f), new Vector3(0.1f, 0.25f, 0.1f)); // Left Arm
+            PopulateLimbVoxels(rightArm, new Vector3(0.3f, 0.25f, 0f), new Vector3(0.1f, 0.25f, 0.1f)); // Right Arm
+            PopulateLimbVoxels(leftLeg, new Vector3(-0.1f, -0.4f, 0f), new Vector3(0.12f, 0.4f, 0.12f)); // Left Leg
+            PopulateLimbVoxels(rightLeg, new Vector3(0.1f, -0.4f, 0f), new Vector3(0.12f, 0.4f, 0.12f)); // Right Leg
             
             return physiology;
+        }
+
+        private static void PopulateLimbVoxels(BodyPart limb, Vector3 center, Vector3 extents)
+        {
+            float voxelSize = 0.01f;
+            
+            for (float x = center.X - extents.X; x <= center.X + extents.X; x += voxelSize)
+            {
+                for (float y = center.Y - extents.Y; y <= center.Y + extents.Y; y += voxelSize)
+                {
+                    for (float z = center.Z - extents.Z; z <= center.Z + extents.Z; z += voxelSize)
+                    {
+                        var pos = new Vector3(x, y, z);
+                        
+                        // Simple SDF cylinder/capsule for limbs
+                        float radius = MathF.Min(extents.X, extents.Z);
+                        float dLimb = SdfCapsule(pos, new Vector3(center.X, center.Y - extents.Y, center.Z), new Vector3(center.X, center.Y + extents.Y, center.Z), radius);
+                        
+                        if (dLimb <= 0)
+                        {
+                            // Inner core is bone, outer shell is muscle
+                            float dBone = dLimb + (radius * 0.7f); // Bone is inner 30% of radius
+                            
+                            OrganType organ;
+                            TissueProperties tissue;
+                            
+                            if (dBone <= 0)
+                            {
+                                organ = OrganType.Bone;
+                                tissue = TissueRegistry.Bone;
+                            }
+                            else
+                            {
+                                organ = OrganType.Muscle;
+                                tissue = TissueRegistry.Muscle;
+                            }
+                            
+                            limb.Voxels.Add(new PhysiologicalVoxel(pos, voxelSize, tissue, organ));
+                        }
+                    }
+                }
+            }
         }
         
         private static void PopulateTorsoVoxels(BodyPart torso)

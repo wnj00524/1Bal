@@ -1,158 +1,120 @@
 using System;
-using System.Numerics;
+using System.IO;
+using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using TacticalSim.Core;
-using TacticalSim.Core.Ballistics;
-using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Entities;
+using TacticalSim.Core.Physiology;
+using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Simulation;
-using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.Ballistics;
+using System.Numerics;
 
-namespace TacticalSim.ConsoleApp
+class Program
 {
-    class Program
+    static void Main()
     {
-        static void Main(string[] args)
+        var services = new ServiceCollection();
+        services.AddTacticalSimCore();
+        var sp = services.BuildServiceProvider();
+        var env = sp.GetRequiredService<IEnvironmentModel>();
+
+        var profiles = new List<AmmunitionProfile>
         {
-            var host = Host.CreateDefaultBuilder(args)
-                .ConfigureServices(services =>
-                {
-                    services.AddTacticalSimCore();
-                })
-                .Build();
+            new AmmunitionProfile { Name = "5.56x45mm NATO (Arm Shot)", MuzzleVelocity = 900f, Ballistics = new BallisticProfile { Mass = 0.004f, CrossSectionalArea = 0.000024f, DragModel = new StandardDragCurve(0.3f) } },
+            new AmmunitionProfile { Name = ".308 Winchester (Leg Shot)", MuzzleVelocity = 800f, Ballistics = new BallisticProfile { Mass = 0.0097f, CrossSectionalArea = 0.000048f, DragModel = new StandardDragCurve(0.4f) } }
+        };
 
-            var knifeAmmo = new AmmunitionProfile
-            {
-                Name = "Combat Knife (Abdomen)",
-                MuzzleVelocity = 15f,
-                Ballistics = new BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new StandardDragCurve(10.0f) }
-            };
-
-            Console.WriteLine("======================================");
-            Console.WriteLine(" TacticalSim Ammunition Comparison Test");
-            Console.WriteLine("======================================\n");
-
-            var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
-            var dummy = new TacticalEntity(new Vector3(0, 1.0f, 0), dummyPhysiology);
-            
-            // 5.56x45mm NATO
-            var rifleAmmo = new AmmunitionProfile
-            {
-                Name = "5.56x45mm NATO",
-                MuzzleVelocity = 900f,
-                Ballistics = new BallisticProfile
-                {
-                    Mass = 0.004f, // 4 grams
-                    CrossSectionalArea = 0.000024f,
-                    DragModel = new StandardDragCurve(0.3f)
-                }
-            };
-            
-            // .45 ACP
-            var handgunAmmo = new AmmunitionProfile
-            {
-                Name = ".45 ACP",
-                MuzzleVelocity = 250f, // subsonic
-                Ballistics = new BallisticProfile
-                {
-                    Mass = 0.0149f, // 14.9 grams (230 grain)
-                    CrossSectionalArea = 0.000103f, // 11.43mm diameter
-                    DragModel = new StandardDragCurve(0.2f)
-                }
-            };
-            
-            var knifeNeckAmmo = new AmmunitionProfile
-            {
-                Name = "Combat Knife (Neck)",
-                MuzzleVelocity = 15f,
-                Ballistics = new BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new StandardDragCurve(10.0f) }
-            };
-
-            var nineMmHeadAmmo = new AmmunitionProfile
-            {
-                Name = "9x19mm (Head)",
-                MuzzleVelocity = 380f,
-                Ballistics = new BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new StandardDragCurve(0.15f) }
-            };
-
-            var ammoProfiles = new[] { rifleAmmo, handgunAmmo, knifeAmmo, knifeNeckAmmo, nineMmHeadAmmo };
-            foreach(var ammo in ammoProfiles)
-            {
-                SimulateTerminalBallistics(dummy, ammo);
-            }
-        }
-
-        static void SimulateTerminalBallistics(TacticalEntity dummy, AmmunitionProfile ammo)
+        foreach (var ammo in profiles)
         {
-            Console.WriteLine($"--- Terminal Ballistics: {ammo.Name} ---");
-            
-            // Setup initial bullet state right before impact
-            float aimYOffset = 0.25f; // Chest
-            if (ammo.Name.Contains("Abdomen")) aimYOffset = 0.10f;
-            else if (ammo.Name.Contains("Neck")) aimYOffset = 0.58f;
-            else if (ammo.Name.Contains("Head")) aimYOffset = 0.76f;
-            
-            Vector3 globalTorsoCenter = dummy.Position + new Vector3(0, aimYOffset, 0); 
-            Vector3 impactDir = Vector3.Normalize(globalTorsoCenter - new Vector3(0, globalTorsoCenter.Y, -10f));
-            
-            var impactState = new ProjectileState 
-            {
-                Position = globalTorsoCenter - (impactDir * 0.15f),
-                Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
-                Time = 0f
-            };
-            
-            float initialEnergy = 0.5f * ammo.Ballistics.Mass * impactState.Velocity.LengthSquared();
-            Console.WriteLine($"Impact Velocity: {impactState.Velocity.Length():F1} m/s");
-            Console.WriteLine($"Impact Energy: {initialEnergy:F1} Joules\n");
-            
-            int voxelsHit = 0;
-            var hitVoxels = new System.Collections.Generic.HashSet<TacticalSim.Core.Physiology.PhysiologicalVoxel>();
-            
-            // Create a fresh dummy for the test so we don't accumulate damage across runs
-            var testDummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
-            var testDummy = new TacticalEntity(new Vector3(0, 1.0f, 0), testDummyPhysiology);
-            
-            var allVoxels = new System.Collections.Generic.List<TacticalSim.Core.Physiology.PhysiologicalVoxel>();
-            void CollectVoxels(TacticalSim.Core.Physiology.BodyPart part) {
-                allVoxels.AddRange(part.Voxels);
-                if (part.Type == TacticalSim.Core.Physiology.BodyPartType.Neck) {
-                    Console.WriteLine($"Neck has {part.Voxels.Count} voxels");
-                }
-                foreach(var c in part.Children) CollectVoxels(c);
-            }
-            CollectVoxels(testDummy.Physiology.RootBodyPart);
+            Console.WriteLine($"\n================== {ammo.Name} ==================");
+            var dummyPhys = AnatomicalDummyBuilder.BuildDummy();
+            var allVoxels = GetAllVoxels(dummyPhys.RootBodyPart);
 
-            foreach(var voxel in allVoxels)
+            var voxelGrid = new PhysiologicalVoxel[100, 220, 100];
+            foreach (var v in allVoxels)
             {
-                var localState = impactState;
-                localState.Position -= testDummy.Position; // Convert to local space
+                int vx = (int)MathF.Round(v.Center.X * 100f) + 50;
+                int vy = (int)MathF.Round(v.Center.Y * 100f) + 100;
+                int vz = (int)MathF.Round(v.Center.Z * 100f) + 50;
+                if (vx >= 0 && vx < 100 && vy >= 0 && vy < 220 && vz >= 0 && vz < 100) voxelGrid[vx, vy, vz] = v;
+            }
+
+            Vector3 impactStatePos = ammo.Name.Contains("Arm") ? new Vector3(0.3f, 0.25f, -1.0f) : new Vector3(0.1f, -0.4f, -1.0f);
+            Vector3 impactDir = new Vector3(0, 0, 1);
+            
+            var impactState = new ProjectileState { Position = impactStatePos, Velocity = impactDir * ammo.MuzzleVelocity, Time = 0f };
+            var cavEvents = new List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)>();
+            
+            while (impactState.Position.Z < 0.2f && impactState.Velocity.LengthSquared() > 0.01f)
+            {
+                var localPos = impactState.Position;
+                float simTimeStep = 0.00001f;
+                impactState = TacticalSim.Core.Ballistics.BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
                 
-                var cavitation = voxel.ProcessPenetration(ref localState, ammo.Ballistics);
+                int bx = (int)MathF.Round(localPos.X * 100f) + 50;
+                int by = (int)MathF.Round(localPos.Y * 100f) + 100;
+                int bz = (int)MathF.Round(localPos.Z * 100f) + 50;
                 
-                if (voxel.DepositedEnergy > 0)
+                if (bx >= 0 && bx < 100 && by >= 0 && by < 220 && bz >= 0 && bz < 100)
                 {
-                    if (voxel.IsDestroyed && !hitVoxels.Contains(voxel))
+                    var voxel = voxelGrid[bx, by, bz];
+                    if (voxel != null && voxel.Contains(localPos))
                     {
-                        hitVoxels.Add(voxel);
-                        voxelsHit++;
-                        Console.WriteLine($"[HIT] Voxel at {voxel.Center} (Tissue: {voxel.Organ})");
-                        Console.WriteLine($"  -> Energy Deposited: {voxel.DepositedEnergy:F1} Joules");
-                        
-                        if (cavitation != null)
+                        var localState = impactState;
+                        localState.Position = localPos;
+                        float distanceThisStep = localState.Velocity.Length() * simTimeStep;
+                        var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
+                        impactState.Velocity = localState.Velocity;
+
+                        if (cav.HasValue)
                         {
-                            Console.WriteLine($"  -> Cavitation Radius: {cavitation.Value.Radius * 1000f:F1} mm");
+                            if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f) cavEvents.Add((impactState.Time, cav.Value));
+                            else {
+                                var last = cavEvents[cavEvents.Count - 1];
+                                var modifiedCav = last.Cav;
+                                modifiedCav.Energy += cav.Value.Energy;
+                                modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
+                                cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
+                            }
                         }
                     }
                 }
-                
-                impactState.Velocity = localState.Velocity;
+            }
+
+            foreach (var cavEvent in cavEvents)
+            {
+                var cav = cavEvent.Cav;
+                int radCells = (int)MathF.Ceiling(cav.Radius * 100f);
+                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 50;
+                int cy = (int)MathF.Round(cav.Origin.Y * 100f) + 100;
+                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 50;
+
+                for (int x = cx - radCells; x <= cx + radCells; x++)
+                    for (int y = cy - radCells; y <= cy + radCells; y++)
+                        for (int z = cz - radCells; z <= cz + radCells; z++)
+                            if (x >= 0 && x < 100 && y >= 0 && y < 220 && z >= 0 && z < 100)
+                            {
+                                var neighbor = voxelGrid[x, y, z];
+                                if (neighbor != null)
+                                {
+                                    float dist = (neighbor.Center - cav.Origin).Length();
+                                    if (dist > 0 && dist <= cav.Radius) neighbor.ApplyKineticEnergy(cav.Energy * (1f - (dist / cav.Radius)), cav.Origin, 0f);
+                                }
+                            }
             }
             
-            Console.WriteLine($"\nTotal Voxels Penetrated: {voxelsHit}");
-            Console.WriteLine($"Exit Velocity: {impactState.Velocity.Length():F1} m/s");
-            Console.WriteLine("----------------------------------------\n");
+            dummyPhys.TickPhysiology(0.1f);
+            var report = MedicalAssessor.AssessTrauma(dummyPhys);
+            Console.WriteLine(report.AssessmentText);
         }
+    }
+
+    private static List<PhysiologicalVoxel> GetAllVoxels(BodyPart root)
+    {
+        var list = new List<PhysiologicalVoxel>();
+        list.AddRange(root.Voxels);
+        foreach (var child in root.Children) list.AddRange(GetAllVoxels(child));
+        return list;
     }
 }

@@ -95,14 +95,14 @@ namespace TacticalSim.GodotClient
             var allVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart);
             
             // Build spatial index for O(1) voxel lookup
-            // Extent bounds mapped to grid coordinates: X[-30..30]->[0..60], Y[0..100]->[0..100], Z[-30..30]->[0..60]
-            var voxelGrid = new PhysiologicalVoxel[60, 100, 60]; 
+            // Extent bounds mapped to grid coordinates: X[-50..50]->[0..100], Y[-100..120]->[0..220], Z[-50..50]->[0..100]
+            var voxelGrid = new PhysiologicalVoxel[100, 220, 100]; 
             foreach (var v in allVoxels)
             {
-                int vx = (int)MathF.Round(v.Center.X * 100f) + 30;
-                int vy = (int)MathF.Round(v.Center.Y * 100f);
-                int vz = (int)MathF.Round(v.Center.Z * 100f) + 30;
-                if (vx >= 0 && vx < 60 && vy >= 0 && vy < 100 && vz >= 0 && vz < 60)
+                int vx = (int)MathF.Round(v.Center.X * 100f) + 50;
+                int vy = (int)MathF.Round(v.Center.Y * 100f) + 100;
+                int vz = (int)MathF.Round(v.Center.Z * 100f) + 50;
+                if (vx >= 0 && vx < 100 && vy >= 0 && vy < 220 && vz >= 0 && vz < 100)
                     voxelGrid[vx, vy, vz] = v;
             }
 
@@ -138,11 +138,11 @@ namespace TacticalSim.GodotClient
                 // O(1) spatial grid lookup instead of looping 40,000 voxels
                 if (isNearTarget)
                 {
-                    int bx = (int)MathF.Round(localPos.X * 100f) + 30;
-                    int by = (int)MathF.Round(localPos.Y * 100f);
-                    int bz = (int)MathF.Round(localPos.Z * 100f) + 30;
+                    int bx = (int)MathF.Round(localPos.X * 100f) + 50;
+                    int by = (int)MathF.Round(localPos.Y * 100f) + 100;
+                    int bz = (int)MathF.Round(localPos.Z * 100f) + 50;
                     
-                    if (bx >= 0 && bx < 60 && by >= 0 && by < 100 && bz >= 0 && bz < 60)
+                    if (bx >= 0 && bx < 100 && by >= 0 && by < 220 && bz >= 0 && bz < 100)
                     {
                         var voxel = voxelGrid[bx, by, bz];
                         if (voxel != null && voxel.Contains(localPos))
@@ -191,9 +191,9 @@ namespace TacticalSim.GodotClient
                 var cav = cavEvent.Cav;
                 
                 int radCells = (int)MathF.Ceiling(cav.Radius * 100f);
-                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 30;
-                int cy = (int)MathF.Round(cav.Origin.Y * 100f);
-                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 30;
+                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 50;
+                int cy = (int)MathF.Round(cav.Origin.Y * 100f) + 100;
+                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 50;
 
                 for (int x = cx - radCells; x <= cx + radCells; x++)
                 {
@@ -201,7 +201,7 @@ namespace TacticalSim.GodotClient
                     {
                         for (int z = cz - radCells; z <= cz + radCells; z++)
                         {
-                            if (x >= 0 && x < 60 && y >= 0 && y < 100 && z >= 0 && z < 60)
+                            if (x >= 0 && x < 100 && y >= 0 && y < 220 && z >= 0 && z < 100)
                             {
                                 var neighbor = voxelGrid[x, y, z];
                                 if (neighbor != null)

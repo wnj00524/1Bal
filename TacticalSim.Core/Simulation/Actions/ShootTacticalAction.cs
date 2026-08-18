@@ -19,7 +19,7 @@ namespace TacticalSim.Core.Simulation.Actions
             Vector3 targetDirection,
             IEnvironmentModel environment) 
             : base(shooter?.Id ?? throw new ArgumentNullException(nameof(shooter)), 
-                   (shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f) * (1.0f + (shooter.Physiology.PainLevel * 1.5f)))
+                   (shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f) * (1.0f + (shooter.Physiology.PainLevel * 1.5f)) * (1.0f + (1.0f - shooter.Physiology.WeaponHandlingLevel) * 2.0f))
         {
             _shooter = shooter;
             _targetDirection = targetDirection.LengthSquared() > 0f ? Vector3.Normalize(targetDirection) : Vector3.UnitZ;
@@ -67,12 +67,14 @@ namespace TacticalSim.Core.Simulation.Actions
             Vector3 fireDir = _targetDirection;
             float pain = _shooter.Physiology.PainLevel;
             float shock = _shooter.Physiology.ShockLevel;
-            float deviationFactor = pain + (shock * 0.5f);
+            float handlingLoss = 1.0f - _shooter.Physiology.WeaponHandlingLevel;
+            
+            float deviationFactor = pain + (shock * 0.5f) + (handlingLoss * 2.0f);
             
             if (deviationFactor > 0.01f)
             {
-                // Max pain/shock causes ~10 degrees of deviation
-                float maxDeviationRadians = 10f * (MathF.PI / 180f) * deviationFactor;
+                // Max pain/shock/arm damage causes up to ~20 degrees of deviation
+                float maxDeviationRadians = 20f * (MathF.PI / 180f) * MathF.Min(1.0f, deviationFactor);
                 
                 var random = new Random(_shooter.Id.GetHashCode()); // Deterministic random per actor
                 float randomPitch = ((float)random.NextDouble() * 2f - 1f) * maxDeviationRadians;

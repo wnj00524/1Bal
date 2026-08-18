@@ -139,10 +139,20 @@ namespace TacticalSim.Core
             if (dummy.ShockLevel > 0f)
                 sb.AppendLine($"Shock Level: {(dummy.ShockLevel*100f):F0}%");
                 
+            if (dummy.MobilityLevel < 1.0f)
+                sb.AppendLine($"Mobility Level: {(dummy.MobilityLevel*100f):F0}%");
+            if (dummy.WeaponHandlingLevel < 1.0f)
+                sb.AppendLine($"Weapon Handling Level: {(dummy.WeaponHandlingLevel*100f):F0}%");
+                
             if (dummy.PainLevel > 0.8f)
                 sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE AGONY (Accuracy Degraded) <<<");
             if (dummy.ShockLevel > 0.5f)
                 sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE SHOCK DETECTED <<<");
+                
+            if (dummy.MobilityLevel < 0.5f)
+                sb.AppendLine(">>> MOTOR ALARM: SEVERE LEG TRAUMA (Mobility Impaired) <<<");
+            if (dummy.WeaponHandlingLevel < 0.5f)
+                sb.AppendLine(">>> MOTOR ALARM: SEVERE ARM TRAUMA (Weapon Handling Impaired) <<<");
             
             if (dummy.ConsciousnessLevel <= 0f)
             {
