@@ -1,5 +1,8 @@
 <Solution>
   <Project Path="TacticalSim.ConsoleApp/TacticalSim.ConsoleApp.csproj" />
   <Project Path="TacticalSim.Core/TacticalSim.Core.csproj" />
+  <Project Path="TacticalSim.GodotClient/TacticalSim.GodotClient.csproj">
+    <BuildType Project="Debug" />
+  </Project>
   <Project Path="TacticalSim.Tests/TacticalSim.Tests.csproj" />
 </Solution>
