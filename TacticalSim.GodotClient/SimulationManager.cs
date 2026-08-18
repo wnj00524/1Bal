@@ -75,7 +75,7 @@ namespace TacticalSim.GodotClient
             
             var impactState = new ProjectileState 
             {
-                Position = globalTorsoCenter - (impactDir * 0.15f), // Start exactly at surface of dummy
+                Position = globalTorsoCenter - (impactDir * 0.26f), // Start outside the 0.25 visual capsule
                 Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
                 Time = 0f
             };

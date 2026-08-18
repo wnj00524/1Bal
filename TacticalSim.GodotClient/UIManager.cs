@@ -86,6 +86,17 @@ namespace TacticalSim.GodotClient
         {
             _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
             
+            if (_simulationManager.ActiveAmmo.MuzzleVelocity < 100f)
+            {
+                _maxPlaybackTime = 0.040f; // 40ms for slow projectiles (knife)
+            }
+            else 
+            {
+                _maxPlaybackTime = 0.010f; // 10ms for bullets
+            }
+
+            _timelineSlider.MaxValue = _maxPlaybackTime;
+            
             // Re-simulate from beginning if we change ammo
             _currentPlaybackTime = 0f;
             _timelineSlider.Value = 0f;
