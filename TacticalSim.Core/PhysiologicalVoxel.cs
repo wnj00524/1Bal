@@ -180,7 +180,7 @@ namespace TacticalSim.Core.Physiology
             if (TemporaryCavityVolume > Tissue.ShearStrength * 0.005f) // Calibrated conversion factor
             {
                 PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
-                if (PermanentCavityVolume > (Size * Size * Size)) 
+                if (PermanentCavityVolume > (Size * Size * Size * 0.5f)) // Destroyed if 50% of volume is carved out
                 {
                     IsDestroyed = true;
                 }
