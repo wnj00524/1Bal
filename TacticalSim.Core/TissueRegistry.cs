@@ -23,7 +23,7 @@ namespace TacticalSim.Core.Physiology
         {
             Density = 1900f,
             Elasticity = 0.1f, // Brittle
-            ShearStrength = 100f // Hard to penetrate/shear, but shatters
+            ShearStrength = 5.0f // Shatters under direct rifle fire but stops pistols
         };
 
         public static readonly TissueProperties Lung = new TissueProperties
