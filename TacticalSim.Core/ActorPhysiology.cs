@@ -62,19 +62,19 @@ namespace TacticalSim.Core.Physiology
                     float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
                     float rate = voxel.Organ switch
                     {
-                        OrganType.Heart => 10.0f,
-                        OrganType.Liver => 2.0f,
-                        OrganType.Spleen => 3.0f, // Highly vascular
-                        OrganType.Kidney => 2.5f, // Renal artery/vein
-                        OrganType.Lung => 0.5f,
-                        OrganType.Intestines => 0.2f, // Moderate bleeding
-                        OrganType.Muscle => 0.05f,
-                        OrganType.Stomach => 0.1f,
-                        OrganType.Bone => 0.8f,
-                        OrganType.Brain => 5.0f, // Highly vascular, intracranial pressure ignores
-                        OrganType.Airway => 1.0f, // Bleeds into lungs
-                        OrganType.Mouth => 0.5f, // Bleeds into airway
-                        _ => 0.05f
+                        OrganType.Heart => 0.5f,
+                        OrganType.Liver => 0.02f,
+                        OrganType.Spleen => 0.03f, 
+                        OrganType.Kidney => 0.03f, 
+                        OrganType.Lung => 0.005f,
+                        OrganType.Intestines => 0.002f, 
+                        OrganType.Muscle => 0.01f, // 100cc muscle tear = 1 ml/sec
+                        OrganType.Stomach => 0.002f,
+                        OrganType.Bone => 0.015f, // Highly vascular marrow, but not an artery
+                        OrganType.Brain => 0.05f, 
+                        OrganType.Airway => 0.01f, 
+                        OrganType.Mouth => 0.005f, 
+                        _ => 0.005f
                     };
                     activeRate += rate * volCc;
                 }

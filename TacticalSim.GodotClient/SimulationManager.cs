@@ -261,3 +261,4 @@ namespace TacticalSim.GodotClient
         }
     }
 }
+// Force Godot rebuild
