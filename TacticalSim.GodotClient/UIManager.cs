@@ -109,14 +109,8 @@ namespace TacticalSim.GodotClient
         {
             _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
             
-            if (_simulationManager.ActiveAmmo.MuzzleVelocity < 100f)
-            {
-                _maxPlaybackTime = 0.040f; // 40ms for slow projectiles (knife)
-            }
-            else 
-            {
-                _maxPlaybackTime = 0.010f; // 10ms for bullets
-            }
+            // Calculate time to travel 10 meters + a little extra for pass-through/cavitation
+            _maxPlaybackTime = (10.0f / _simulationManager.ActiveAmmo.MuzzleVelocity) + 0.005f;
 
             _timelineSlider.MaxValue = _maxPlaybackTime;
             
@@ -180,8 +174,9 @@ namespace TacticalSim.GodotClient
         {
             if (_isPlaying)
             {
-                // Playback speed: extremely slow motion for 10ms flight/cavitation
-                float nextTime = _currentPlaybackTime + (float)delta * 0.005f; 
+                // Playback speed: scaled so full flight takes about 2 seconds of real time
+                float playbackSpeed = _maxPlaybackTime / 2.0f;
+                float nextTime = _currentPlaybackTime + (float)delta * playbackSpeed; 
                 if (nextTime >= _maxPlaybackTime)
                 {
                     nextTime = _maxPlaybackTime;

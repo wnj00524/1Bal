@@ -1,9 +1,7 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://SimulationManager.cs" id="1_sim"]
-[ext_resource type="Script" path="res://VoxelRenderer.cs" id="2_vox"]
 [ext_resource type="Script" path="res://UIManager.cs" id="3_ui"]
-[ext_resource type="Script" path="res://CameraOrbit.cs" id="4_cam"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bullet"]
 albedo_color = Color(1, 0.8, 0, 1)
@@ -11,25 +9,20 @@ emission_enabled = true
 emission = Color(1, 0.8, 0, 1)
 emission_energy_multiplier = 2.0
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_bullet"]
+[sub_resource type="SphereMesh" id="SphereMesh_bullet"]
 material = SubResource("StandardMaterial3D_bullet")
-radius = 0.005
-height = 0.02
+radius = 0.1
+height = 0.2
 
 [node name="Main" type="Node3D"]
 
 [node name="SimulationManager" type="Node" parent="."]
 script = ExtResource("1_sim")
 BulletPath = NodePath("../BulletMesh")
-VoxelRendererPath = NodePath("../VoxelRenderer")
 
 [node name="BulletMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 1.5, -10)
-mesh = SubResource("CapsuleMesh_bullet")
-
-[node name="VoxelRenderer" type="Node3D" parent="."]
-script = ExtResource("2_vox")
-SimulationManagerPath = NodePath("../SimulationManager")
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -10)
+mesh = SubResource("SphereMesh_bullet")
 
 [node name="UIManager" type="CanvasLayer" parent="."]
 script = ExtResource("3_ui")
@@ -125,10 +118,19 @@ text = "+10s Medical Time"
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 5, 0)
 shadow_enabled = true
 
-[node name="Backstop" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 2.0)
-size = Vector3(4, 3, 1)
-
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 2, 2, 3)
-script = ExtResource("4_cam")
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 15, -5)
+projection = 1
+size = 15.0
+
+[node name="ShooterCircle" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -10)
+radius = 0.5
+height = 0.1
+sides = 32
+
+[node name="DummyCircle" type="CSGCylinder3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+radius = 0.5
+height = 0.1
+sides = 32

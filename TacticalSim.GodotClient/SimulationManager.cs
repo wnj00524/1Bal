@@ -20,15 +20,12 @@ namespace TacticalSim.GodotClient
         public TacticalEntity Dummy { get; private set; } = null!;
 
         [Export] public NodePath BulletPath { get; set; } = null!;
-        [Export] public NodePath VoxelRendererPath { get; set; } = null!;
         
         private MeshInstance3D _bulletMesh = null!;
-        private VoxelRenderer _voxelRenderer = null!;
 
         public override void _Ready()
         {
             _bulletMesh = GetNode<MeshInstance3D>(BulletPath);
-            _voxelRenderer = GetNode<VoxelRenderer>(VoxelRendererPath);
 
             InitializeDependencyInjection();
             
@@ -74,12 +71,13 @@ namespace TacticalSim.GodotClient
             else if (ammo.Name.Contains("Head")) aimYOffset = 0.76f;
             
             System.Numerics.Vector3 globalTorsoCenter = Dummy.Position + new System.Numerics.Vector3(0, aimYOffset, 0); 
-            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTorsoCenter - new System.Numerics.Vector3(0, globalTorsoCenter.Y, -10f));
+            System.Numerics.Vector3 muzzlePoint = Shooter.Position + new System.Numerics.Vector3(0, aimYOffset, 0);
+            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(globalTorsoCenter - muzzlePoint);
             
             var impactState = new ProjectileState 
             {
-                Position = globalTorsoCenter - (impactDir * 0.26f), // Start outside the 0.25 visual capsule
-                Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
+                Position = muzzlePoint, 
+                Velocity = impactDir * ammo.MuzzleVelocity,
                 Time = 0f
             };
 
