@@ -17,6 +17,7 @@ namespace TacticalSim.GodotClient
         private float _currentPlaybackTime = 0f;
         private float _maxPlaybackTime = 0.010f; // 10ms to see cavitation collapse
 
+        private Button _medTickButton = null!;
         private RichTextLabel _reportText = null!;
         private bool _hasExportedReport = false;
 
@@ -31,7 +32,22 @@ namespace TacticalSim.GodotClient
             _timelineSlider.ValueChanged += OnSliderValueChanged;
             
             _timeLabel = GetNode<Label>("Control/Panel/Margin/VBox/HBox/TimeLbl");
+            
+            _medTickButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/MedTickBtn");
+            _medTickButton.Pressed += OnMedTickPressed;
+            
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+        }
+
+        private void OnMedTickPressed()
+        {
+            if (_simulationManager.Dummy != null)
+            {
+                _simulationManager.Dummy.Physiology.TickPhysiology(10.0f);
+                
+                var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
+                _reportText.Text = report.AssessmentText;
+            }
         }
 
         private void OnPlayPausePressed()

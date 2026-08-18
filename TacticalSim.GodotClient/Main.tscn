@@ -110,6 +110,22 @@ step = 1e-05
 layout_mode = 2
 text = "0.0000 / 0.0100 s"
 
+[node name="VSeparator" type="VSeparator" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="MedTickBtn" type="Button" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+layout_mode = 2
+text = "+10s Medical Time"
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 5, 0)
+shadow_enabled = true
+
+[node name="Backstop" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 2.0)
+size = Vector3(4, 3, 1)
+
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 2, 2, 3)
 script = ExtResource("4_cam")

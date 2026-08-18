@@ -111,6 +111,12 @@ namespace TacticalSim.GodotClient
                         break; // Can only be in one voxel at a time
                     }
                 }
+                
+                // Backstop material interaction
+                if (impactState.Position.Z >= 1.5f)
+                {
+                    impactState.Velocity = System.Numerics.Vector3.Zero;
+                }
             }
 
             // 4. Update the visual state
