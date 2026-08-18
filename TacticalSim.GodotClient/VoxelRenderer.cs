@@ -54,6 +54,8 @@ namespace TacticalSim.GodotClient
             }
         }
 
+        [Export] public bool DebugHighlightDestroyed { get; set; } = true;
+
         public void RefreshVoxels(IActorPhysiology dummyPhysiology, List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)> cavEvents, float currentTime, System.Numerics.Vector3 entityPos)
         {
             var voxels = dummyPhysiology.RootBodyPart.Voxels;
@@ -64,11 +66,27 @@ namespace TacticalSim.GodotClient
             for (int i = 0; i < voxels.Count; i++)
             {
                 var voxel = voxels[i];
+                var mesh = _voxelMeshes[i];
+                var mat = (StandardMaterial3D)mesh.MaterialOverride;
+
                 if (voxel.IsDestroyed) 
                 {
-                    _voxelMeshes[i].Visible = false;
+                    if (DebugHighlightDestroyed)
+                    {
+                        mesh.Visible = true;
+                        mat.AlbedoColor = new Color(1.0f, 1.0f, 0.0f, 1.0f); // Solid yellow
+                        mat.Transparency = BaseMaterial3D.TransparencyEnum.Disabled;
+                    }
+                    else
+                    {
+                        mesh.Visible = false;
+                    }
                     continue;
                 }
+
+                // Restore normal material properties in case we scrubbed backward
+                mat.AlbedoColor = GetColorForOrgan(voxel.Organ);
+                mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
 
                 bool isTemporarilyDisplaced = false;
                 System.Numerics.Vector3 globalVoxelCenter = entityPos + voxel.Center;
