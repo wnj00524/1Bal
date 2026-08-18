@@ -86,50 +86,64 @@ namespace TacticalSim.GodotClient
             var cavEvents = new List<(float Time, CavitationEvent Cav)>();
             
             // 3. RK4 Physics Loop (simulating continuous flight until t = flightTime)
-            float simTimeStep = 0.00001f; // 10 microseconds for extremely precise physics
-            
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
             
             while (impactState.Time < flightTime)
             {
+                // Fast distance check to optimize time step and voxel collision checks
+                var localPos = impactState.Position - Dummy.Position;
+                bool isNearTarget = localPos.LengthSquared() < 4.0f; // Within 2 meters of dummy
+                
+                // 10 microseconds for extremely precise physics near target, 1 millisecond in the air
+                float simTimeStep = isNearTarget ? 0.00001f : 0.001f; 
+
+                // Prevent overshooting the target flightTime scrubber
+                if (impactState.Time + simTimeStep > flightTime)
+                {
+                    simTimeStep = flightTime - impactState.Time;
+                }
+
                 // Advance flight path
                 impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
                 
                 // Break if projectile has essentially stopped (kinetic energy depleted)
                 if (impactState.Velocity.LengthSquared() < 0.01f) break;
 
-                // Fast voxel lookup using grid coordinates
-                var localPos = impactState.Position - Dummy.Position;
+                // Update local position after step
+                localPos = impactState.Position - Dummy.Position;
 
-                // Look for voxel within 1cm
-                foreach (var voxel in allVoxels)
+                // Only check 40,000 voxels if we are physically close to the dummy
+                if (isNearTarget)
                 {
-                    if (voxel.Contains(localPos))
+                    foreach (var voxel in allVoxels)
                     {
-                        var localState = impactState;
-                        localState.Position = localPos;
-                        
-                        float distanceThisStep = localState.Velocity.Length() * simTimeStep;
-                        var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
-                        
-                        impactState.Velocity = localState.Velocity;
-
-                        if (cav.HasValue)
+                        if (voxel.Contains(localPos))
                         {
-                            if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f)
+                            var localState = impactState;
+                            localState.Position = localPos;
+                            
+                            float distanceThisStep = localState.Velocity.Length() * simTimeStep;
+                            var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
+                            
+                            impactState.Velocity = localState.Velocity;
+
+                            if (cav.HasValue)
                             {
-                                cavEvents.Add((impactState.Time, cav.Value));
+                                if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f)
+                                {
+                                    cavEvents.Add((impactState.Time, cav.Value));
+                                }
+                                else
+                                {
+                                    var last = cavEvents[cavEvents.Count - 1];
+                                    var modifiedCav = last.Cav;
+                                    modifiedCav.Energy += cav.Value.Energy;
+                                    modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
+                                    cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
+                                }
                             }
-                            else
-                            {
-                                var last = cavEvents[cavEvents.Count - 1];
-                                var modifiedCav = last.Cav;
-                                modifiedCav.Energy += cav.Value.Energy;
-                                modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
-                                cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
-                            }
+                            break; 
                         }
-                        break; 
                     }
                 }
                 
