@@ -4,16 +4,25 @@ using TacticalSim.Core.Physiology;
 
 namespace TacticalSim.GodotClient
 {
+    public enum VisualRenderMode
+    {
+        FullVoxels,
+        Abstract
+    }
+
     public partial class VoxelRenderer : Node3D
     {
         [Export]
         public NodePath SimulationManagerPath { get; set; } = null!;
         [Export] 
         public bool DebugHighlightDestroyed { get; set; } = true;
+        [Export]
+        public VisualRenderMode RenderMode { get; set; } = VisualRenderMode.Abstract;
         
         private SimulationManager _simulationManager = null!;
         private MultiMeshInstance3D _multiMeshInstance = null!;
         private MultiMesh _multiMesh = null!;
+        private MeshInstance3D _abstractBodyProxy = null!;
 
         public override void _Ready()
         {
@@ -28,6 +37,25 @@ namespace TacticalSim.GodotClient
             var voxels = dummy.Physiology.RootBodyPart.Voxels;
             if (voxels.Count == 0) return;
 
+            // 1. Create the Abstract Body Proxy (Capsule)
+            _abstractBodyProxy = new MeshInstance3D
+            {
+                Mesh = new CapsuleMesh { Radius = 0.25f, Height = 0.8f }, // Approximate torso dimensions
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(0.3f, 0.5f, 0.8f, 0.2f), // Translucent blue
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                    CullMode = BaseMaterial3D.CullModeEnum.Disabled
+                },
+                Position = new Godot.Vector3(dummy.Position.X, dummy.Position.Y + 0.4f, dummy.Position.Z) // Center torso
+            };
+            
+            if (RenderMode == VisualRenderMode.Abstract)
+            {
+                AddChild(_abstractBodyProxy);
+            }
+
+            // 2. Setup Voxel MultiMesh
             _multiMesh = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
@@ -35,7 +63,7 @@ namespace TacticalSim.GodotClient
                 InstanceCount = voxels.Count
             };
 
-            float visualSize = voxels[0].Size * 0.9f; // 10% gap
+            float visualSize = voxels[0].Size * 0.9f;
             _multiMesh.Mesh = new BoxMesh { Size = new Godot.Vector3(visualSize, visualSize, visualSize) };
 
             for (int i = 0; i < voxels.Count; i++)
@@ -43,7 +71,10 @@ namespace TacticalSim.GodotClient
                 var voxel = voxels[i];
                 System.Numerics.Vector3 globalPos = dummy.Position + voxel.Center;
                 
-                _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Godot.Vector3(globalPos.X, globalPos.Y, globalPos.Z)));
+                // If abstract, hide all voxels initially by scaling to zero
+                var initialScale = RenderMode == VisualRenderMode.Abstract ? Godot.Vector3.Zero : Godot.Vector3.One;
+                
+                _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(initialScale), new Godot.Vector3(globalPos.X, globalPos.Y, globalPos.Z)));
                 _multiMesh.SetInstanceColor(i, GetColorForOrgan(voxel.Organ));
             }
 
@@ -82,7 +113,6 @@ namespace TacticalSim.GodotClient
                     }
                     else
                     {
-                        // Hide by scaling to zero
                         _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Godot.Vector3.Zero), Godot.Vector3.Zero));
                     }
                     continue;
@@ -113,12 +143,15 @@ namespace TacticalSim.GodotClient
 
                 if (isTemporarilyDisplaced)
                 {
+                    // Hide during temporary displacement
                     _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(Godot.Vector3.Zero), Godot.Vector3.Zero));
                 }
                 else
                 {
+                    // Restore to normal (if FullVoxels, scale to One; if Abstract, scale to Zero to stay hidden)
+                    var targetScale = RenderMode == VisualRenderMode.Abstract ? Godot.Vector3.Zero : Godot.Vector3.One;
                     System.Numerics.Vector3 pos = entityPos + voxel.Center;
-                    _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity, new Godot.Vector3(pos.X, pos.Y, pos.Z)));
+                    _multiMesh.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(targetScale), new Godot.Vector3(pos.X, pos.Y, pos.Z)));
                 }
             }
         }
@@ -127,7 +160,7 @@ namespace TacticalSim.GodotClient
         {
             return organ switch
             {
-                OrganType.Muscle => new Color(0.8f, 0.2f, 0.2f, 0.2f), // Slightly more transparent so we can see inside!
+                OrganType.Muscle => new Color(0.8f, 0.2f, 0.2f, 0.2f),
                 OrganType.Lung => new Color(0.9f, 0.6f, 0.6f, 0.5f),
                 OrganType.Heart => new Color(0.9f, 0.1f, 0.1f, 0.9f),
                 OrganType.Liver => new Color(0.6f, 0.1f, 0.1f, 0.9f),
