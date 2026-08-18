@@ -38,9 +38,16 @@ namespace TacticalSim.GodotClient
 
         private void OnSliderValueChanged(double value)
         {
-            _currentPlaybackTime = (float)value;
-            _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F3} s";
-            
+            if (!_isPlaying) 
+            {
+                UpdateScrubber((float)value);
+            }
+        }
+
+        private void UpdateScrubber(float time)
+        {
+            _currentPlaybackTime = time;
+            _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
             _simulationManager.ScrubToTime(_currentPlaybackTime);
         }
 
@@ -56,7 +63,12 @@ namespace TacticalSim.GodotClient
                     OnPlayPausePressed(); // Auto-pause at end
                 }
                 
+                // Update slider without triggering its signal
+                _timelineSlider.SetBlockSignals(true);
                 _timelineSlider.Value = nextTime;
+                _timelineSlider.SetBlockSignals(false);
+
+                UpdateScrubber(nextTime);
             }
         }
     }

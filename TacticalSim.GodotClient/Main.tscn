@@ -42,7 +42,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
+mouse_filter = 1
 
 [node name="Panel" type="PanelContainer" parent="UIManager/Control"]
 layout_mode = 1
@@ -53,11 +53,11 @@ anchor_bottom = 1.0
 offset_top = -80.0
 grow_horizontal = 2
 grow_vertical = 0
-mouse_filter = 2
+mouse_filter = 1
 
 [node name="Margin" type="MarginContainer" parent="UIManager/Control/Panel"]
 layout_mode = 2
-mouse_filter = 2
+mouse_filter = 1
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 20
@@ -65,7 +65,7 @@ theme_override_constants/margin_bottom = 10
 
 [node name="VBox" type="VBoxContainer" parent="UIManager/Control/Panel/Margin"]
 layout_mode = 2
-mouse_filter = 2
+mouse_filter = 1
 
 [node name="Label" type="Label" parent="UIManager/Control/Panel/Margin/VBox"]
 layout_mode = 2
