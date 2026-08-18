@@ -15,7 +15,7 @@ namespace TacticalSim.GodotClient
         
         private bool _isPlaying = false;
         private float _currentPlaybackTime = 0f;
-        private float _maxPlaybackTime = 20f; // Simplified max time
+        private float _maxPlaybackTime = 0.030f; // 30ms bullet flight time
 
         public override void _Ready()
         {
@@ -40,7 +40,7 @@ namespace TacticalSim.GodotClient
             var vbox = new VBoxContainer();
             margin.AddChild(vbox);
 
-            var header = new Label { Text = "TacticalSim - Simulation Scrubber" };
+            var header = new Label { Text = "TacticalSim - Bullet Time Scrubber" };
             vbox.AddChild(header);
 
             var hbox = new HBoxContainer();
@@ -54,14 +54,14 @@ namespace TacticalSim.GodotClient
             {
                 MinValue = 0,
                 MaxValue = _maxPlaybackTime,
-                Step = 0.01,
+                Step = 0.0005, // 0.5ms steps
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 CustomMinimumSize = new Godot.Vector2(0, 30)
             };
             _timelineSlider.ValueChanged += OnSliderValueChanged;
             hbox.AddChild(_timelineSlider);
 
-            _timeLabel = new Label { Text = "0.00 / 20.00 TU" };
+            _timeLabel = new Label { Text = "0.000 / 0.030 s" };
             hbox.AddChild(_timeLabel);
         }
 
@@ -74,17 +74,17 @@ namespace TacticalSim.GodotClient
         private void OnSliderValueChanged(double value)
         {
             _currentPlaybackTime = (float)value;
-            _timeLabel.Text = $"{_currentPlaybackTime:F2} / {_maxPlaybackTime:F2} TU";
+            _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F3} s";
             
-            // In a full implementation, we'd tell SimulationManager to scrub to this TU snapshot
-            // _simulationManager.ScrubToTime(_currentPlaybackTime);
+            _simulationManager.ScrubToTime(_currentPlaybackTime);
         }
 
         public override void _Process(double delta)
         {
             if (_isPlaying)
             {
-                float nextTime = _currentPlaybackTime + (float)delta * 5f; // Playback speed multiplier
+                // Playback speed: 0.01 seconds of flight per real second (slow motion)
+                float nextTime = _currentPlaybackTime + (float)delta * 0.01f; 
                 if (nextTime >= _maxPlaybackTime)
                 {
                     nextTime = _maxPlaybackTime;

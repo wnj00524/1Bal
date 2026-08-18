@@ -54,6 +54,17 @@ namespace TacticalSim.GodotClient
             }
         }
 
+        public void RefreshVoxels(IActorPhysiology dummyPhysiology)
+        {
+            var voxels = dummyPhysiology.RootBodyPart.Voxels;
+            if (voxels.Count != _voxelMeshes.Count) return;
+
+            for (int i = 0; i < voxels.Count; i++)
+            {
+                _voxelMeshes[i].Visible = !voxels[i].IsDestroyed;
+            }
+        }
+
         private Color GetColorForOrgan(OrganType organ)
         {
             return organ switch

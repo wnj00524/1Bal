@@ -14,19 +14,25 @@ namespace TacticalSim.GodotClient
     public partial class SimulationManager : Node
     {
         private IServiceProvider _serviceProvider = null!;
-        private ITurnResolver _turnResolver = null!;
         
         public TacticalEntity Shooter { get; private set; } = null!;
         public TacticalEntity Dummy { get; private set; } = null!;
+
+        [Export] public NodePath BulletPath { get; set; } = null!;
+        [Export] public NodePath VoxelRendererPath { get; set; } = null!;
         
-        // Cache to store the bullet position at a given TU
-        private List<(float Time, System.Numerics.Vector3 Position)> _trajectoryCache = new();
+        private MeshInstance3D _bulletMesh = null!;
+        private VoxelRenderer _voxelRenderer = null!;
 
         public override void _Ready()
         {
+            _bulletMesh = GetNode<MeshInstance3D>(BulletPath);
+            _voxelRenderer = GetNode<VoxelRenderer>(VoxelRendererPath);
+
             InitializeDependencyInjection();
-            InitializeSimulationState();
-            RunSimulationToCompletion();
+            
+            // Initial scrub sets everything to t=0
+            ScrubToTime(0.0f);
         }
 
         private void InitializeDependencyInjection()
@@ -34,52 +40,68 @@ namespace TacticalSim.GodotClient
             var services = new ServiceCollection();
             services.AddTacticalSimCore();
             _serviceProvider = services.BuildServiceProvider();
-            _turnResolver = _serviceProvider.GetRequiredService<ITurnResolver>();
         }
 
-        private void InitializeSimulationState()
+        public void ScrubToTime(float flightTime)
         {
+            // 1. Instantiate a fresh Dummy with full health
             var actorPhysiology = new DummyPhysiology();
             actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
-            
             Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -10f), actorPhysiology);
-            Shooter.EquippedWeapon = new WeaponProfile
+            
+            var ammo = new AmmunitionProfile
             {
-                Name = "Rifle",
-                BaseTUCostToFire = 15f,
-                LoadedAmmunition = new AmmunitionProfile
+                Name = "5.56x45mm NATO",
+                MuzzleVelocity = 900f,
+                Ballistics = new BallisticProfile
                 {
-                    Name = "5.56x45mm NATO",
-                    MuzzleVelocity = 900f,
-                    Ballistics = new BallisticProfile
-                    {
-                        Mass = 0.004f, 
-                        CrossSectionalArea = 0.000024f,
-                        DragModel = new StandardDragCurve(0.3f)
-                    }
+                    Mass = 0.004f, 
+                    CrossSectionalArea = 0.000024f,
+                    DragModel = new StandardDragCurve(0.3f)
                 }
             };
 
             var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
             Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
-        }
-
-        private void RunSimulationToCompletion()
-        {
-            var targetDir = System.Numerics.Vector3.Normalize(Dummy.Position - Shooter.Position);
-            var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
-            var shootAction = new TacticalSim.Core.Simulation.Actions.ShootTacticalAction(Shooter, targetDir, env);
             
-            _turnResolver.ScheduleAction(shootAction);
-
-            // Run until complete
-            while (_turnResolver.HasActiveActions)
+            // 2. Setup initial bullet state right before impact
+            System.Numerics.Vector3 torsoCenter = new System.Numerics.Vector3(0, 0.25f, 0); 
+            System.Numerics.Vector3 impactDir = System.Numerics.Vector3.Normalize(torsoCenter - new System.Numerics.Vector3(0, 0.25f, -10f));
+            
+            var impactState = new ProjectileState 
             {
-                _turnResolver.Tick(1.0f);
-            }
+                Position = torsoCenter - (impactDir * 0.5f),
+                Velocity = impactDir * (ammo.MuzzleVelocity * 0.9f),
+                Time = 0f
+            };
+
+            var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
             
-            // In a full implementation, we'd capture the timeline snapshots here
-            // For now, the dummy has accumulated the end-state damage
+            // 3. Step physics until target time
+            float simTimeStep = 0.0005f; // high precision steps
+            while (impactState.Time < flightTime)
+            {
+                // Advance flight path
+                impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
+                
+                // Process terminal ballistics against dummy
+                foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
+                {
+                    voxel.ProcessPenetration(ref impactState, ammo.Ballistics);
+                }
+            }
+
+            // 4. Update the visual state
+            _bulletMesh.Position = new Godot.Vector3(impactState.Position.X, impactState.Position.Y, impactState.Position.Z);
+            
+            // Look in the direction of velocity
+            if (impactState.Velocity.LengthSquared() > 0)
+            {
+                var targetPt = impactState.Position + impactState.Velocity;
+                _bulletMesh.LookAt(new Godot.Vector3(targetPt.X, targetPt.Y, targetPt.Z), Godot.Vector3.Up);
+            }
+
+            _voxelRenderer.RefreshVoxels(Dummy.Physiology);
         }
     }
 }
