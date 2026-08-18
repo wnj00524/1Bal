@@ -1,6 +1,7 @@
 ; Engine configuration file.
 [application]
 config/name="TacticalSim.GodotClient"
+run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 [dotnet]
 project/assembly_name="TacticalSim.GodotClient"
