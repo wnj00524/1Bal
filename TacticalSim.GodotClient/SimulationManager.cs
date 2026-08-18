@@ -83,28 +83,28 @@ namespace TacticalSim.GodotClient
                 Time = 0f
             };
 
+            var allVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart);
+
+            var cavEvents = new List<(float Time, CavitationEvent Cav)>();
+            
+            // 3. RK4 Physics Loop (simulating continuous flight until t = flightTime)
+            float simTimeStep = 0.00001f; // 10 microseconds for extremely precise physics
+            
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
             
-            // 3. Step physics until target time
-            float simTimeStep = 0.00001f; // 10 microsecond steps to prevent voxel tunneling
-            
-            var cavEvents = new List<(float Time, CavitationEvent Cav)>();
-
             while (impactState.Time < flightTime)
             {
                 // Advance flight path
                 impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
                 
+                // Break if projectile has essentially stopped (kinetic energy depleted)
+                if (impactState.Velocity.LengthSquared() < 0.01f) break;
+
                 // Fast voxel lookup using grid coordinates
                 var localPos = impactState.Position - Dummy.Position;
-                
-                // 1cm grid, round to nearest cm
-                int gridX = (int)MathF.Round(localPos.X * 100f);
-                int gridY = (int)MathF.Round(localPos.Y * 100f);
-                int gridZ = (int)MathF.Round(localPos.Z * 100f);
-                
+
                 // Look for voxel within 1cm
-                foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
+                foreach (var voxel in allVoxels)
                 {
                     if (voxel.Contains(localPos))
                     {
@@ -143,14 +143,14 @@ namespace TacticalSim.GodotClient
             }
 
             int destroyedCount = 0;
-            foreach (var v in Dummy.Physiology.RootBodyPart.Voxels) if (v.IsDestroyed) destroyedCount++;
+            foreach (var v in allVoxels) if (v.IsDestroyed) destroyedCount++;
             System.IO.File.WriteAllText("MedicalReport.txt", $"Knife Debug: Hit {destroyedCount} voxels. Final Pos: {impactState.Position}");
             
             // 4. Apply accumulated cavitation damage to surrounding tissue
             foreach (var cavEvent in cavEvents)
             {
                 var cav = cavEvent.Cav;
-                foreach (var neighbor in Dummy.Physiology.RootBodyPart.Voxels)
+                foreach (var neighbor in allVoxels)
                 {
                     float dist = (neighbor.Center - cav.Origin).Length();
                     if (dist > 0 && dist <= cav.Radius)
@@ -174,6 +174,16 @@ namespace TacticalSim.GodotClient
 
             // We dispense with the heavy visual voxel animation, just show the bullet moving
             // _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
+        }
+        private List<PhysiologicalVoxel> GetAllVoxels(TacticalSim.Core.Physiology.BodyPart root)
+        {
+            var list = new List<PhysiologicalVoxel>();
+            list.AddRange(root.Voxels);
+            foreach (var child in root.Children)
+            {
+                list.AddRange(GetAllVoxels(child));
+            }
+            return list;
         }
     }
 }

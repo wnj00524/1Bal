@@ -58,13 +58,29 @@ namespace TacticalSim.ConsoleApp
                 {
                     Mass = 0.0149f, // 14.9 grams (230 grain)
                     CrossSectionalArea = 0.000103f, // 11.43mm diameter
-                    DragModel = new StandardDragCurve(0.3f) // Simplified drag
+                    DragModel = new StandardDragCurve(0.2f)
                 }
             };
+            
+            var knifeNeckAmmo = new AmmunitionProfile
+            {
+                Name = "Combat Knife (Neck)",
+                MuzzleVelocity = 15f,
+                Ballistics = new BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new StandardDragCurve(10.0f) }
+            };
 
-            SimulateTerminalBallistics(dummy, rifleAmmo);
-            SimulateTerminalBallistics(dummy, handgunAmmo);
-            SimulateTerminalBallistics(dummy, knifeAmmo);
+            var nineMmHeadAmmo = new AmmunitionProfile
+            {
+                Name = "9x19mm (Head)",
+                MuzzleVelocity = 380f,
+                Ballistics = new BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new StandardDragCurve(0.15f) }
+            };
+
+            var ammoProfiles = new[] { rifleAmmo, handgunAmmo, knifeAmmo, knifeNeckAmmo, nineMmHeadAmmo };
+            foreach(var ammo in ammoProfiles)
+            {
+                SimulateTerminalBallistics(dummy, ammo);
+            }
         }
 
         static void SimulateTerminalBallistics(TacticalEntity dummy, AmmunitionProfile ammo)
@@ -98,7 +114,17 @@ namespace TacticalSim.ConsoleApp
             var testDummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
             var testDummy = new TacticalEntity(new Vector3(0, 1.0f, 0), testDummyPhysiology);
             
-            foreach(var voxel in testDummy.Physiology.RootBodyPart.Voxels)
+            var allVoxels = new System.Collections.Generic.List<TacticalSim.Core.Physiology.PhysiologicalVoxel>();
+            void CollectVoxels(TacticalSim.Core.Physiology.BodyPart part) {
+                allVoxels.AddRange(part.Voxels);
+                if (part.Type == TacticalSim.Core.Physiology.BodyPartType.Neck) {
+                    Console.WriteLine($"Neck has {part.Voxels.Count} voxels");
+                }
+                foreach(var c in part.Children) CollectVoxels(c);
+            }
+            CollectVoxels(testDummy.Physiology.RootBodyPart);
+
+            foreach(var voxel in allVoxels)
             {
                 var localState = impactState;
                 localState.Position -= testDummy.Position; // Convert to local space

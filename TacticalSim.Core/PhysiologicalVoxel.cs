@@ -120,8 +120,10 @@ namespace TacticalSim.Core.Physiology
             // Update projectile state
             projectile.Velocity = rayDirection * exitSpeed;
             projectile.Position += rayDirection * distanceInMeters; // Advance projectile to exit point
+            
+            float directCrushVolume = profile.CrossSectionalArea * distanceInMeters;
 
-            return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)));
+            return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)), directCrushVolume);
         }
 
         public bool Contains(Vector3 point)
