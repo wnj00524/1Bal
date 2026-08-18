@@ -17,4 +17,5 @@ Agents working in this repository MUST track their progress and align tasks with
   - Phase 2: Physiological State Machine
   - Phase 3: Turn Resolution System
 - **Labels**: Apply relevant labels (`area: ballistics`, `area: physiology`, `area: simulation`, `type: architecture`) to issues and PRs.
-- **Project Updates**: When implementing new features, always verify if issues need to be transitioned across columns in the 1BalProj project.
+- **Task Tracking**: When you begin work on an issue, you MUST move the issue to the "In Progress" status on the `1BalProj` project using the GitHub CLI (e.g. `gh project item-edit`).
+- **Project Updates**: When implementing new features, always verify if issues need to be transitioned across columns in the 1BalProj project when completed.
