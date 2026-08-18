@@ -15,7 +15,7 @@ namespace TacticalSim.GodotClient
         
         private bool _isPlaying = false;
         private float _currentPlaybackTime = 0f;
-        private float _maxPlaybackTime = 0.030f; // 30ms bullet flight time
+        private float _maxPlaybackTime = 0.0015f; // 1.5ms bullet flight time
 
         public override void _Ready()
         {
@@ -48,8 +48,8 @@ namespace TacticalSim.GodotClient
         {
             if (_isPlaying)
             {
-                // Playback speed: 0.01 seconds of flight per real second (slow motion)
-                float nextTime = _currentPlaybackTime + (float)delta * 0.01f; 
+                // Playback speed: extremely slow motion for 1.5ms flight
+                float nextTime = _currentPlaybackTime + (float)delta * 0.0005f; 
                 if (nextTime >= _maxPlaybackTime)
                 {
                     nextTime = _maxPlaybackTime;

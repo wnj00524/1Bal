@@ -78,7 +78,7 @@ namespace TacticalSim.GodotClient
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
             
             // 3. Step physics until target time
-            float simTimeStep = 0.0005f; // high precision steps
+            float simTimeStep = 0.00001f; // 10 microsecond steps to prevent voxel tunneling
             while (impactState.Time < flightTime)
             {
                 // Advance flight path
