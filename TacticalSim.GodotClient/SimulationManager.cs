@@ -89,26 +89,34 @@ namespace TacticalSim.GodotClient
                 // Advance flight path
                 impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
                 
-                // Process terminal ballistics against dummy
+                // Fast voxel lookup using grid coordinates
+                var localPos = impactState.Position - Dummy.Position;
+                
+                // 1cm grid, round to nearest cm
+                int gridX = (int)MathF.Round(localPos.X * 100f);
+                int gridY = (int)MathF.Round(localPos.Y * 100f);
+                int gridZ = (int)MathF.Round(localPos.Z * 100f);
+                
+                // Look for voxel within 1cm
                 foreach (var voxel in Dummy.Physiology.RootBodyPart.Voxels)
                 {
-                    // Convert to local space for voxel intersection
-                    var localState = impactState;
-                    localState.Position -= Dummy.Position;
-                    
-                    if (voxel.Contains(localState.Position))
+                    // Fast check using distance squared
+                    float distSq = (localPos - voxel.Center).LengthSquared();
+                    if (distSq < (0.005f * 0.005f)) // 0.5cm radius for 1cm voxel
                     {
+                        var localState = impactState;
+                        localState.Position = localPos;
+                        
                         float distanceThisStep = localState.Velocity.Length() * simTimeStep;
                         var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
                         
-                        // Sync state back
                         impactState.Velocity = localState.Velocity;
 
                         if (cav.HasValue)
                         {
                             cavEvents.Add((impactState.Time, cav.Value));
                         }
-                        break; // Can only be in one voxel at a time
+                        break; 
                     }
                 }
                 
@@ -129,7 +137,8 @@ namespace TacticalSim.GodotClient
                 _bulletMesh.LookAt(new Godot.Vector3(targetPt.X, targetPt.Y, targetPt.Z), Godot.Vector3.Up);
             }
 
-            _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
+            // We dispense with the heavy visual voxel animation, just show the bullet moving
+            // _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
         }
     }
 }
