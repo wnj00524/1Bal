@@ -120,6 +120,8 @@ namespace TacticalSim.Core.Physiology
         float BloodOxygenation { get; } // 1.0 down to 0.0
         float AirwayObstruction { get; } // 0.0 to 1.0
         float AlveolarBloodAccumulation { get; } // ml
+        float TensionPneumothoraxLevel { get; } // 0.0 to 1.0
+        bool HasChestSeal { get; }
         
         // Nervous System
         float PainLevel { get; }
@@ -131,6 +133,8 @@ namespace TacticalSim.Core.Physiology
         float WeaponHandlingLevel { get; } // 1.0 down to 0.0
         
         void AdministerAnalgesic(float strength);
+        void ApplyChestSeal();
+        void PerformNeedleDecompression();
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -149,6 +153,8 @@ namespace TacticalSim.Core.Physiology
         public float BloodOxygenation { get; private set; } = 1.0f;
         public float AirwayObstruction { get; private set; } = 0f;
         public float AlveolarBloodAccumulation { get; private set; } = 0f;
+        public float TensionPneumothoraxLevel { get; private set; } = 0f;
+        public bool HasChestSeal { get; private set; }
 
         public float PainLevel { get; private set; } = 0f;
         public float ShockLevel { get; private set; } = 0f;
@@ -167,6 +173,16 @@ namespace TacticalSim.Core.Physiology
         public void AdministerAnalgesic(float strength)
         {
             _analgesicLevel = Math.Clamp(_analgesicLevel + MathF.Max(0f, strength), 0f, 1f);
+        }
+
+        public void ApplyChestSeal()
+        {
+            HasChestSeal = true;
+        }
+
+        public void PerformNeedleDecompression()
+        {
+            TensionPneumothoraxLevel = 0f;
         }
 
         public void TickPhysiology(float dt)
@@ -308,8 +324,20 @@ namespace TacticalSim.Core.Physiology
                 lungCapacityLost = destroyedLungVoxels / totalLungVoxels;
             float remainingCapacity = 1.0f - lungCapacityLost;
 
+            // A penetrating lung injury leaks air into the pleural cavity. A chest
+            // seal prevents further ingress; decompression is required to remove
+            // pressure that has already accumulated.
+            if (destroyedLungVoxels > 0f && !HasChestSeal)
+            {
+                float punctureFraction = destroyedLungVoxels / totalLungVoxels;
+                TensionPneumothoraxLevel = MathF.Min(1f,
+                    TensionPneumothoraxLevel + (punctureFraction * 0.02f * dt));
+            }
+
             // 4. Respiration Effectiveness
-            float effectiveness = (1.0f - AirwayObstruction) * remainingCapacity;
+            float effectiveness = (1.0f - AirwayObstruction)
+                * remainingCapacity
+                * (1.0f - TensionPneumothoraxLevel);
 
             // 5. Hypoxia Calculation
             if (effectiveness < 0.8f) // Demand threshold
