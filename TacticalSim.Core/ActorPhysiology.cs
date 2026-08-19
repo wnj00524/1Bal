@@ -114,6 +114,8 @@ namespace TacticalSim.Core.Physiology
         float ConsciousnessLevel { get; } // 0.0 to 1.0
         float HeartRateBpm { get; }
         float MeanArterialPressureMmhg { get; }
+        float BreathingRatePerMinute { get; }
+        float AutonomicDrive { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
 
         // Respiratory System
@@ -148,6 +150,8 @@ namespace TacticalSim.Core.Physiology
         
         public float HeartRateBpm { get; private set; } = 80f;
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
+        public float BreathingRatePerMinute { get; private set; } = 12f;
+        public float AutonomicDrive { get; private set; } = 1f;
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
@@ -164,6 +168,7 @@ namespace TacticalSim.Core.Physiology
         public float WeaponHandlingLevel { get; private set; } = 1.0f;
 
         private float _analgesicLevel = 0f;
+        private float _cardiacFunction = 1f;
 
         public void SetRoot(BodyPart root)
         {
@@ -200,10 +205,46 @@ namespace TacticalSim.Core.Physiology
             }
 
             TickIschemia(RootBodyPart, dt);
+            UpdateAutonomicControl();
             UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
             UpdateNervousSystemState(dt);
             UpdateMotorState();
+        }
+
+        private void UpdateAutonomicControl()
+        {
+            AutonomicDrive = CalculateOrganFunction(OrganType.Brain);
+            _cardiacFunction = CalculateOrganFunction(OrganType.Heart);
+            BreathingRatePerMinute = 12f * AutonomicDrive;
+        }
+
+        private float CalculateOrganFunction(OrganType organ)
+        {
+            float total = 0f;
+            float destroyed = 0f;
+            CountOrganVoxels(RootBodyPart, organ, ref total, ref destroyed);
+            return total > 0f ? Math.Clamp(1f - (destroyed / total), 0f, 1f) : 1f;
+        }
+
+        private static void CountOrganVoxels(
+            BodyPart part,
+            OrganType organ,
+            ref float total,
+            ref float destroyed)
+        {
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.Organ != organ)
+                    continue;
+
+                total += 1f;
+                if (voxel.IsDestroyed)
+                    destroyed += 1f;
+            }
+
+            foreach (var child in part.Children)
+                CountOrganVoxels(child, organ, ref total, ref destroyed);
         }
 
         private void UpdateMotorState()
@@ -337,7 +378,9 @@ namespace TacticalSim.Core.Physiology
             // 4. Respiration Effectiveness
             float effectiveness = (1.0f - AirwayObstruction)
                 * remainingCapacity
-                * (1.0f - TensionPneumothoraxLevel);
+                * (1.0f - TensionPneumothoraxLevel)
+                * AutonomicDrive
+                * _cardiacFunction;
 
             // 5. Hypoxia Calculation
             if (effectiveness < 0.8f) // Demand threshold
@@ -446,6 +489,18 @@ namespace TacticalSim.Core.Physiology
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f;
             }
+
+            HeartRateBpm *= AutonomicDrive * _cardiacFunction;
+            MeanArterialPressureMmhg *= AutonomicDrive * _cardiacFunction;
+
+            if (HeartRateBpm <= 0f)
+            {
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+            }
+
+            if (AutonomicDrive <= 0f)
+                ConsciousnessLevel = 0f;
         }
 
         private void UpdateNervousSystemState(float dt)
