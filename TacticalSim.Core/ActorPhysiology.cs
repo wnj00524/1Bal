@@ -124,6 +124,7 @@ namespace TacticalSim.Core.Physiology
         // Nervous System
         float PainLevel { get; }
         float ShockLevel { get; }
+        float AnalgesicLevel { get; }
         
         // Motor System
         float MobilityLevel { get; } // 1.0 down to 0.0
@@ -151,6 +152,7 @@ namespace TacticalSim.Core.Physiology
 
         public float PainLevel { get; private set; } = 0f;
         public float ShockLevel { get; private set; } = 0f;
+        public float AnalgesicLevel => _analgesicLevel;
         
         public float MobilityLevel { get; private set; } = 1.0f;
         public float WeaponHandlingLevel { get; private set; } = 1.0f;
@@ -164,7 +166,7 @@ namespace TacticalSim.Core.Physiology
 
         public void AdministerAnalgesic(float strength)
         {
-            _analgesicLevel = MathF.Min(1.0f, _analgesicLevel + strength);
+            _analgesicLevel = Math.Clamp(_analgesicLevel + MathF.Max(0f, strength), 0f, 1f);
         }
 
         public void TickPhysiology(float dt)

@@ -50,6 +50,18 @@ namespace TacticalSim.Tests
         }
 
         [Fact]
+        public void AdministerAnalgesic_ClampsDoseAndRejectsNegativeStrength()
+        {
+            var physiology = new TacticalActorPhysiology();
+
+            physiology.AdministerAnalgesic(2f);
+            Assert.Equal(1f, physiology.AnalgesicLevel);
+
+            physiology.AdministerAnalgesic(-0.75f);
+            Assert.Equal(1f, physiology.AnalgesicLevel);
+        }
+
+        [Fact]
         public void HighPain_IncreasesShootTUCost()
         {
             var physiology = new TacticalActorPhysiology();
