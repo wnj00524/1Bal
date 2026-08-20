@@ -30,11 +30,12 @@ namespace TacticalSim.GodotClient
         private PopupPanel _targetMenu = null!;
         private TargetSilhouetteMenu _targetSilhouette = null!;
         private PopupPanel _commandMenu = null!;
+        private PopupMenu _medicalMenu = null!;
         private RadialCommandMenu _radialCommands = null!;
         private Vector3 _commandDestination;
         private Vector2 _commandScreenPosition;
 
-        private readonly string[] _sceneProfiles = { "Training Dummy Outside" };
+        private readonly string[] _sceneProfiles = { "Training Dummy Outside", "Chest Wound Response" };
 
         private readonly string[] _targetProfiles =
         {
@@ -88,6 +89,10 @@ namespace TacticalSim.GodotClient
             _targetSilhouette.TargetSelected += OnContextTargetSelected;
             _radialCommands.MoveSelected += OnMoveSelected;
             _radialCommands.ShootSelected += OnShootSelected;
+            _radialCommands.MedicalSelected += OnMedicalSelected;
+            _medicalMenu = new PopupMenu { Name = "MedicalMenu" };
+            AddChild(_medicalMenu);
+            _medicalMenu.IdPressed += OnMedicalActionSelected;
 
             _scenarioControls.Hide();
             _projectilePanel.Hide();
@@ -117,18 +122,25 @@ namespace TacticalSim.GodotClient
                 return;
 
             _targetMenu.Hide();
+            _medicalMenu.Hide();
             _commandScreenPosition = click.Position;
 
+            bool isDummy = _simulationManager.IsDummyAtScreenPosition(click.Position);
+            var commands = new List<RadialCommandMenu.Command>();
             if (_simulationManager.IsValidShotTargetAtScreenPosition(click.Position))
+                commands.Add(RadialCommandMenu.Command.Shoot);
+            if (isDummy && _simulationManager.GetAvailableMedicalActions().Count > 0)
+                commands.Add(RadialCommandMenu.Command.Medical);
+            if (commands.Count > 0)
             {
-                ShowCommandMenu(click.Position, RadialCommandMenu.Command.Shoot);
+                ShowCommandMenu(click.Position, commands);
                 GetViewport().SetInputAsHandled();
                 return;
             }
 
             if (_simulationManager.TryGetMoveDestination(click.Position, out _commandDestination))
             {
-                ShowCommandMenu(click.Position, RadialCommandMenu.Command.Move);
+                ShowCommandMenu(click.Position, new[] { RadialCommandMenu.Command.Move });
                 GetViewport().SetInputAsHandled();
             }
         }
@@ -156,6 +168,7 @@ namespace TacticalSim.GodotClient
         {
             _targetMenu.Hide();
             _commandMenu.Hide();
+            _medicalMenu.Hide();
             _simulationManager.UnloadScenario();
             _scenarioControls.Hide();
             _setupPanel.Show();
@@ -181,9 +194,34 @@ namespace TacticalSim.GodotClient
             _targetMenu.Popup();
         }
 
-        private void ShowCommandMenu(Vector2 screenPosition, RadialCommandMenu.Command command)
+        private void OnMedicalSelected()
         {
-            _radialCommands.ShowCommand(command);
+            _commandMenu.Hide();
+            _medicalMenu.Clear();
+            foreach (SimulationManager.MedicalAction action in _simulationManager.GetAvailableMedicalActions())
+                _medicalMenu.AddItem(FormatMedicalAction(action), (int)action);
+            _medicalMenu.Position = new Vector2I((int)_commandScreenPosition.X + 12, (int)_commandScreenPosition.Y + 12);
+            _medicalMenu.Popup();
+        }
+
+        private void OnMedicalActionSelected(long id)
+        {
+            var action = (SimulationManager.MedicalAction)id;
+            _simulationManager.QueueMedicalAction(action);
+            _focusLabel.Text = $"{FormatMedicalAction(action)} ordered. Advance the simulation to treat the dummy.";
+            _medicalMenu.Hide();
+        }
+
+        private static string FormatMedicalAction(SimulationManager.MedicalAction action) => action switch
+        {
+            SimulationManager.MedicalAction.ApplyChestSeal => "Apply chest seal",
+            SimulationManager.MedicalAction.NeedleDecompression => "Needle decompression",
+            _ => action.ToString()
+        };
+
+        private void ShowCommandMenu(Vector2 screenPosition, IEnumerable<RadialCommandMenu.Command> commands)
+        {
+            _radialCommands.ShowCommands(commands);
             _commandMenu.Position = new Vector2I(
                 (int)screenPosition.X - 76,
                 (int)screenPosition.Y - 76);

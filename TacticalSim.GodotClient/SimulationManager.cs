@@ -11,6 +11,7 @@ using TacticalSim.Core;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.World;
 using System.Numerics;
+using System.Linq;
 
 namespace TacticalSim.GodotClient
 {
@@ -35,6 +36,7 @@ namespace TacticalSim.GodotClient
         private Godot.Vector3? _pendingMoveDestination;
         private ProjectileState? _projectileState;
         private bool _isProjectileSelected;
+        private MedicalAction? _pendingMedicalAction;
         private Node3D _penetrationVisualization = null!;
 
         public string? LoadedScenarioName { get; private set; }
@@ -48,6 +50,7 @@ namespace TacticalSim.GodotClient
         public bool HasPendingMove => _pendingMoveDestination.HasValue;
         public bool IsProjectileSelected => _isProjectileSelected;
         public bool HasCompletePenetration { get; private set; }
+        public bool HasPendingMedicalAction => _pendingMedicalAction.HasValue;
         public bool HasMaterialHit { get; private set; }
         public System.Numerics.Vector3? PenetrationEntryPoint { get; private set; }
         public System.Numerics.Vector3? PenetrationExitPoint { get; private set; }
@@ -94,7 +97,7 @@ namespace TacticalSim.GodotClient
 
         public void LoadScenario(string sceneName, AmmunitionProfile weapon, string target)
         {
-            if (sceneName != "Training Dummy Outside")
+            if (sceneName != "Training Dummy Outside" && sceneName != "Chest Wound Response")
                 throw new ArgumentException($"Unknown scenario: {sceneName}", nameof(sceneName));
 
             ActiveAmmo = weapon ?? throw new ArgumentNullException(nameof(weapon));
@@ -108,6 +111,7 @@ namespace TacticalSim.GodotClient
             _isProjectileSelected = false;
             ClearPenetrationVisualization();
             ClearAgentFocus();
+            _pendingMedicalAction = null;
 
             PrepareScenario();
             SetScenarioVisibility(true);
@@ -121,6 +125,7 @@ namespace TacticalSim.GodotClient
                 throw new ArgumentOutOfRangeException(nameof(seconds), "Scenarios advance in five-second increments.");
 
             ApplyPendingMovement(seconds);
+            ApplyPendingMedicalAction();
 
             if (IsTargetedShotPending)
             {
@@ -158,6 +163,7 @@ namespace TacticalSim.GodotClient
             _isProjectileSelected = false;
             ClearPenetrationVisualization();
             ClearAgentFocus();
+            _pendingMedicalAction = null;
             SetScenarioVisibility(false);
         }
 
@@ -295,6 +301,62 @@ namespace TacticalSim.GodotClient
                 && collider.AsGodotObject() == _dummyVisual;
         }
 
+        public enum MedicalAction
+        {
+            ApplyChestSeal,
+            NeedleDecompression
+        }
+
+        public IReadOnlyList<MedicalAction> GetAvailableMedicalActions()
+        {
+            var actions = new List<MedicalAction>();
+            if (!IsScenarioLoaded || !ReferenceEquals(_focusedAgent, Shooter))
+                return actions;
+
+            bool hasOpenChestWound = GetAllVoxels(Dummy.Physiology.RootBodyPart)
+                .Exists(voxel => voxel.Organ == OrganType.Lung && voxel.IsDestroyed);
+            if (hasOpenChestWound && !Dummy.Physiology.HasChestSeal)
+                actions.Add(MedicalAction.ApplyChestSeal);
+            if (Dummy.Physiology.TensionPneumothoraxLevel > 0f)
+                actions.Add(MedicalAction.NeedleDecompression);
+            return actions;
+        }
+
+        public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
+        {
+            if (!IsScenarioLoaded)
+                return false;
+
+            Camera3D? camera = GetViewport().GetCamera3D();
+            if (camera == null)
+                return false;
+            Godot.Vector3 origin = camera.ProjectRayOrigin(screenPosition);
+            var query = PhysicsRayQueryParameters3D.Create(
+                origin, origin + camera.ProjectRayNormal(screenPosition) * 1000f);
+            var hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            return hit.TryGetValue("collider", out Variant collider)
+                && collider.AsGodotObject() == _dummyVisual;
+        }
+
+        public void QueueMedicalAction(MedicalAction action)
+        {
+            if (!GetAvailableMedicalActions().Contains(action))
+                throw new InvalidOperationException("That treatment is not currently applicable to the dummy.");
+            _pendingMedicalAction = action;
+        }
+
+        private void ApplyPendingMedicalAction()
+        {
+            if (!_pendingMedicalAction.HasValue)
+                return;
+
+            if (_pendingMedicalAction == MedicalAction.ApplyChestSeal)
+                Dummy.Physiology.ApplyChestSeal();
+            else
+                Dummy.Physiology.PerformNeedleDecompression();
+            _pendingMedicalAction = null;
+        }
+
         private void SetScenarioVisibility(bool visible)
         {
             _scenarioRoot.Visible = visible;
@@ -315,6 +377,17 @@ namespace TacticalSim.GodotClient
             Dummy = new TacticalEntity(
                 new System.Numerics.Vector3(0, 1f, 0),
                 AnatomicalDummyBuilder.BuildDummy());
+
+            if (LoadedScenarioName == "Chest Wound Response")
+            {
+                List<PhysiologicalVoxel> lungVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart)
+                    .FindAll(voxel => voxel.Organ == OrganType.Lung);
+                foreach (PhysiologicalVoxel lungVoxel in lungVoxels.Take(6))
+                {
+                    lungVoxel.ApplyKineticEnergy(1_000f, lungVoxel.Center, lungVoxel.Size * lungVoxel.Size * lungVoxel.Size);
+                }
+                Dummy.Physiology.TickPhysiology(1f);
+            }
 
             _shooterVisual.Position = new Godot.Vector3(0, 0.9f, -TargetDistance);
             _dummyVisual.Position = new Godot.Vector3(0, 0.9f, 0);
