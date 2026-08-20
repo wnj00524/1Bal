@@ -35,6 +35,7 @@ namespace TacticalSim.GodotClient
         private Godot.Vector3? _pendingMoveDestination;
         private ProjectileState? _projectileState;
         private bool _isProjectileSelected;
+        private Node3D _penetrationVisualization = null!;
 
         public string? LoadedScenarioName { get; private set; }
         public float ElapsedScenarioTime { get; private set; }
@@ -46,6 +47,9 @@ namespace TacticalSim.GodotClient
         public bool HasFocusedAgent => _focusedAgent != null;
         public bool HasPendingMove => _pendingMoveDestination.HasValue;
         public bool IsProjectileSelected => _isProjectileSelected;
+        public bool HasCompletePenetration { get; private set; }
+        public System.Numerics.Vector3? PenetrationEntryPoint { get; private set; }
+        public System.Numerics.Vector3? PenetrationExitPoint { get; private set; }
         public ProjectileTelemetry? SelectedProjectileTelemetry =>
             _isProjectileSelected && _projectileState.HasValue
                 ? ProjectileTelemetry.From(_projectileState.Value, ActiveAmmo.Ballistics)
@@ -59,6 +63,7 @@ namespace TacticalSim.GodotClient
             _dummyVisual = GetNode<Node3D>(DummyVisualPath);
 
             InitializeDependencyInjection();
+            CreatePenetrationVisualization();
             SetScenarioVisibility(false);
         }
 
@@ -99,6 +104,7 @@ namespace TacticalSim.GodotClient
             LastProjectileTermination = ProjectileTerminationReason.None;
             _projectileState = null;
             _isProjectileSelected = false;
+            ClearPenetrationVisualization();
             ClearAgentFocus();
 
             PrepareScenario();
@@ -148,6 +154,7 @@ namespace TacticalSim.GodotClient
             LastProjectileTermination = ProjectileTerminationReason.None;
             _projectileState = null;
             _isProjectileSelected = false;
+            ClearPenetrationVisualization();
             ClearAgentFocus();
             SetScenarioVisibility(false);
         }
@@ -388,6 +395,8 @@ namespace TacticalSim.GodotClient
             }
 
             var cavEvents = new List<(float Time, CavitationEvent Cav)>();
+            System.Numerics.Vector3? firstMaterialContact = null;
+            System.Numerics.Vector3? lastMaterialContact = null;
             
             // 3. RK4 Physics Loop (simulating continuous flight until t = flightTime)
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
@@ -431,6 +440,8 @@ namespace TacticalSim.GodotClient
                         var voxel = voxelGrid[bx, by, bz];
                         if (voxel != null && voxel.Contains(localPos))
                         {
+                            firstMaterialContact ??= impactState.Position;
+                            lastMaterialContact = impactState.Position;
                             var localState = impactState;
                             localState.Position = localPos;
                             
@@ -509,6 +520,11 @@ namespace TacticalSim.GodotClient
             }
             
             _projectileState = impactState;
+            UpdatePenetrationVisualization(
+                firstMaterialContact,
+                lastMaterialContact,
+                impactState.Position,
+                impactDir);
             _bulletMesh.Position = new Godot.Vector3(impactState.Position.X, impactState.Position.Y, impactState.Position.Z);
             
             // Look in the direction of velocity
@@ -521,6 +537,110 @@ namespace TacticalSim.GodotClient
             // We dispense with the heavy visual voxel animation, just show the bullet moving
             // _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
         }
+
+        private void CreatePenetrationVisualization()
+        {
+            _penetrationVisualization = new Node3D { Name = "PenetrationVisualization" };
+            AddChild(_penetrationVisualization);
+        }
+
+        private void ClearPenetrationVisualization()
+        {
+            HasCompletePenetration = false;
+            PenetrationEntryPoint = null;
+            PenetrationExitPoint = null;
+
+            if (_penetrationVisualization != null)
+            {
+                foreach (Node child in _penetrationVisualization.GetChildren())
+                    child.QueueFree();
+            }
+        }
+
+        private void UpdatePenetrationVisualization(
+            System.Numerics.Vector3? firstContact,
+            System.Numerics.Vector3? lastContact,
+            System.Numerics.Vector3 projectilePosition,
+            System.Numerics.Vector3 direction)
+        {
+            ClearPenetrationVisualization();
+            if (!firstContact.HasValue || !lastContact.HasValue)
+                return;
+
+            float travelBeyondMaterial = System.Numerics.Vector3.Dot(
+                projectilePosition - lastContact.Value,
+                direction);
+            if (travelBeyondMaterial <= 0.01f)
+                return;
+
+            HasCompletePenetration = true;
+            PenetrationEntryPoint = firstContact;
+            PenetrationExitPoint = lastContact;
+
+            AddPenetrationMarker(firstContact.Value, "ENTRY", new Color(1f, 0.2f, 0.08f));
+            AddPenetrationMarker(lastContact.Value, "EXIT", new Color(0.1f, 0.9f, 1f));
+            AddPenetrationChannel(firstContact.Value, lastContact.Value);
+        }
+
+        private void AddPenetrationMarker(System.Numerics.Vector3 position, string text, Color color)
+        {
+            var marker = new MeshInstance3D
+            {
+                Mesh = new SphereMesh { Radius = 0.045f, Height = 0.09f },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = color,
+                    EmissionEnabled = true,
+                    Emission = color,
+                    EmissionEnergyMultiplier = 3f
+                },
+                Position = ToGodot(position)
+            };
+            _penetrationVisualization.AddChild(marker);
+
+            var label = new Label3D
+            {
+                Text = text,
+                FontSize = 32,
+                Modulate = color,
+                OutlineSize = 8,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                Position = ToGodot(position) + new Godot.Vector3(0f, 0.1f, 0f)
+            };
+            _penetrationVisualization.AddChild(label);
+        }
+
+        private void AddPenetrationChannel(
+            System.Numerics.Vector3 entryPoint,
+            System.Numerics.Vector3 exitPoint)
+        {
+            Godot.Vector3 entry = ToGodot(entryPoint);
+            Godot.Vector3 exit = ToGodot(exitPoint);
+            Godot.Vector3 channel = exit - entry;
+            float length = channel.Length();
+            if (length <= 0.001f)
+                return;
+
+            var channelMesh = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh { TopRadius = 0.012f, BottomRadius = 0.012f, Height = length },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(1f, 0.5f, 0.05f, 0.85f),
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                    EmissionEnabled = true,
+                    Emission = new Color(1f, 0.25f, 0.02f),
+                    EmissionEnergyMultiplier = 2f
+                },
+                Position = (entry + exit) * 0.5f,
+                Basis = new Basis(new Godot.Quaternion(Godot.Vector3.Up, channel.Normalized()))
+            };
+            _penetrationVisualization.AddChild(channelMesh);
+        }
+
+        private static Godot.Vector3 ToGodot(System.Numerics.Vector3 value) =>
+            new(value.X, value.Y, value.Z);
+
         private List<PhysiologicalVoxel> GetAllVoxels(TacticalSim.Core.Physiology.BodyPart root)
         {
             var list = new List<PhysiologicalVoxel>();

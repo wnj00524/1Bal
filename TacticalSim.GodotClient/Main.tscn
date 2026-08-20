@@ -260,6 +260,10 @@ text = "Elapsed: 0s"
 layout_mode = 2
 text = "Focus: none"
 
+[node name="PenetrationLbl" type="Label" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
+layout_mode = 2
+text = "Penetration: none"
+
 [node name="AdvanceBtn" type="Button" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
 text = "Advance +5 Seconds"

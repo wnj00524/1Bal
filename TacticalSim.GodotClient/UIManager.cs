@@ -25,6 +25,7 @@ namespace TacticalSim.GodotClient
         private Label _projectileVelocityLabel = null!;
         private Label _projectileEnergyLabel = null!;
         private Label _projectileHeightLabel = null!;
+        private Label _penetrationLabel = null!;
         private RichTextLabel _reportText = null!;
         private PopupPanel _targetMenu = null!;
         private TargetSilhouetteMenu _targetSilhouette = null!;
@@ -67,6 +68,7 @@ namespace TacticalSim.GodotClient
             _projectileVelocityLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/VelocityLbl");
             _projectileEnergyLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/EnergyLbl");
             _projectileHeightLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/HeightLbl");
+            _penetrationLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/PenetrationLbl");
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
             _targetMenu = GetNode<PopupPanel>("Control/TargetContextMenu");
             _targetSilhouette = GetNode<TargetSilhouetteMenu>("Control/TargetContextMenu/Margin/VBox/Silhouette");
@@ -90,6 +92,7 @@ namespace TacticalSim.GodotClient
             _scenarioControls.Hide();
             _projectilePanel.Hide();
             _reportText.Text = "Choose a scene and loadout to begin.";
+            _penetrationLabel.Text = "Penetration: none";
         }
 
         public override void _UnhandledInput(InputEvent @event)
@@ -159,6 +162,7 @@ namespace TacticalSim.GodotClient
             _reportText.Text = "Choose a scene and loadout to begin.";
             _focusLabel.Text = "Focus: none";
             _projectilePanel.Hide();
+            _penetrationLabel.Text = "Penetration: none";
         }
 
         private void OnMoveSelected()
@@ -212,6 +216,12 @@ namespace TacticalSim.GodotClient
             _timeLabel.Text = $"Elapsed: {_simulationManager.ElapsedScenarioTime:F0}s";
             var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
             _reportText.Text = report.AssessmentText;
+            _penetrationLabel.Text = _simulationManager.HasCompletePenetration
+                ? "Penetration: THROUGH (ENTRY → EXIT)"
+                : "Penetration: none";
+            _penetrationLabel.Modulate = _simulationManager.HasCompletePenetration
+                ? new Color(0.25f, 1f, 0.7f)
+                : Colors.White;
             System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
             RefreshProjectileTelemetry();
         }
