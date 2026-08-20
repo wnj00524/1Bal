@@ -1,9 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://SimulationManager.cs" id="1_sim"]
 [ext_resource type="Script" path="res://CameraOrbit.cs" id="2_camera"]
 [ext_resource type="Script" path="res://UIManager.cs" id="3_ui"]
 [ext_resource type="Script" path="res://TargetSilhouetteMenu.cs" id="4_target_menu"]
+[ext_resource type="Script" path="res://RadialCommandMenu.cs" id="5_radial_menu"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bullet"]
 albedo_color = Color(1, 0.8, 0, 1)
@@ -297,6 +298,20 @@ custom_minimum_size = Vector2(220, 360)
 layout_mode = 2
 mouse_filter = 0
 script = ExtResource("4_target_menu")
+
+[node name="CommandMenu" type="PopupPanel" parent="UIManager/Control"]
+size = Vector2i(152, 152)
+transparent_bg = true
+
+[node name="RadialCommands" type="Control" parent="UIManager/Control/CommandMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+script = ExtResource("5_radial_menu")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 5, 0)
