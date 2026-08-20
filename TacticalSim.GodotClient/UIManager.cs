@@ -120,7 +120,7 @@ namespace TacticalSim.GodotClient
 
         private void OnContextTargetSelected(string target)
         {
-            _simulationManager.ActiveTarget = target;
+            _simulationManager.QueueTargetedShot(target);
             _targetSelect.Select(System.Array.IndexOf(_targetProfiles, target));
             UpdateScenarioLabel();
             _targetMenu.Hide();
