@@ -77,8 +77,10 @@ namespace TacticalSim.Core.Simulation.Actions
                 float maxDeviationRadians = 20f * (MathF.PI / 180f) * MathF.Min(1.0f, deviationFactor);
                 
                 var random = new Random(_shooter.Id.GetHashCode()); // Deterministic random per actor
-                float randomPitch = ((float)random.NextDouble() * 2f - 1f) * maxDeviationRadians;
-                float randomYaw = ((float)random.NextDouble() * 2f - 1f) * maxDeviationRadians;
+                float r = (0.25f + 0.75f * (float)random.NextDouble()) * maxDeviationRadians;
+                float theta = (float)random.NextDouble() * MathF.PI * 2f;
+                float randomPitch = r * MathF.Sin(theta);
+                float randomYaw = r * MathF.Cos(theta);
                 
                 // Construct a rotation and apply to the base direction
                 var rotation = Quaternion.CreateFromYawPitchRoll(randomYaw, randomPitch, 0f);
