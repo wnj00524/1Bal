@@ -32,6 +32,7 @@ namespace TacticalSim.GodotClient
         public string? LoadedScenarioName { get; private set; }
         public float ElapsedScenarioTime { get; private set; }
         public bool IsScenarioLoaded => LoadedScenarioName != null;
+        public bool HasBulletBeenFired { get; private set; }
 
         public override void _Ready()
         {
@@ -76,10 +77,9 @@ namespace TacticalSim.GodotClient
             ActiveTarget = target;
             LoadedScenarioName = sceneName;
             ElapsedScenarioTime = 0f;
+            HasBulletBeenFired = false;
 
-            float distance = ActiveAmmo.Name.Contains("Knife") ? 1f : 10f;
-            float impactTime = (distance / ActiveAmmo.MuzzleVelocity) + 0.005f;
-            ScrubToTime(impactTime);
+            PrepareScenario();
             SetScenarioVisibility(true);
         }
 
@@ -98,6 +98,7 @@ namespace TacticalSim.GodotClient
         {
             LoadedScenarioName = null;
             ElapsedScenarioTime = 0f;
+            HasBulletBeenFired = false;
             SetScenarioVisibility(false);
         }
 
@@ -106,7 +107,28 @@ namespace TacticalSim.GodotClient
             _scenarioRoot.Visible = visible;
             _shooterVisual.Visible = visible;
             _dummyVisual.Visible = visible;
-            _bulletMesh.Visible = visible;
+            _bulletMesh.Visible = visible && HasBulletBeenFired;
+        }
+
+        private void PrepareScenario()
+        {
+            TargetDistance = ActiveAmmo.Name.Contains("Knife") ? 1f : 10f;
+
+            var shooterPhysiology = new TacticalActorPhysiology();
+            shooterPhysiology.SetRoot(new BodyPart { Type = BodyPartType.Thorax });
+            Shooter = new TacticalEntity(
+                new System.Numerics.Vector3(0, 1.5f, -TargetDistance),
+                shooterPhysiology);
+            Dummy = new TacticalEntity(
+                new System.Numerics.Vector3(0, 1f, 0),
+                AnatomicalDummyBuilder.BuildDummy());
+
+            _shooterVisual.Position = new Godot.Vector3(0, 0.9f, -TargetDistance);
+            _dummyVisual.Position = new Godot.Vector3(0, 0.9f, 0);
+            _bulletMesh.Position = new Godot.Vector3(
+                Shooter.Position.X,
+                Shooter.Position.Y,
+                Shooter.Position.Z);
         }
 
         private void ScrubToTime(float flightTime)
