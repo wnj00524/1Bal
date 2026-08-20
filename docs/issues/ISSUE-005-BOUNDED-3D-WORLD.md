@@ -34,15 +34,15 @@ This issue introduces:
 
 This issue is broken into **7 tasks** that must be completed **in order**. Each task has its own detailed document in `docs/issues/tasks/`.
 
-| # | Task | File | Dependencies | Estimated Effort |
-|---|------|------|-------------|------------------|
-| 1 | Create `WorldBounds` value type | [TASK-01-WORLD-BOUNDS.md](tasks/TASK-01-WORLD-BOUNDS.md) | None | Small |
-| 2 | Create `ITacticalWorld` interface | [TASK-02-ITACTICAL-WORLD.md](tasks/TASK-02-ITACTICAL-WORLD.md) | Task 1 | Small |
-| 3 | Create `TacticalWorld` implementation | [TASK-03-TACTICAL-WORLD.md](tasks/TASK-03-TACTICAL-WORLD.md) | Tasks 1, 2 | Medium |
-| 4 | Refactor `ITurnResolver` and `TurnResolver` | [TASK-04-REFACTOR-TURN-RESOLVER.md](tasks/TASK-04-REFACTOR-TURN-RESOLVER.md) | Task 3 | Medium |
-| 5 | Update DI registration | [TASK-05-UPDATE-DI.md](tasks/TASK-05-UPDATE-DI.md) | Task 4 | Small |
-| 6 | Create `WorldTests.cs` | [TASK-06-WORLD-TESTS.md](tasks/TASK-06-WORLD-TESTS.md) | Tasks 1, 2, 3 | Medium |
-| 7 | Migrate all existing tests | [TASK-07-MIGRATE-TESTS.md](tasks/TASK-07-MIGRATE-TESTS.md) | Tasks 4, 5 | Large (mechanical) |
+| # | Task | GitHub Issue | File | Dependencies | Estimated Effort |
+|---|------|--------------|------|-------------|------------------|
+| 1 | Create `WorldBounds` value type | [#36](https://github.com/wnj00524/1Bal/issues/36) | [TASK-01-WORLD-BOUNDS.md](tasks/TASK-01-WORLD-BOUNDS.md) | None | Small |
+| 2 | Create `ITacticalWorld` interface | [#37](https://github.com/wnj00524/1Bal/issues/37) | [TASK-02-ITACTICAL-WORLD.md](tasks/TASK-02-ITACTICAL-WORLD.md) | Task 1 | Small |
+| 3 | Create `TacticalWorld` implementation | [#38](https://github.com/wnj00524/1Bal/issues/38) | [TASK-03-TACTICAL-WORLD.md](tasks/TASK-03-TACTICAL-WORLD.md) | Tasks 1, 2 | Medium |
+| 4 | Refactor `ITurnResolver` and `TurnResolver` | [#39](https://github.com/wnj00524/1Bal/issues/39) | [TASK-04-REFACTOR-TURN-RESOLVER.md](tasks/TASK-04-REFACTOR-TURN-RESOLVER.md) | Task 3 | Medium |
+| 5 | Update DI registration | [#40](https://github.com/wnj00524/1Bal/issues/40) | [TASK-05-UPDATE-DI.md](tasks/TASK-05-UPDATE-DI.md) | Task 4 | Small |
+| 6 | Create `WorldTests.cs` | [#41](https://github.com/wnj00524/1Bal/issues/41) | [TASK-06-WORLD-TESTS.md](tasks/TASK-06-WORLD-TESTS.md) | Tasks 1, 2, 3 | Medium |
+| 7 | Migrate all existing tests | [#42](https://github.com/wnj00524/1Bal/issues/42) | [TASK-07-MIGRATE-TESTS.md](tasks/TASK-07-MIGRATE-TESTS.md) | Tasks 4, 5 | Large (mechanical) |
 
 ## Acceptance Criteria
 
