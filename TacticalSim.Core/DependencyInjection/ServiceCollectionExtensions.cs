@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Cover;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Simulation;
 
@@ -40,6 +41,7 @@ namespace TacticalSim.Core.DependencyInjection
 
             services.AddSingleton<IMaterialRegistry, MaterialRegistry>();
             services.AddTransient<IMaterialPenetrationSystem, MaterialPenetrationSystem>();
+            services.AddTransient<ICoverTrajectorySolver, CoverTrajectorySolver>();
 
             return services;
         }

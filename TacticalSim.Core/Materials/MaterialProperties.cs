@@ -21,6 +21,18 @@ namespace TacticalSim.Core.Materials
         public float Density { get; set; }
 
         /// <summary>
+        /// Relative resistance to localized deformation. Values are expressed on a
+        /// dimensionless engineering scale so that material data can be calibrated
+        /// without coupling the registry to a particular hardness test.
+        /// </summary>
+        public float Hardness { get; set; }
+
+        /// <summary>
+        /// Compressive yield strength in megapascals (MPa).
+        /// </summary>
+        public float YieldStrength { get; set; }
+
+        /// <summary>
         /// Dimensionless medium resistance / drag coefficient multiplier.
         /// </summary>
         public float ResistanceCoefficient { get; set; }
@@ -49,6 +61,21 @@ namespace TacticalSim.Core.Materials
             ResistanceCoefficient = resistanceCoefficient;
             RicochetAngleThreshold = ricochetAngleThreshold;
             YieldEnergyThreshold = yieldEnergyThreshold;
+            Hardness = resistanceCoefficient;
+            // Preserve compatibility with the original energy-threshold profiles
+            // while exposing a positive strength value to geometry consumers.
+            YieldStrength = yieldEnergyThreshold;
+        }
+
+        public MaterialProperties(
+            string name,
+            MaterialType type,
+            float density,
+            float hardness,
+            float yieldStrength)
+            : this(name, type, density, hardness, MathF.PI / 2f, 0f)
+        {
+            YieldStrength = yieldStrength;
         }
     }
 }
