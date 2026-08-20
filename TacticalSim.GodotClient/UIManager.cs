@@ -21,6 +21,10 @@ namespace TacticalSim.GodotClient
         private Label _scenarioLabel = null!;
         private Label _timeLabel = null!;
         private Label _focusLabel = null!;
+        private Control _projectilePanel = null!;
+        private Label _projectileVelocityLabel = null!;
+        private Label _projectileEnergyLabel = null!;
+        private Label _projectileHeightLabel = null!;
         private RichTextLabel _reportText = null!;
         private PopupPanel _targetMenu = null!;
         private TargetSilhouetteMenu _targetSilhouette = null!;
@@ -55,6 +59,10 @@ namespace TacticalSim.GodotClient
             _scenarioLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/ScenarioLbl");
             _timeLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/TimeLbl");
             _focusLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/FocusLbl");
+            _projectilePanel = GetNode<Control>("Control/ProjectilePanel");
+            _projectileVelocityLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/VelocityLbl");
+            _projectileEnergyLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/EnergyLbl");
+            _projectileHeightLabel = GetNode<Label>("Control/ProjectilePanel/Margin/VBox/HeightLbl");
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
             _targetMenu = GetNode<PopupPanel>("Control/TargetContextMenu");
             _targetSilhouette = GetNode<TargetSilhouetteMenu>("Control/TargetContextMenu/Margin/VBox/Silhouette");
@@ -72,6 +80,7 @@ namespace TacticalSim.GodotClient
             _targetSilhouette.TargetSelected += OnContextTargetSelected;
 
             _scenarioControls.Hide();
+            _projectilePanel.Hide();
             _reportText.Text = "Choose a scene and loadout to begin.";
         }
 
@@ -84,6 +93,7 @@ namespace TacticalSim.GodotClient
                 } leftClick && _simulationManager.IsScenarioLoaded)
             {
                 _focusLabel.Text = _simulationManager.HandleLeftClick(leftClick.Position);
+                RefreshProjectileTelemetry();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -130,6 +140,7 @@ namespace TacticalSim.GodotClient
             _setupPanel.Show();
             _reportText.Text = "Choose a scene and loadout to begin.";
             _focusLabel.Text = "Focus: none";
+            _projectilePanel.Hide();
         }
 
         private void OnContextTargetSelected(string target)
@@ -159,6 +170,22 @@ namespace TacticalSim.GodotClient
             var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
             _reportText.Text = report.AssessmentText;
             System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
+            RefreshProjectileTelemetry();
+        }
+
+        private void RefreshProjectileTelemetry()
+        {
+            var telemetry = _simulationManager.SelectedProjectileTelemetry;
+            if (!telemetry.HasValue)
+            {
+                _projectilePanel.Hide();
+                return;
+            }
+
+            _projectileVelocityLabel.Text = $"Velocity: {telemetry.Value.Velocity:F1} m/s";
+            _projectileEnergyLabel.Text = $"Energy: {telemetry.Value.KineticEnergy:F1} J";
+            _projectileHeightLabel.Text = $"Height: {telemetry.Value.Height:F2} m";
+            _projectilePanel.Show();
         }
 
         private static AmmunitionProfile CreateWeapon(
