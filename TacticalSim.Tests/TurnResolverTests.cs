@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.World;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -13,7 +14,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void InitialState_HasZeroGlobalTime_AndNoActiveActions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             Assert.Equal(0.0f, resolver.GlobalTime);
             Assert.False(resolver.HasActiveActions);
@@ -30,7 +32,8 @@ namespace TacticalSim.Tests
         [InlineData(float.NegativeInfinity)]
         public void Tick_InvalidDeltaTime_ThrowsArgumentException(float invalidDt)
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             Assert.Throws<ArgumentException>(() => resolver.Tick(invalidDt));
         }
@@ -38,7 +41,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_AdvancesGlobalTime_AndFiresTimeAdvancedEvent()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var events = new List<TimeAdvancedEventArgs>();
             resolver.TimeAdvanced += (_, e) => events.Add(e);
 
@@ -60,7 +64,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void ScheduleAction_NullAction_ThrowsArgumentNullException()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             Assert.Throws<ArgumentNullException>(() => resolver.ScheduleAction(null!));
         }
@@ -68,7 +73,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void ScheduleAction_EmptyActorId_ThrowsArgumentException()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var action = new GenericTacticalAction(Guid.Empty, 1.0f);
 
             Assert.Throws<ArgumentException>(() => resolver.ScheduleAction(action));
@@ -81,7 +87,8 @@ namespace TacticalSim.Tests
         [InlineData(float.PositiveInfinity)]
         public void ScheduleAction_InvalidTUCost_ThrowsArgumentException(float invalidCost)
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var action = new GenericTacticalAction(Guid.NewGuid(), invalidCost);
 
             Assert.Throws<ArgumentException>(() => resolver.ScheduleAction(action));
@@ -90,7 +97,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void ScheduleAction_NonPendingState_ThrowsInvalidOperationException()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var action = new GenericTacticalAction(Guid.NewGuid(), 1.0f)
             {
                 State = TacticalActionState.Executing
@@ -102,7 +110,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void SingleActor_FullLifecycle_ExecutionAndEvents()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
             float executedDelta = 0.0f;
             int executeCount = 0;
@@ -175,7 +184,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void MultiActor_ConcurrentExecution_ResolvesIndependently()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor1 = Guid.NewGuid();
             var actor2 = Guid.NewGuid();
             var actor3 = Guid.NewGuid();
@@ -241,7 +251,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void SubTickCarryover_SingleTick_ExecutesMultipleQueuedActions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action1 = new GenericTacticalAction(actorId, 0.3f);
@@ -305,7 +316,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void SubTickCarryover_QueueExhaustion_IdleRemainder()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action1 = new GenericTacticalAction(actorId, 0.2f);
@@ -328,7 +340,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CancelAction_ActiveAction_TransitionsToCancelledAndPromotesNext()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             bool cancelHookCalled = false;
@@ -365,7 +378,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CancelAction_QueuedAction_RemovesFromQueueWithoutAffectingActive()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action1 = new GenericTacticalAction(actorId, 1.0f);
@@ -396,7 +410,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CancelAction_NonExistent_ReturnsFalse()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var action = new GenericTacticalAction(Guid.NewGuid(), 1.0f);
             resolver.ScheduleAction(action);
 
@@ -408,7 +423,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CancelActorActions_CancelsAllActiveAndQueuedActionsForActor()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor1 = Guid.NewGuid();
             var actor2 = Guid.NewGuid();
 
@@ -449,7 +465,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void FaultIsolation_ActionThrowsException_FailsGracefullyWithoutCrashingResolver()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var badActor = Guid.NewGuid();
             var goodActor = Guid.NewGuid();
 
@@ -500,7 +517,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Reset_ClearsAllStateAndTimeline()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor = Guid.NewGuid();
 
             resolver.ScheduleAction(new GenericTacticalAction(actor, 1.0f));
@@ -523,7 +541,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void MoveTacticalAction_InterpolatesPositionCorrectly()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
             var start = new Vector3(0, 0, 0);
             var target = new Vector3(10, 0, 0);
@@ -564,7 +583,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void AimTacticalAction_RampsAimBonusWithNormalizedProgress()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
             var targetId = Guid.NewGuid();
 
@@ -593,7 +613,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void WaitTacticalAction_IdlesUntilCostComplete()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
             var wait = new WaitTacticalAction(actorId, 1.5f);
 
@@ -612,7 +633,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Determinism_MultipleActorsProcessedInSortedActorIdOrder()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var id1 = Guid.Parse("00000000-0000-0000-0000-000000000001");
             var id2 = Guid.Parse("00000000-0000-0000-0000-000000000002");
             var id3 = Guid.Parse("00000000-0000-0000-0000-000000000003");
@@ -635,7 +657,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void PrecisionTolerance_FractionalStepsWithRepeatingDecimals_ResolvesAccurately()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             // Total TU cost = 1.0f, ticked in 10 steps of 0.1f (often causes floating-point drift in naive summation)
@@ -659,7 +682,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void MultiActor_InterleavedComplexQueues_AllActorsExecuteDeterministically()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var a1 = Guid.Parse("00000000-0000-0000-0000-000000000001");
             var a2 = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
@@ -719,7 +743,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CarryoverFaultIsolation_SecondQueuedActionThrows_FirstCompletedSecondFailed()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor = Guid.NewGuid();
             var ex = new InvalidOperationException("Queued action fault");
 
@@ -747,7 +772,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void CancelAction_InMiddleOfFiveQueuedActions_PreservesOrderOfRemaining()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor = Guid.NewGuid();
 
             var a1 = new GenericTacticalAction(actor, 1.0f);
@@ -777,7 +803,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void GetActiveActions_ReturnsDeterministicSortedList()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var a3 = Guid.Parse("00000000-0000-0000-0000-000000000003");
             var a1 = Guid.Parse("00000000-0000-0000-0000-000000000001");
             var a2 = Guid.Parse("00000000-0000-0000-0000-000000000002");
@@ -796,7 +823,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void ScheduleAction_AfterPriorActionsComplete_CorrectStartTimeAndTimeline()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actor = Guid.NewGuid();
 
             var act1 = new GenericTacticalAction(actor, 1.0f);

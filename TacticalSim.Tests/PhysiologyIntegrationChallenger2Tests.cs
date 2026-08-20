@@ -8,6 +8,7 @@ using TacticalSim.Core.Entities;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.World;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -47,7 +48,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Physiology_DeepHierarchicalBodyPartTree_AggregatesBleedRatesAndIschemiaAccurately()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var physiology = new TacticalActorPhysiology();
 
             // Build a 10-level nested hierarchy:
@@ -77,7 +79,7 @@ namespace TacticalSim.Tests
 
             physiology.SetRoot(root);
             var entity = new TacticalEntity(Vector3.Zero, physiology);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             // Total bleed: 3 (Thorax) + 6 (Abdomen) + 8 * 1.5 (Leg nodes) = 3 + 6 + 12 = 21 ml/s
             // Tick 10s: 21 * 10 = 210 ml lost -> TotalBloodVolume = 4790 ml
@@ -105,15 +107,17 @@ namespace TacticalSim.Tests
             float dt = totalDuration / stepCount; // 0.1s
 
             // Macro-step resolver
-            var macroResolver = new TurnResolver();
+            var macroWorld = new TacticalWorld(WorldBounds.CreateDefault());
+            var macroResolver = new TurnResolver(macroWorld);
             var (macroEntity, macroPhys, _) = CreateCustomEntity(arterialBleed: bleedRate);
-            macroResolver.RegisterEntity(macroEntity);
+            macroWorld.AddEntity(macroEntity);
             macroResolver.Tick(totalDuration);
 
             // Micro-step resolver
-            var microResolver = new TurnResolver();
+            var microWorld = new TacticalWorld(WorldBounds.CreateDefault());
+            var microResolver = new TurnResolver(microWorld);
             var (microEntity, microPhys, _) = CreateCustomEntity(arterialBleed: bleedRate);
-            microResolver.RegisterEntity(microEntity);
+            microWorld.AddEntity(microEntity);
 
             for (int i = 0; i < stepCount; i++)
             {
@@ -148,12 +152,13 @@ namespace TacticalSim.Tests
             float expectedMAP,
             float expectedConsciousness)
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             float bloodLossNeeded = 5000f * lostFraction;
             float bleedRate = bloodLossNeeded / 1.0f; // in 1 second
 
             var (entity, phys, _) = CreateCustomEntity(arterialBleed: bleedRate);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             resolver.Tick(1.0f);
 
@@ -166,10 +171,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void Physiology_MassiveBleed_UnderflowSafety_DoesNotThrow()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Massive catastrophic bleed rate: 1,000,000 ml/s
             var (entity, phys, _) = CreateCustomEntity(arterialBleed: 1_000_000f);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             resolver.Tick(1.0f);
 
@@ -188,8 +194,9 @@ namespace TacticalSim.Tests
         {
             var dummy = AnatomicalDummyBuilder.BuildDummy();
             var entity = new TacticalEntity(Vector3.Zero, dummy);
-            var resolver = new TurnResolver();
-            resolver.RegisterEntity(entity);
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
+            world.AddEntity(entity);
 
             // Heart position in dummy: center at (0.04, 0.28, 0.04)
             var heartHitPoint = new Vector3(0.04f, 0.28f, 0.04f);
@@ -221,9 +228,10 @@ namespace TacticalSim.Tests
                 dummy.ProcessImpact(Vector3.UnitZ, 5000f, hitPoint);
             }
 
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var entity = new TacticalEntity(Vector3.Zero, dummy);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             resolver.Tick(1.0f);
 
@@ -245,9 +253,10 @@ namespace TacticalSim.Tests
         [InlineData(10000.0f, true)]
         public void Tourniquet_Exact7200SecondsBoundary_NecrosisThresholdVerification(float elapsedSeconds, bool expectedNecrotic)
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, _, arm) = CreateCustomEntity(arterialBleed: 50f, bodyPartType: BodyPartType.RightArm, hasTourniquet: true);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             resolver.Tick(elapsedSeconds);
 
@@ -258,10 +267,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tourniquet_NonExtremityBodyPart_DoesNotHaltBleeding()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Tourniquet applied on Thorax (non-extremity)
             var (entity, phys, thorax) = CreateCustomEntity(arterialBleed: 30f, bodyPartType: BodyPartType.Thorax, hasTourniquet: true);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             // Active bleed rate should still be 30 ml/s because tourniquet on torso cannot occlude junctional hemorrhage
             Assert.Equal(30f, thorax.GetActiveBleedRate());
@@ -274,7 +284,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tourniquet_FourLimbsStaggeredTourniquets_IndividualNecrosisTransitions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var physiology = new TacticalActorPhysiology();
             var thorax = new BodyPart { Type = BodyPartType.Thorax };
             physiology.SetRoot(thorax);
@@ -290,7 +301,7 @@ namespace TacticalSim.Tests
             thorax.Children.Add(rightLeg);
 
             var entity = new TacticalEntity(Vector3.Zero, physiology);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             // T=0: Apply tourniquet to LeftArm
             leftArm.HasTourniquet = true;
@@ -361,10 +372,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void ActionCancellation_LethalTraumaMidExecution_CancelsActiveAndQueuedActionsImmediately()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Bleed rate: 3000 ml/s -> Drops from 5000ml to 2000ml in 1 second (60% lost, fatal)
             var (dyingEntity, phys, _) = CreateCustomEntity(arterialBleed: 3000f);
-            resolver.RegisterEntity(dyingEntity);
+            world.AddEntity(dyingEntity);
 
             var act1 = new GenericTacticalAction(dyingEntity.Id, 5.0f);
             var act2 = new GenericTacticalAction(dyingEntity.Id, 5.0f);
@@ -396,14 +408,15 @@ namespace TacticalSim.Tests
         [Fact]
         public void ActionCancellation_MultiActorCasualtyIsolation_FatalBleedDoesNotAffectHealthyActors()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             // 5 Healthy Actors
             var healthyActors = new List<(TacticalEntity entity, GenericTacticalAction action)>();
             for (int i = 0; i < 5; i++)
             {
                 var (ent, _, _) = CreateCustomEntity();
-                resolver.RegisterEntity(ent);
+                world.AddEntity(ent);
                 var act = new GenericTacticalAction(ent.Id, 3.0f);
                 resolver.ScheduleAction(act);
                 healthyActors.Add((ent, act));
@@ -417,9 +430,9 @@ namespace TacticalSim.Tests
             var (w2, phys2, _) = CreateCustomEntity(arterialBleed: 1500f);
             var (w3, phys3, _) = CreateCustomEntity(arterialBleed: 1000f);
 
-            resolver.RegisterEntity(w1);
-            resolver.RegisterEntity(w2);
-            resolver.RegisterEntity(w3);
+            world.AddEntity(w1);
+            world.AddEntity(w2);
+            world.AddEntity(w3);
 
             var actW1 = new GenericTacticalAction(w1.Id, 5.0f);
             var actW2 = new GenericTacticalAction(w2.Id, 5.0f);
@@ -465,10 +478,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void ActionCancellation_PreIncapacitatedEntity_ActionScheduled_CancelledOnFirstTick()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Pre-incapacitated entity (fatal bleed, blood volume already 0)
             var (deadEntity, phys, _) = CreateCustomEntity(arterialBleed: 5000f);
-            resolver.RegisterEntity(deadEntity);
+            world.AddEntity(deadEntity);
 
             // Tick once to drain to 0
             resolver.Tick(1.0f);
@@ -489,13 +503,14 @@ namespace TacticalSim.Tests
         [Fact]
         public void ActionCancellation_LethalTraumaAppliedInActionCallback_NextTickCancelsTargetActions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             var (shooter, _, _) = CreateCustomEntity();
             var (target, targetPhys, targetRoot) = CreateCustomEntity();
 
-            resolver.RegisterEntity(shooter);
-            resolver.RegisterEntity(target);
+            world.AddEntity(shooter);
+            world.AddEntity(target);
 
             // Target has a 10 TU action
             var targetAction = new GenericTacticalAction(target.Id, 10.0f);
@@ -523,9 +538,10 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tourniquet_DynamicLooseningAndReapplication_AccumulatesIschemiaCorrectly()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, phys, arm) = CreateCustomEntity(arterialBleed: 50f, bodyPartType: BodyPartType.LeftArm, hasTourniquet: true);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             // T=0 -> T=3000s with tourniquet on
             resolver.Tick(3000f);
@@ -558,12 +574,13 @@ namespace TacticalSim.Tests
         [Fact]
         public void EntityUnregistration_MidSimulationWhileBleeding_HaltsEntityTickingWithoutAffectingOthers()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (e1, phys1, _) = CreateCustomEntity(arterialBleed: 10f);
             var (e2, phys2, _) = CreateCustomEntity(arterialBleed: 20f);
 
-            resolver.RegisterEntity(e1);
-            resolver.RegisterEntity(e2);
+            world.AddEntity(e1);
+            world.AddEntity(e2);
 
             var act1 = new GenericTacticalAction(e1.Id, 10.0f);
             var act2 = new GenericTacticalAction(e2.Id, 10.0f);
@@ -576,7 +593,7 @@ namespace TacticalSim.Tests
             Assert.Equal(4960f, phys2.TotalBloodVolume, 2);
 
             // Unregister e1 mid-simulation
-            bool unregistered = resolver.UnregisterEntity(e1.Id);
+            bool unregistered = world.RemoveEntity(e1.Id);
             Assert.True(unregistered);
 
             // Tick 2.0s more
@@ -601,7 +618,8 @@ namespace TacticalSim.Tests
 
             for (int run = 0; run < iterationCount; run++)
             {
-                var resolver = new TurnResolver();
+                var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
                 int actorCount = rng.Next(3, 15);
                 var actors = new List<(TacticalEntity entity, TacticalActorPhysiology phys, BodyPart root)>();
 
@@ -614,7 +632,7 @@ namespace TacticalSim.Tests
                     bool hasTq = isLimb && (rng.NextDouble() > 0.6);
 
                     var (entity, phys, root) = CreateCustomEntity(artBleed, venBleed, partType, hasTq);
-                    resolver.RegisterEntity(entity);
+                    world.AddEntity(entity);
                     actors.Add((entity, phys, root));
 
                     // Schedule 1 to 5 random actions
