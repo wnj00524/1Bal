@@ -1,4 +1,5 @@
 using System.Numerics;
+using TacticalSim.Core;
 using TacticalSim.Core.Physiology;
 using Xunit;
 
@@ -56,6 +57,59 @@ public class MotorRespiratoryTraumaTests
         Assert.Equal(0f, physiology.TensionPneumothoraxLevel);
         physiology.TickPhysiology(1f);
         Assert.Equal(0f, physiology.TensionPneumothoraxLevel);
+    }
+
+    [Fact]
+    public void SeriousOpenChestWoundReportMakesFirstAidBenefitObvious()
+    {
+        var physiology = CreateSeriousChestWound();
+
+        string untreated = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
+        Assert.Contains("FATAL WITHIN 5 MINUTES WITHOUT FIRST AID", untreated);
+
+        physiology.ApplyChestSeal();
+        string sealed = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
+        Assert.Contains("DETERIORATION HALTED; NEEDLE DECOMPRESSION REQUIRED", sealed);
+
+        physiology.PerformNeedleDecompression();
+        string decompressed = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
+        Assert.Contains("STABILIZED BY FIRST AID", decompressed);
+    }
+
+    [Fact]
+    public void SeriousChestWoundIsFatalWithinFiveMinutesButFirstAidPreventsArrest()
+    {
+        var untreated = CreateSeriousChestWound();
+        var treated = CreateSeriousChestWound();
+        treated.ApplyChestSeal();
+        treated.PerformNeedleDecompression();
+
+        for (int elapsed = 0; elapsed < 300; elapsed += 5)
+        {
+            untreated.TickPhysiology(5f);
+            treated.TickPhysiology(5f);
+        }
+
+        Assert.Equal(0f, untreated.ConsciousnessLevel);
+        Assert.True(treated.ConsciousnessLevel > 0f);
+        Assert.True(treated.BloodOxygenation >= 0.9f);
+    }
+
+    private static TacticalActorPhysiology CreateSeriousChestWound()
+    {
+        var physiology = new TacticalActorPhysiology();
+        var thorax = new BodyPart { Type = BodyPartType.Thorax };
+        for (int index = 0; index < 10; index++)
+        {
+            var voxel = new PhysiologicalVoxel(
+                new Vector3(index * 0.01f, 0f, 0f), 0.01f, TissueRegistry.Lung, OrganType.Lung);
+            if (index < 2)
+                voxel.ApplyKineticEnergy(1_000f, voxel.Center, 0.000001f);
+            thorax.Voxels.Add(voxel);
+        }
+        physiology.SetRoot(thorax);
+        physiology.TickPhysiology(1f);
+        return physiology;
     }
 
     private static TacticalActorPhysiology CreateExtremityPhysiology(BodyPartType type)

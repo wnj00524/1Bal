@@ -18,6 +18,7 @@ namespace TacticalSim.GodotClient
     public partial class SimulationManager : Node
     {
         private const float WalkingSpeedMetersPerSecond = 1.4f;
+        private const float ChestWoundDestroyedLungFraction = 0.20f;
         private IServiceProvider _serviceProvider = null!;
         
         public TacticalEntity Shooter { get; private set; } = null!;
@@ -437,7 +438,9 @@ namespace TacticalSim.GodotClient
             {
                 List<PhysiologicalVoxel> lungVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart)
                     .FindAll(voxel => voxel.Organ == OrganType.Lung);
-                foreach (PhysiologicalVoxel lungVoxel in lungVoxels.Take(6))
+                int woundedVoxels = Math.Max(1,
+                    (int)MathF.Ceiling(lungVoxels.Count * ChestWoundDestroyedLungFraction));
+                foreach (PhysiologicalVoxel lungVoxel in lungVoxels.Take(woundedVoxels))
                 {
                     lungVoxel.ApplyKineticEnergy(1_000f, lungVoxel.Center, lungVoxel.Size * lungVoxel.Size * lungVoxel.Size);
                 }
