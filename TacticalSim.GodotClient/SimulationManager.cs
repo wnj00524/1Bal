@@ -33,6 +33,8 @@ namespace TacticalSim.GodotClient
         private Node3D _dummyVisual = null!;
         private TacticalEntity? _focusedAgent;
         private Godot.Vector3? _pendingMoveDestination;
+        private ProjectileState? _projectileState;
+        private bool _isProjectileSelected;
 
         public string? LoadedScenarioName { get; private set; }
         public float ElapsedScenarioTime { get; private set; }
@@ -43,6 +45,11 @@ namespace TacticalSim.GodotClient
         public TacticalEntity? FocusedAgent => _focusedAgent;
         public bool HasFocusedAgent => _focusedAgent != null;
         public bool HasPendingMove => _pendingMoveDestination.HasValue;
+        public bool IsProjectileSelected => _isProjectileSelected;
+        public ProjectileTelemetry? SelectedProjectileTelemetry =>
+            _isProjectileSelected && _projectileState.HasValue
+                ? ProjectileTelemetry.From(_projectileState.Value, ActiveAmmo.Ballistics)
+                : null;
 
         public override void _Ready()
         {
@@ -90,6 +97,8 @@ namespace TacticalSim.GodotClient
             HasBulletBeenFired = false;
             IsTargetedShotPending = false;
             LastProjectileTermination = ProjectileTerminationReason.None;
+            _projectileState = null;
+            _isProjectileSelected = false;
             ClearAgentFocus();
 
             PrepareScenario();
@@ -137,6 +146,8 @@ namespace TacticalSim.GodotClient
             HasBulletBeenFired = false;
             IsTargetedShotPending = false;
             LastProjectileTermination = ProjectileTerminationReason.None;
+            _projectileState = null;
+            _isProjectileSelected = false;
             ClearAgentFocus();
             SetScenarioVisibility(false);
         }
@@ -158,6 +169,13 @@ namespace TacticalSim.GodotClient
                 return "No agent or walkable position selected.";
 
             GodotObject? collider = colliderVariant.AsGodotObject();
+            if (HasBulletBeenFired && IsProjectileCollider(collider))
+            {
+                ClearAgentFocus();
+                _isProjectileSelected = true;
+                return "Projectile selected.";
+            }
+
             if (collider == _shooterVisual)
             {
                 FocusAgent(Shooter);
@@ -180,8 +198,15 @@ namespace TacticalSim.GodotClient
 
         private void FocusAgent(TacticalEntity agent)
         {
+            _isProjectileSelected = false;
             _focusedAgent = agent;
             _pendingMoveDestination = null;
+        }
+
+        private bool IsProjectileCollider(GodotObject? collider)
+        {
+            return collider is Node node
+                && (node == _bulletMesh || _bulletMesh.IsAncestorOf(node));
         }
 
         private void ClearAgentFocus()
@@ -454,7 +479,7 @@ namespace TacticalSim.GodotClient
                 }
             }
             
-            var endPos = impactState.Position;
+            _projectileState = impactState;
             _bulletMesh.Position = new Godot.Vector3(impactState.Position.X, impactState.Position.Y, impactState.Position.Z);
             
             // Look in the direction of velocity
