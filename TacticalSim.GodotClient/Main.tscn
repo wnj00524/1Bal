@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://SimulationManager.cs" id="1_sim"]
 [ext_resource type="Script" path="res://CameraOrbit.cs" id="2_camera"]
@@ -15,6 +15,9 @@ emission_energy_multiplier = 2.0
 material = SubResource("StandardMaterial3D_bullet")
 radius = 0.1
 height = 0.2
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_bullet"]
+radius = 0.18
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
 albedo_color = Color(0.12, 0.36, 0.12, 1)
@@ -36,6 +39,11 @@ DummyVisualPath = NodePath("../DummyCircle")
 [node name="BulletMesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -10)
 mesh = SubResource("SphereMesh_bullet")
+
+[node name="SelectionBody" type="StaticBody3D" parent="BulletMesh"]
+
+[node name="SelectionShape" type="CollisionShape3D" parent="BulletMesh/SelectionBody"]
+shape = SubResource("SphereShape3D_bullet")
 
 [node name="Scenario" type="Node3D" parent="."]
 
@@ -132,6 +140,46 @@ offset_bottom = 175.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
+
+[node name="ProjectilePanel" type="PanelContainer" parent="UIManager/Control"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -245.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 165.0
+grow_horizontal = 0
+mouse_filter = 1
+
+[node name="Margin" type="MarginContainer" parent="UIManager/Control/ProjectilePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="UIManager/Control/ProjectilePanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UIManager/Control/ProjectilePanel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Projectile"
+
+[node name="VelocityLbl" type="Label" parent="UIManager/Control/ProjectilePanel/Margin/VBox"]
+layout_mode = 2
+text = "Velocity: 0.0 m/s"
+
+[node name="EnergyLbl" type="Label" parent="UIManager/Control/ProjectilePanel/Margin/VBox"]
+layout_mode = 2
+text = "Energy: 0.0 J"
+
+[node name="HeightLbl" type="Label" parent="UIManager/Control/ProjectilePanel/Margin/VBox"]
+layout_mode = 2
+text = "Height: 0.00 m"
 
 [node name="Margin" type="MarginContainer" parent="UIManager/Control/SetupPanel"]
 layout_mode = 2
