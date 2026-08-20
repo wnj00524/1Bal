@@ -420,7 +420,19 @@ namespace TacticalSim.GodotClient
                 }
 
                 // Advance flight path
+                System.Numerics.Vector3 stepStartPosition = impactState.Position;
                 impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
+
+                // The building is a scene-level obstacle, so detect its actual
+                // collision point rather than using a fixed world-space stopping plane.
+                if (TryGetBuildingWallImpact(stepStartPosition, impactState.Position, out var wallContact))
+                {
+                    firstMaterialContact = wallContact;
+                    lastMaterialContact = wallContact;
+                    impactState.Position = wallContact;
+                    impactState.Velocity = System.Numerics.Vector3.Zero;
+                    break;
+                }
                 
                 LastProjectileTermination = ProjectileFlightTermination.Evaluate(
                     impactState, ammo.Ballistics, worldBounds);
@@ -471,24 +483,6 @@ namespace TacticalSim.GodotClient
                     }
                 }
                 
-                // Backstop material interaction
-                if (impactState.Position.Z >= 1.5f)
-                {
-                    // Keep the terminal state on the stopping plane. The physics step
-                    // can advance past it before the next termination check runs.
-                    var backstopContact = new System.Numerics.Vector3(
-                        impactState.Position.X,
-                        impactState.Position.Y,
-                        1.5f);
-                    if (!firstMaterialContact.HasValue)
-                    {
-                        firstMaterialContact = backstopContact;
-                        lastMaterialContact = backstopContact;
-                    }
-
-                    impactState.Position = backstopContact;
-                    impactState.Velocity = System.Numerics.Vector3.Zero;
-                }
             }
 
             int destroyedCount = 0;
@@ -586,6 +580,51 @@ namespace TacticalSim.GodotClient
                 foreach (Node child in _penetrationVisualization.GetChildren())
                     child.QueueFree();
             }
+        }
+
+        private bool TryGetBuildingWallImpact(
+            System.Numerics.Vector3 start,
+            System.Numerics.Vector3 end,
+            out System.Numerics.Vector3 contactPoint)
+        {
+            contactPoint = default;
+
+            Godot.Vector3 rayStart = ToGodot(start);
+            Godot.Vector3 rayEnd = ToGodot(end);
+            if (rayStart.DistanceSquaredTo(rayEnd) <= 0.000001f)
+                return false;
+
+            var query = PhysicsRayQueryParameters3D.Create(rayStart, rayEnd);
+            Godot.Collections.Dictionary hit = _scenarioRoot.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (!hit.TryGetValue("collider", out Variant colliderVariant)
+                || !IsBuildingWallCollider(colliderVariant.AsGodotObject())
+                || !hit.TryGetValue("position", out Variant positionVariant))
+            {
+                return false;
+            }
+
+            Godot.Vector3 godotContact = positionVariant.AsVector3();
+            contactPoint = new System.Numerics.Vector3(
+                godotContact.X,
+                godotContact.Y,
+                godotContact.Z);
+            return true;
+        }
+
+        private bool IsBuildingWallCollider(GodotObject? collider)
+        {
+            if (collider is not Node node)
+                return false;
+
+            for (Node? current = node; current != null; current = current.GetParent())
+            {
+                if (current == _scenarioRoot)
+                    return false;
+                if (current.Name == "BrickBuilding")
+                    return true;
+            }
+
+            return false;
         }
 
         private void UpdatePenetrationVisualization(
