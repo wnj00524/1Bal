@@ -62,7 +62,10 @@ namespace TacticalSim.Core.Physiology
                     float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
                     float rate = voxel.Organ switch
                     {
-                        OrganType.Heart => 0.5f,
+                        // Cardiac muscle is continuously perfused under arterial
+                        // pressure; a destroyed cubic centimeter represents a
+                        // catastrophic rather than a generic soft-tissue bleed.
+                        OrganType.Heart => 6.0f,
                         OrganType.Liver => 0.02f,
                         OrganType.Spleen => 0.03f, 
                         OrganType.Kidney => 0.03f, 
