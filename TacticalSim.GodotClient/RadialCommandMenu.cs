@@ -6,10 +6,25 @@ namespace TacticalSim.GodotClient;
 /// <summary>A compact contextual wheel which requires an explicit command selection.</summary>
 public partial class RadialCommandMenu : Control
 {
+    public enum Command
+    {
+        Move,
+        Shoot
+    }
+
     private const float OuterRadius = 76f;
     private const float InnerRadius = 22f;
 
     public event Action? MoveSelected;
+    public event Action? ShootSelected;
+
+    public Command ActiveCommand { get; private set; } = Command.Move;
+
+    public void ShowCommand(Command command)
+    {
+        ActiveCommand = command;
+        QueueRedraw();
+    }
 
     public override void _Ready()
     {
@@ -26,7 +41,7 @@ public partial class RadialCommandMenu : Control
         DrawCircle(center, InnerRadius, new Color("17202d"));
 
         Font font = ThemeDB.FallbackFont;
-        const string label = "MOVE";
+        string label = ActiveCommand == Command.Shoot ? "SHOOT" : "MOVE";
         Vector2 textSize = font.GetStringSize(label, HorizontalAlignment.Left, -1, 18);
         DrawString(font, center - textSize / 2f + new Vector2(0, textSize.Y), label,
             HorizontalAlignment.Left, -1, 18, Colors.White);
@@ -45,7 +60,10 @@ public partial class RadialCommandMenu : Control
         if (distance > OuterRadius)
             return;
 
-        MoveSelected?.Invoke();
+        if (ActiveCommand == Command.Shoot)
+            ShootSelected?.Invoke();
+        else
+            MoveSelected?.Invoke();
         AcceptEvent();
     }
 }

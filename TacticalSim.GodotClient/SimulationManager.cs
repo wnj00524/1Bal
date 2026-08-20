@@ -130,8 +130,8 @@ namespace TacticalSim.GodotClient
         {
             if (!IsScenarioLoaded)
                 throw new InvalidOperationException("Load a scenario before selecting a shot target.");
-            if (_focusedAgent == null)
-                throw new InvalidOperationException("Select an agent before assigning a shot target.");
+            if (!ReferenceEquals(_focusedAgent, Shooter))
+                throw new InvalidOperationException("Select the shooter before assigning a shot target.");
             if (string.IsNullOrWhiteSpace(target))
                 throw new ArgumentException("A target region is required.", nameof(target));
 
@@ -179,7 +179,7 @@ namespace TacticalSim.GodotClient
             if (collider == _shooterVisual)
             {
                 FocusAgent(Shooter);
-                return "Shooter focused. Right click the ground for commands.";
+                return "Shooter focused. Right click the ground or a valid target for commands.";
             }
 
             if (collider == _dummyVisual)
@@ -268,9 +268,9 @@ namespace TacticalSim.GodotClient
                 _pendingMoveDestination = null;
         }
 
-        public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
+        public bool IsValidShotTargetAtScreenPosition(Godot.Vector2 screenPosition)
         {
-            if (!IsScenarioLoaded)
+            if (!IsScenarioLoaded || !ReferenceEquals(_focusedAgent, Shooter))
                 return false;
 
             Camera3D? camera = GetViewport().GetCamera3D();

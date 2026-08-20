@@ -31,6 +31,7 @@ namespace TacticalSim.GodotClient
         private PopupPanel _commandMenu = null!;
         private RadialCommandMenu _radialCommands = null!;
         private Vector3 _commandDestination;
+        private Vector2 _commandScreenPosition;
 
         private readonly string[] _sceneProfiles = { "Training Dummy Outside" };
 
@@ -84,6 +85,7 @@ namespace TacticalSim.GodotClient
             GetNode<Button>("Control/ScenarioPanel/Margin/HBox/ChangeBtn").Pressed += OnChangeScenarioPressed;
             _targetSilhouette.TargetSelected += OnContextTargetSelected;
             _radialCommands.MoveSelected += OnMoveSelected;
+            _radialCommands.ShootSelected += OnShootSelected;
 
             _scenarioControls.Hide();
             _projectilePanel.Hide();
@@ -111,22 +113,19 @@ namespace TacticalSim.GodotClient
                 } click || !_simulationManager.IsScenarioLoaded)
                 return;
 
-            if (_simulationManager.IsDummyAtScreenPosition(click.Position))
+            _targetMenu.Hide();
+            _commandScreenPosition = click.Position;
+
+            if (_simulationManager.IsValidShotTargetAtScreenPosition(click.Position))
             {
-                _commandMenu.Hide();
-                _targetMenu.Position = new Vector2I((int)click.Position.X + 12, (int)click.Position.Y + 12);
-                _targetMenu.Popup();
+                ShowCommandMenu(click.Position, RadialCommandMenu.Command.Shoot);
                 GetViewport().SetInputAsHandled();
                 return;
             }
 
             if (_simulationManager.TryGetMoveDestination(click.Position, out _commandDestination))
             {
-                _targetMenu.Hide();
-                _commandMenu.Position = new Vector2I(
-                    (int)click.Position.X - 76,
-                    (int)click.Position.Y - 76);
-                _commandMenu.Popup();
+                ShowCommandMenu(click.Position, RadialCommandMenu.Command.Move);
                 GetViewport().SetInputAsHandled();
             }
         }
@@ -169,11 +168,29 @@ namespace TacticalSim.GodotClient
             _commandMenu.Hide();
         }
 
+        private void OnShootSelected()
+        {
+            _commandMenu.Hide();
+            _targetMenu.Position = new Vector2I(
+                (int)_commandScreenPosition.X + 12,
+                (int)_commandScreenPosition.Y + 12);
+            _targetMenu.Popup();
+        }
+
+        private void ShowCommandMenu(Vector2 screenPosition, RadialCommandMenu.Command command)
+        {
+            _radialCommands.ShowCommand(command);
+            _commandMenu.Position = new Vector2I(
+                (int)screenPosition.X - 76,
+                (int)screenPosition.Y - 76);
+            _commandMenu.Popup();
+        }
+
         private void OnContextTargetSelected(string target)
         {
-            if (!_simulationManager.HasFocusedAgent)
+            if (!ReferenceEquals(_simulationManager.FocusedAgent, _simulationManager.Shooter))
             {
-                _focusLabel.Text = "Select an agent before assigning a shot target.";
+                _focusLabel.Text = "Select the shooter before assigning a shot target.";
                 _targetMenu.Hide();
                 return;
             }
