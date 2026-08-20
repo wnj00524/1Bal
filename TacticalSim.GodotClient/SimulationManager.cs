@@ -102,6 +102,24 @@ namespace TacticalSim.GodotClient
             SetScenarioVisibility(false);
         }
 
+        public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
+        {
+            if (!IsScenarioLoaded)
+                return false;
+
+            Camera3D? camera = GetViewport().GetCamera3D();
+            if (camera == null)
+                return false;
+
+            Godot.Vector3 rayOrigin = camera.ProjectRayOrigin(screenPosition);
+            Godot.Vector3 rayEnd = rayOrigin + camera.ProjectRayNormal(screenPosition) * 1000f;
+            var query = PhysicsRayQueryParameters3D.Create(rayOrigin, rayEnd);
+            Godot.Collections.Dictionary hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(query);
+
+            return hit.TryGetValue("collider", out Variant collider)
+                && collider.AsGodotObject() == _dummyVisual;
+        }
+
         private void SetScenarioVisibility(bool visible)
         {
             _scenarioRoot.Visible = visible;

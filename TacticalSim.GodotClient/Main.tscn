@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://SimulationManager.cs" id="1_sim"]
 [ext_resource type="Script" path="res://CameraOrbit.cs" id="2_camera"]
 [ext_resource type="Script" path="res://UIManager.cs" id="3_ui"]
+[ext_resource type="Script" path="res://TargetSilhouetteMenu.cs" id="4_target_menu"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bullet"]
 albedo_color = Color(1, 0.8, 0, 1)
@@ -214,6 +215,37 @@ text = "Advance +5 Seconds"
 layout_mode = 2
 text = "Change Scenario"
 
+[node name="TargetContextMenu" type="PopupPanel" parent="UIManager/Control"]
+size = Vector2i(252, 430)
+
+[node name="Margin" type="MarginContainer" parent="UIManager/Control/TargetContextMenu"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="UIManager/Control/TargetContextMenu/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UIManager/Control/TargetContextMenu/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Select target area"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="UIManager/Control/TargetContextMenu/Margin/VBox"]
+layout_mode = 2
+text = "Click a region on the silhouette"
+horizontal_alignment = 1
+
+[node name="Silhouette" type="Control" parent="UIManager/Control/TargetContextMenu/Margin/VBox"]
+custom_minimum_size = Vector2(220, 360)
+layout_mode = 2
+mouse_filter = 0
+script = ExtResource("4_target_menu")
+
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 5, 0)
 shadow_enabled = true
@@ -236,3 +268,4 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 radius = 0.3
 height = 1.8
 sides = 32
+use_collision = true
