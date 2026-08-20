@@ -45,6 +45,8 @@ namespace TacticalSim.GodotClient
 
         private readonly List<AmmunitionProfile> _weaponProfiles = new()
         {
+            AmmunitionCatalog.TwentyTwoLongRifle,
+            AmmunitionCatalog.ThreeEightyAcp,
             CreateWeapon("5.56x45mm NATO", 900f, 0.004f, 0.000024f, 0.3f),
             CreateWeapon("9x19mm Parabellum", 380f, 0.008f, 0.0000636f, 0.15f),
             CreateWeapon(".308 Winchester", 800f, 0.0097f, 0.000048f, 0.4f),
@@ -216,6 +218,11 @@ namespace TacticalSim.GodotClient
         {
             SimulationManager.MedicalAction.ApplyChestSeal => "Apply chest seal",
             SimulationManager.MedicalAction.NeedleDecompression => "Needle decompression",
+            SimulationManager.MedicalAction.ApplyLeftArmTourniquet => "Tourniquet: left arm",
+            SimulationManager.MedicalAction.ApplyRightArmTourniquet => "Tourniquet: right arm",
+            SimulationManager.MedicalAction.ApplyLeftLegTourniquet => "Tourniquet: left leg",
+            SimulationManager.MedicalAction.ApplyRightLegTourniquet => "Tourniquet: right leg",
+            SimulationManager.MedicalAction.PackAbdominalWound => "Pack abdominal-wall wound",
             _ => action.ToString()
         };
 
