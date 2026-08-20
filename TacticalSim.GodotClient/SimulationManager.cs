@@ -20,17 +20,28 @@ namespace TacticalSim.GodotClient
         public TacticalEntity Dummy { get; private set; } = null!;
 
         [Export] public NodePath BulletPath { get; set; } = null!;
+        [Export] public NodePath ScenarioRootPath { get; set; } = null!;
+        [Export] public NodePath ShooterVisualPath { get; set; } = null!;
+        [Export] public NodePath DummyVisualPath { get; set; } = null!;
         
         private MeshInstance3D _bulletMesh = null!;
+        private Node3D _scenarioRoot = null!;
+        private Node3D _shooterVisual = null!;
+        private Node3D _dummyVisual = null!;
+
+        public string? LoadedScenarioName { get; private set; }
+        public float ElapsedScenarioTime { get; private set; }
+        public bool IsScenarioLoaded => LoadedScenarioName != null;
 
         public override void _Ready()
         {
             _bulletMesh = GetNode<MeshInstance3D>(BulletPath);
+            _scenarioRoot = GetNode<Node3D>(ScenarioRootPath);
+            _shooterVisual = GetNode<Node3D>(ShooterVisualPath);
+            _dummyVisual = GetNode<Node3D>(DummyVisualPath);
 
             InitializeDependencyInjection();
-            
-            // Initial scrub sets everything to t=0
-            ScrubToTime(0.0f);
+            SetScenarioVisibility(false);
         }
 
         private void InitializeDependencyInjection()
@@ -56,7 +67,49 @@ namespace TacticalSim.GodotClient
         
         public float TargetDistance { get; private set; } = 10f;
 
-        public void ScrubToTime(float flightTime)
+        public void LoadScenario(string sceneName, AmmunitionProfile weapon, string target)
+        {
+            if (sceneName != "Training Dummy Outside")
+                throw new ArgumentException($"Unknown scenario: {sceneName}", nameof(sceneName));
+
+            ActiveAmmo = weapon ?? throw new ArgumentNullException(nameof(weapon));
+            ActiveTarget = target;
+            LoadedScenarioName = sceneName;
+            ElapsedScenarioTime = 0f;
+
+            float distance = ActiveAmmo.Name.Contains("Knife") ? 1f : 10f;
+            float impactTime = (distance / ActiveAmmo.MuzzleVelocity) + 0.005f;
+            ScrubToTime(impactTime);
+            SetScenarioVisibility(true);
+        }
+
+        public void AdvanceScenario(float seconds = 5f)
+        {
+            if (!IsScenarioLoaded)
+                throw new InvalidOperationException("Load a scenario before advancing it.");
+            if (seconds != 5f)
+                throw new ArgumentOutOfRangeException(nameof(seconds), "Scenarios advance in five-second increments.");
+
+            Dummy.Physiology.TickPhysiology(seconds);
+            ElapsedScenarioTime += seconds;
+        }
+
+        public void UnloadScenario()
+        {
+            LoadedScenarioName = null;
+            ElapsedScenarioTime = 0f;
+            SetScenarioVisibility(false);
+        }
+
+        private void SetScenarioVisibility(bool visible)
+        {
+            _scenarioRoot.Visible = visible;
+            _shooterVisual.Visible = visible;
+            _dummyVisual.Visible = visible;
+            _bulletMesh.Visible = visible;
+        }
+
+        private void ScrubToTime(float flightTime)
         {
             var ammo = ActiveAmmo;
             

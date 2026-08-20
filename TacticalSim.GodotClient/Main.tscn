@@ -28,6 +28,9 @@ roughness = 0.95
 [node name="SimulationManager" type="Node" parent="."]
 script = ExtResource("1_sim")
 BulletPath = NodePath("../BulletMesh")
+ScenarioRootPath = NodePath("../Scenario")
+ShooterVisualPath = NodePath("../ShooterCircle")
+DummyVisualPath = NodePath("../DummyCircle")
 
 [node name="BulletMesh" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -10)
@@ -112,9 +115,66 @@ mouse_filter = 1
 [node name="ReportText" type="RichTextLabel" parent="UIManager/Control/ReportPanel/Margin"]
 layout_mode = 2
 mouse_filter = 1
-text = "Waiting for impact..."
+text = "Choose a scene and loadout to begin."
 
-[node name="Panel" type="PanelContainer" parent="UIManager/Control"]
+[node name="SetupPanel" type="PanelContainer" parent="UIManager/Control"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -175.0
+offset_right = 220.0
+offset_bottom = 175.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="Margin" type="MarginContainer" parent="UIManager/Control/SetupPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 25
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 25
+
+[node name="VBox" type="VBoxContainer" parent="UIManager/Control/SetupPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Scenario Setup"
+horizontal_alignment = 1
+
+[node name="SceneLabel" type="Label" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+text = "Scene"
+
+[node name="SceneSelect" type="OptionButton" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="WeaponLabel" type="Label" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+text = "Weapon"
+
+[node name="WeaponSelect" type="OptionButton" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="TargetLabel" type="Label" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+text = "Target area"
+
+[node name="TargetSelect" type="OptionButton" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="LoadBtn" type="Button" parent="UIManager/Control/SetupPanel/Margin/VBox"]
+layout_mode = 2
+text = "Load Scenario"
+
+[node name="ScenarioPanel" type="PanelContainer" parent="UIManager/Control"]
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
@@ -125,7 +185,7 @@ grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 1
 
-[node name="Margin" type="MarginContainer" parent="UIManager/Control/Panel"]
+[node name="Margin" type="MarginContainer" parent="UIManager/Control/ScenarioPanel"]
 layout_mode = 2
 mouse_filter = 1
 theme_override_constants/margin_left = 20
@@ -133,44 +193,26 @@ theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 10
 
-[node name="VBox" type="VBoxContainer" parent="UIManager/Control/Panel/Margin"]
+[node name="HBox" type="HBoxContainer" parent="UIManager/Control/ScenarioPanel/Margin"]
 layout_mode = 2
-mouse_filter = 1
+theme_override_constants/separation = 16
 
-[node name="Label" type="Label" parent="UIManager/Control/Panel/Margin/VBox"]
-layout_mode = 2
-text = "TacticalSim - Bullet Time Scrubber"
-
-[node name="HBox" type="HBoxContainer" parent="UIManager/Control/Panel/Margin/VBox"]
-layout_mode = 2
-
-[node name="AmmoSelect" type="OptionButton" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
-layout_mode = 2
-
-[node name="TargetSelect" type="OptionButton" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
-layout_mode = 2
-
-[node name="PlayBtn" type="Button" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
-layout_mode = 2
-text = "Play"
-
-[node name="Slider" type="HSlider" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+[node name="ScenarioLbl" type="Label" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
 size_flags_horizontal = 3
-max_value = 0.01
-step = 1e-05
+text = "Scenario"
 
-[node name="TimeLbl" type="Label" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+[node name="TimeLbl" type="Label" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
-text = "0.0000 / 0.0100 s"
+text = "Elapsed: 0s"
 
-[node name="VSeparator" type="VSeparator" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+[node name="AdvanceBtn" type="Button" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
-theme_override_constants/separation = 20
+text = "Advance +5 Seconds"
 
-[node name="MedTickBtn" type="Button" parent="UIManager/Control/Panel/Margin/VBox/HBox"]
+[node name="ChangeBtn" type="Button" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
-text = "+10s Medical Time"
+text = "Change Scenario"
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.25, 0.433013, 0, 0.866025, 0.5, -0.5, -0.433013, 0.75, 0, 5, 0)

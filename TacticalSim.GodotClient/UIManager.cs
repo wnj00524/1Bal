@@ -1,247 +1,122 @@
 using Godot;
-using System;
+using System.Collections.Generic;
+using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Entities;
 
 namespace TacticalSim.GodotClient
 {
     public partial class UIManager : CanvasLayer
     {
+        private const float AdvanceSeconds = 5f;
+
         [Export]
         public NodePath SimulationManagerPath { get; set; } = null!;
-        
+
         private SimulationManager _simulationManager = null!;
-        private HSlider _timelineSlider = null!;
+        private Control _setupPanel = null!;
+        private Control _scenarioControls = null!;
+        private OptionButton _sceneSelect = null!;
+        private OptionButton _weaponSelect = null!;
+        private OptionButton _targetSelect = null!;
+        private Label _scenarioLabel = null!;
         private Label _timeLabel = null!;
-        private Button _playPauseButton = null!;
-        
-        private bool _isPlaying = false;
-        private float _currentPlaybackTime = 0f;
-        private float _maxPlaybackTime = 0.010f; // 10ms to see cavitation collapse
-
-        private Button _medTickButton = null!;
         private RichTextLabel _reportText = null!;
-        private bool _hasExportedReport = false;
 
-        private OptionButton _ammoSelectButton = null!;
-        private OptionButton _targetSelectButton = null!;
-        
-        private readonly string[] _targetProfiles = new[]
+        private readonly string[] _sceneProfiles = { "Training Dummy Outside" };
+
+        private readonly string[] _targetProfiles =
         {
-            "Chest",
-            "Head",
-            "Neck",
-            "Abdomen",
-            "Left Arm",
-            "Right Arm",
-            "Left Leg",
-            "Right Leg"
+            "Chest", "Head", "Neck", "Abdomen",
+            "Left Arm", "Right Arm", "Left Leg", "Right Leg"
         };
-        
-        private readonly System.Collections.Generic.List<TacticalSim.Core.Entities.AmmunitionProfile> _ammoProfiles = new()
+
+        private readonly List<AmmunitionProfile> _weaponProfiles = new()
         {
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "5.56x45mm NATO",
-                MuzzleVelocity = 900f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.004f, CrossSectionalArea = 0.000024f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.3f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "9x19mm Parabellum",
-                MuzzleVelocity = 380f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.15f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = ".308 Winchester",
-                MuzzleVelocity = 800f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.0097f, CrossSectionalArea = 0.000048f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.4f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "12 Gauge Slug",
-                MuzzleVelocity = 480f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.0283f, CrossSectionalArea = 0.00025f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.5f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "Combat Knife (Abdomen)",
-                MuzzleVelocity = 15f, // Fast stab
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(10.0f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "Combat Knife (Neck)",
-                MuzzleVelocity = 15f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.4f, CrossSectionalArea = 0.00015f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(10.0f) }
-            },
-            new TacticalSim.Core.Entities.AmmunitionProfile
-            {
-                Name = "9x19mm (Head)",
-                MuzzleVelocity = 380f,
-                Ballistics = new TacticalSim.Core.Ballistics.BallisticProfile { Mass = 0.008f, CrossSectionalArea = 0.0000636f, DragModel = new TacticalSim.Core.Ballistics.StandardDragCurve(0.15f) }
-            }
+            CreateWeapon("5.56x45mm NATO", 900f, 0.004f, 0.000024f, 0.3f),
+            CreateWeapon("9x19mm Parabellum", 380f, 0.008f, 0.0000636f, 0.15f),
+            CreateWeapon(".308 Winchester", 800f, 0.0097f, 0.000048f, 0.4f),
+            CreateWeapon("12 Gauge Slug", 480f, 0.0283f, 0.00025f, 0.5f),
+            CreateWeapon("Combat Knife (Abdomen)", 15f, 0.4f, 0.00015f, 10f),
+            CreateWeapon("Combat Knife (Neck)", 15f, 0.4f, 0.00015f, 10f),
+            CreateWeapon("9x19mm (Head)", 380f, 0.008f, 0.0000636f, 0.15f)
         };
 
         public override void _Ready()
         {
             _simulationManager = GetNode<SimulationManager>(SimulationManagerPath);
-            
-            _ammoSelectButton = GetNode<OptionButton>("Control/Panel/Margin/VBox/HBox/AmmoSelect");
-            foreach (var ammo in _ammoProfiles)
+            _setupPanel = GetNode<Control>("Control/SetupPanel");
+            _scenarioControls = GetNode<Control>("Control/ScenarioPanel");
+            _sceneSelect = GetNode<OptionButton>("Control/SetupPanel/Margin/VBox/SceneSelect");
+            _weaponSelect = GetNode<OptionButton>("Control/SetupPanel/Margin/VBox/WeaponSelect");
+            _targetSelect = GetNode<OptionButton>("Control/SetupPanel/Margin/VBox/TargetSelect");
+            _scenarioLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/ScenarioLbl");
+            _timeLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/TimeLbl");
+            _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+
+            foreach (string scene in _sceneProfiles)
+                _sceneSelect.AddItem(scene);
+            foreach (AmmunitionProfile weapon in _weaponProfiles)
+                _weaponSelect.AddItem(weapon.Name);
+            foreach (string target in _targetProfiles)
+                _targetSelect.AddItem(target);
+
+            GetNode<Button>("Control/SetupPanel/Margin/VBox/LoadBtn").Pressed += OnLoadScenarioPressed;
+            GetNode<Button>("Control/ScenarioPanel/Margin/HBox/AdvanceBtn").Pressed += OnAdvancePressed;
+            GetNode<Button>("Control/ScenarioPanel/Margin/HBox/ChangeBtn").Pressed += OnChangeScenarioPressed;
+
+            _scenarioControls.Hide();
+            _reportText.Text = "Choose a scene and loadout to begin.";
+        }
+
+        private void OnLoadScenarioPressed()
+        {
+            string sceneName = _sceneProfiles[_sceneSelect.Selected];
+            AmmunitionProfile weapon = _weaponProfiles[_weaponSelect.Selected];
+            string target = _targetProfiles[_targetSelect.Selected];
+
+            _simulationManager.LoadScenario(sceneName, weapon, target);
+            _scenarioLabel.Text = $"{sceneName}  |  {weapon.Name}  |  {target}";
+            _setupPanel.Hide();
+            _scenarioControls.Show();
+            RefreshScenarioStatus();
+        }
+
+        private void OnAdvancePressed()
+        {
+            _simulationManager.AdvanceScenario(AdvanceSeconds);
+            RefreshScenarioStatus();
+        }
+
+        private void OnChangeScenarioPressed()
+        {
+            _simulationManager.UnloadScenario();
+            _scenarioControls.Hide();
+            _setupPanel.Show();
+            _reportText.Text = "Choose a scene and loadout to begin.";
+        }
+
+        private void RefreshScenarioStatus()
+        {
+            _timeLabel.Text = $"Elapsed: {_simulationManager.ElapsedScenarioTime:F0}s";
+            var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
+            _reportText.Text = report.AssessmentText;
+            System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
+        }
+
+        private static AmmunitionProfile CreateWeapon(
+            string name, float muzzleVelocity, float mass, float area, float dragCoefficient)
+        {
+            return new AmmunitionProfile
             {
-                _ammoSelectButton.AddItem(ammo.Name);
-            }
-            _ammoSelectButton.ItemSelected += OnAmmoSelected;
-            
-            _targetSelectButton = GetNode<OptionButton>("Control/Panel/Margin/VBox/HBox/TargetSelect");
-            foreach (var target in _targetProfiles)
-            {
-                _targetSelectButton.AddItem(target);
-            }
-            _targetSelectButton.ItemSelected += OnTargetSelected;
-            
-            _playPauseButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/PlayBtn");
-            _playPauseButton.Pressed += OnPlayPausePressed;
-            
-            _timelineSlider = GetNode<HSlider>("Control/Panel/Margin/VBox/HBox/Slider");
-            _timelineSlider.ValueChanged += OnSliderValueChanged;
-            
-            _timeLabel = GetNode<Label>("Control/Panel/Margin/VBox/HBox/TimeLbl");
-            
-            _medTickButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/MedTickBtn");
-            _medTickButton.Pressed += OnMedTickPressed;
-            
-            var hbox = GetNode<Godot.BoxContainer>("Control/Panel/Margin/VBox/HBox");
-            var analgesicBtn = new Godot.Button { Text = "Give Analgesic" };
-            hbox.AddChild(analgesicBtn);
-            analgesicBtn.Pressed += () => {
-                if (_simulationManager.Dummy != null)
+                Name = name,
+                MuzzleVelocity = muzzleVelocity,
+                Ballistics = new BallisticProfile
                 {
-                    _simulationManager.Dummy.Physiology.AdministerAnalgesic(0.5f);
-                    var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
-                    _reportText.Text = report.AssessmentText;
+                    Mass = mass,
+                    CrossSectionalArea = area,
+                    DragModel = new StandardDragCurve(dragCoefficient)
                 }
             };
-            
-            _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
-            
-            // Initialize with default ammo and target to set bounds correctly
-            OnTargetSelected(0);
-            OnAmmoSelected(0);
-        }
-
-        private void OnTargetSelected(long index)
-        {
-            _simulationManager.ActiveTarget = _targetProfiles[(int)index];
-            _currentPlaybackTime = 0f;
-            _timelineSlider.Value = 0f;
-            UpdateScrubber(0f);
-        }
-
-        private void OnAmmoSelected(long index)
-        {
-            _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
-            
-            // Calculate time to travel to the target + a little extra for pass-through/cavitation
-            float dist = _simulationManager.ActiveAmmo.Name.Contains("Knife") ? 1.0f : 10.0f;
-            _maxPlaybackTime = (dist / _simulationManager.ActiveAmmo.MuzzleVelocity) + 0.005f;
-
-            _timelineSlider.MaxValue = _maxPlaybackTime;
-            
-            // Re-simulate from beginning if we change ammo
-            _currentPlaybackTime = 0f;
-            _timelineSlider.Value = 0f;
-            UpdateScrubber(0f);
-        }
-
-        private float _postImpactTime = 0f;
-
-        private void OnMedTickPressed()
-        {
-            if (_simulationManager.Dummy != null)
-            {
-                _simulationManager.Dummy.Physiology.TickPhysiology(10.0f);
-                _postImpactTime += 10.0f;
-                UpdateTimeLabel();
-                
-                var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
-                _reportText.Text = report.AssessmentText;
-            }
-        }
-
-        private void UpdateTimeLabel()
-        {
-            if (_postImpactTime > 0f)
-            {
-                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s  [+{_postImpactTime:F0}s]";
-            }
-            else
-            {
-                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
-            }
-        }
-
-        private void OnPlayPausePressed()
-        {
-            _isPlaying = !_isPlaying;
-            _playPauseButton.Text = _isPlaying ? "Pause" : "Play";
-        }
-
-        private void OnSliderValueChanged(double value)
-        {
-            if (!_isPlaying) 
-            {
-                UpdateScrubber((float)value);
-            }
-        }
-
-        private void UpdateScrubber(float time)
-        {
-            _currentPlaybackTime = time;
-            _postImpactTime = 0f;
-            UpdateTimeLabel();
-            
-            _simulationManager.ScrubToTime(_currentPlaybackTime);
-            
-            // Generate live medical assessment
-            if (_simulationManager.Dummy != null)
-            {
-                var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
-                _reportText.Text = report.AssessmentText;
-                
-                // Export report when reaching the end of the timeline
-                if (time >= _maxPlaybackTime && !_hasExportedReport)
-                {
-                    System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
-                    _hasExportedReport = true;
-                }
-                else if (time < _maxPlaybackTime)
-                {
-                    _hasExportedReport = false; // Reset if scrubbed backward
-                }
-            }
-        }
-
-        public override void _Process(double delta)
-        {
-            if (_isPlaying)
-            {
-                // Playback speed: scaled so full flight takes about 2 seconds of real time
-                float playbackSpeed = _maxPlaybackTime / 2.0f;
-                float nextTime = _currentPlaybackTime + (float)delta * playbackSpeed; 
-                if (nextTime >= _maxPlaybackTime)
-                {
-                    nextTime = _maxPlaybackTime;
-                    OnPlayPausePressed(); // Auto-pause at end
-                }
-                
-                // Update slider without triggering its signal
-                _timelineSlider.SetBlockSignals(true);
-                _timelineSlider.Value = nextTime;
-                _timelineSlider.SetBlockSignals(false);
-
-                UpdateScrubber(nextTime);
-            }
         }
     }
 }
