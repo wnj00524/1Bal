@@ -15,7 +15,7 @@ TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .N
 3. **`TacticalSim.Core.DependencyInjection`**:
    - `ServiceCollectionExtensions`: Registers `ITurnResolver` -> `TurnResolver` (Transient), ballistics models, material penetration systems, and core dependencies.
 4. **`TacticalSim.Tests`**:
-   - Comprehensive xUnit test suite (392 tests) validating timeline invariants, concurrent multi-actor interleaving, sub-tick carryover, failure isolation, physiological bleeding/ischemia integration, stress, and dependency injection.
+   - Comprehensive xUnit test suite (443 tests) validating timeline invariants, concurrent multi-actor interleaving, sub-tick carryover, failure isolation, physiological bleeding/ischemia integration, stress, and dependency injection.
 
 ---
 
@@ -57,7 +57,7 @@ TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .N
 | M1 | Core Turn Resolver & Physiology Integration | Enhance `ITurnResolver` and `TurnResolver` with entity management, physiological ticking, clean action math, and DI registration. | none | DONE |
 | M2 | Comprehensive E2E Testing Suite | Develop Tiers 1-4 comprehensive xUnit test suite for turn resolution, multi-actor interleaving, and physiological integration; publish `TEST_READY.md`. | M1 | DONE |
 | M3 | Verification, Hardening & Acceptance Gate | Run full test suite, execute adversarial challenger verification, forensic integrity audit, and ensure 0 warnings/0 errors. | M1, M2 | DONE |
-| M4 | Bounded 3D World & Entity Refactor | Implement bounded 3D world, refactor entity ownership from TurnResolver to TacticalWorld, migrate all tests. See `docs/issues/ISSUE-005-BOUNDED-3D-WORLD.md`. | M3 | TODO |
+| M4 | Bounded 3D World & Entity Refactor | Implement bounded 3D world, refactor entity ownership from TurnResolver to TacticalWorld, migrate all tests. See `docs/issues/ISSUE-005-BOUNDED-3D-WORLD.md`. | M3 | DONE |
 
 ---
 

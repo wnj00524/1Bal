@@ -68,8 +68,8 @@ public class MotorRespiratoryTraumaTests
         Assert.Contains("FATAL WITHIN 5 MINUTES WITHOUT FIRST AID", untreated);
 
         physiology.ApplyChestSeal();
-        string sealed = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
-        Assert.Contains("DETERIORATION HALTED; NEEDLE DECOMPRESSION REQUIRED", sealed);
+        string sealedAssessment = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
+        Assert.Contains("DETERIORATION HALTED; NEEDLE DECOMPRESSION REQUIRED", sealedAssessment);
 
         physiology.PerformNeedleDecompression();
         string decompressed = MedicalAssessor.AssessTrauma(physiology).AssessmentText;
