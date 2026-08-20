@@ -8,6 +8,7 @@ using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.World;
 using System.Numerics;
 
 namespace TacticalSim.GodotClient
@@ -33,6 +34,8 @@ namespace TacticalSim.GodotClient
         public float ElapsedScenarioTime { get; private set; }
         public bool IsScenarioLoaded => LoadedScenarioName != null;
         public bool HasBulletBeenFired { get; private set; }
+        public bool IsTargetedShotPending { get; private set; }
+        public ProjectileTerminationReason LastProjectileTermination { get; private set; }
 
         public override void _Ready()
         {
@@ -78,6 +81,8 @@ namespace TacticalSim.GodotClient
             LoadedScenarioName = sceneName;
             ElapsedScenarioTime = 0f;
             HasBulletBeenFired = false;
+            IsTargetedShotPending = false;
+            LastProjectileTermination = ProjectileTerminationReason.None;
 
             PrepareScenario();
             SetScenarioVisibility(true);
@@ -90,8 +95,27 @@ namespace TacticalSim.GodotClient
             if (seconds != 5f)
                 throw new ArgumentOutOfRangeException(nameof(seconds), "Scenarios advance in five-second increments.");
 
+            if (IsTargetedShotPending)
+            {
+                IsTargetedShotPending = false;
+                HasBulletBeenFired = true;
+                _bulletMesh.Visible = true;
+                ScrubToTime(seconds);
+            }
+
             Dummy.Physiology.TickPhysiology(seconds);
             ElapsedScenarioTime += seconds;
+        }
+
+        public void QueueTargetedShot(string target)
+        {
+            if (!IsScenarioLoaded)
+                throw new InvalidOperationException("Load a scenario before selecting a shot target.");
+            if (string.IsNullOrWhiteSpace(target))
+                throw new ArgumentException("A target region is required.", nameof(target));
+
+            ActiveTarget = target;
+            IsTargetedShotPending = true;
         }
 
         public void UnloadScenario()
@@ -99,6 +123,8 @@ namespace TacticalSim.GodotClient
             LoadedScenarioName = null;
             ElapsedScenarioTime = 0f;
             HasBulletBeenFired = false;
+            IsTargetedShotPending = false;
+            LastProjectileTermination = ProjectileTerminationReason.None;
             SetScenarioVisibility(false);
         }
 
@@ -215,6 +241,7 @@ namespace TacticalSim.GodotClient
             
             // 3. RK4 Physics Loop (simulating continuous flight until t = flightTime)
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
+            WorldBounds worldBounds = WorldBounds.CreateDefault();
             
             while (impactState.Time < flightTime)
             {
@@ -234,8 +261,10 @@ namespace TacticalSim.GodotClient
                 // Advance flight path
                 impactState = BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
                 
-                // Break if projectile has essentially stopped (kinetic energy depleted)
-                if (impactState.Velocity.LengthSquared() < 0.01f) break;
+                LastProjectileTermination = ProjectileFlightTermination.Evaluate(
+                    impactState, ammo.Ballistics, worldBounds);
+                if (LastProjectileTermination != ProjectileTerminationReason.None)
+                    break;
 
                 // Update local position after step
                 localPos = impactState.Position - Dummy.Position;
