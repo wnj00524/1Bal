@@ -29,6 +29,8 @@ namespace TacticalSim.GodotClient
         private Node3D _scenarioRoot = null!;
         private Node3D _shooterVisual = null!;
         private Node3D _dummyVisual = null!;
+        private TacticalEntity? _focusedAgent;
+        private Godot.Vector3? _pendingMoveDestination;
 
         public string? LoadedScenarioName { get; private set; }
         public float ElapsedScenarioTime { get; private set; }
@@ -36,6 +38,9 @@ namespace TacticalSim.GodotClient
         public bool HasBulletBeenFired { get; private set; }
         public bool IsTargetedShotPending { get; private set; }
         public ProjectileTerminationReason LastProjectileTermination { get; private set; }
+        public TacticalEntity? FocusedAgent => _focusedAgent;
+        public bool HasFocusedAgent => _focusedAgent != null;
+        public bool HasPendingMove => _pendingMoveDestination.HasValue;
 
         public override void _Ready()
         {
@@ -83,6 +88,7 @@ namespace TacticalSim.GodotClient
             HasBulletBeenFired = false;
             IsTargetedShotPending = false;
             LastProjectileTermination = ProjectileTerminationReason.None;
+            ClearAgentFocus();
 
             PrepareScenario();
             SetScenarioVisibility(true);
@@ -94,6 +100,8 @@ namespace TacticalSim.GodotClient
                 throw new InvalidOperationException("Load a scenario before advancing it.");
             if (seconds != 5f)
                 throw new ArgumentOutOfRangeException(nameof(seconds), "Scenarios advance in five-second increments.");
+
+            ApplyPendingMovement();
 
             if (IsTargetedShotPending)
             {
@@ -125,7 +133,73 @@ namespace TacticalSim.GodotClient
             HasBulletBeenFired = false;
             IsTargetedShotPending = false;
             LastProjectileTermination = ProjectileTerminationReason.None;
+            ClearAgentFocus();
             SetScenarioVisibility(false);
+        }
+
+        public string HandleLeftClick(Godot.Vector2 screenPosition)
+        {
+            if (!IsScenarioLoaded)
+                return "No scenario loaded.";
+
+            Camera3D? camera = GetViewport().GetCamera3D();
+            if (camera == null)
+                return "No active camera.";
+
+            Godot.Vector3 rayOrigin = camera.ProjectRayOrigin(screenPosition);
+            Godot.Vector3 rayEnd = rayOrigin + camera.ProjectRayNormal(screenPosition) * 1000f;
+            var query = PhysicsRayQueryParameters3D.Create(rayOrigin, rayEnd);
+            Godot.Collections.Dictionary hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (!hit.TryGetValue("collider", out Variant colliderVariant))
+                return "No agent or walkable position selected.";
+
+            GodotObject? collider = colliderVariant.AsGodotObject();
+            if (collider == _shooterVisual)
+            {
+                FocusAgent(Shooter);
+                return "Shooter focused. Left click the ground to assign movement.";
+            }
+
+            if (collider == _dummyVisual)
+            {
+                FocusAgent(Dummy);
+                return "Dummy focused. Left click the ground to assign movement.";
+            }
+
+            if (_focusedAgent == null)
+                return "Select an agent before assigning a command.";
+
+            Godot.Vector3 destination = hit["position"].AsVector3();
+            _pendingMoveDestination = new Godot.Vector3(destination.X, 0.9f, destination.Z);
+            return "Movement assigned. Advance the simulation to execute it.";
+        }
+
+        private void FocusAgent(TacticalEntity agent)
+        {
+            _focusedAgent = agent;
+            _pendingMoveDestination = null;
+        }
+
+        private void ClearAgentFocus()
+        {
+            _focusedAgent = null;
+            _pendingMoveDestination = null;
+        }
+
+        private void ApplyPendingMovement()
+        {
+            if (_focusedAgent == null || !_pendingMoveDestination.HasValue)
+                return;
+
+            Godot.Vector3 destination = _pendingMoveDestination.Value;
+            _focusedAgent.Position = new System.Numerics.Vector3(
+                destination.X,
+                _focusedAgent.Position.Y,
+                destination.Z);
+
+            Node3D visual = ReferenceEquals(_focusedAgent, Shooter) ? _shooterVisual : _dummyVisual;
+            visual.Position = destination;
+            _pendingMoveDestination = null;
         }
 
         public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
@@ -178,22 +252,32 @@ namespace TacticalSim.GodotClient
         private void ScrubToTime(float flightTime)
         {
             var ammo = ActiveAmmo;
-            
-            TargetDistance = ammo.Name.Contains("Knife") ? 1.0f : 10.0f;
+
+            bool shooterWasFocused = ReferenceEquals(_focusedAgent, Shooter);
+            bool dummyWasFocused = ReferenceEquals(_focusedAgent, Dummy);
+            System.Numerics.Vector3 shooterPosition = Shooter.Position;
+            System.Numerics.Vector3 dummyPosition = Dummy.Position;
 
             // 1. Instantiate a fresh Dummy with full health
             var actorPhysiology = new TacticalActorPhysiology();
             actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
-            Shooter = new TacticalEntity(new System.Numerics.Vector3(0, 1.5f, -TargetDistance), actorPhysiology);
+            Shooter = new TacticalEntity(shooterPosition, actorPhysiology);
             
             var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
-            Dummy = new TacticalEntity(new System.Numerics.Vector3(0, 1.0f, 0), dummyPhysiology);
+            Dummy = new TacticalEntity(dummyPosition, dummyPhysiology);
+            if (shooterWasFocused)
+                _focusedAgent = Shooter;
+            else if (dummyWasFocused)
+                _focusedAgent = Dummy;
             
             // Move the visual shooter circle dynamically
             var shooterCircle = GetNodeOrNull<Godot.Node3D>("../ShooterCircle");
             if (shooterCircle != null)
             {
-                shooterCircle.Position = new Godot.Vector3(0, 0, -TargetDistance);
+                shooterCircle.Position = new Godot.Vector3(
+                    Shooter.Position.X,
+                    0.9f,
+                    Shooter.Position.Z);
             }
             
             // 2. Setup initial bullet state right before impact
