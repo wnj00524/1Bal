@@ -304,7 +304,12 @@ namespace TacticalSim.GodotClient
         public enum MedicalAction
         {
             ApplyChestSeal,
-            NeedleDecompression
+            NeedleDecompression,
+            ApplyLeftArmTourniquet,
+            ApplyRightArmTourniquet,
+            ApplyLeftLegTourniquet,
+            ApplyRightLegTourniquet,
+            PackAbdominalWound
         }
 
         public IReadOnlyList<MedicalAction> GetAvailableMedicalActions()
@@ -319,7 +324,37 @@ namespace TacticalSim.GodotClient
                 actions.Add(MedicalAction.ApplyChestSeal);
             if (Dummy.Physiology.TensionPneumothoraxLevel > 0f)
                 actions.Add(MedicalAction.NeedleDecompression);
+            AddTourniquetIfApplicable(actions, BodyPartType.LeftArm, MedicalAction.ApplyLeftArmTourniquet);
+            AddTourniquetIfApplicable(actions, BodyPartType.RightArm, MedicalAction.ApplyRightArmTourniquet);
+            AddTourniquetIfApplicable(actions, BodyPartType.LeftLeg, MedicalAction.ApplyLeftLegTourniquet);
+            AddTourniquetIfApplicable(actions, BodyPartType.RightLeg, MedicalAction.ApplyRightLegTourniquet);
+
+            BodyPart? abdomen = FindBodyPart(Dummy.Physiology.RootBodyPart, BodyPartType.Abdomen);
+            if (abdomen != null && !abdomen.HasWoundPacking &&
+                abdomen.Voxels.Exists(voxel => voxel.IsDestroyed && voxel.Organ == OrganType.Muscle))
+                actions.Add(MedicalAction.PackAbdominalWound);
             return actions;
+        }
+
+        private void AddTourniquetIfApplicable(
+            List<MedicalAction> actions, BodyPartType type, MedicalAction action)
+        {
+            BodyPart? part = FindBodyPart(Dummy.Physiology.RootBodyPart, type);
+            if (part != null && !part.HasTourniquet && part.GetActiveBleedRate() > 0f)
+                actions.Add(action);
+        }
+
+        private static BodyPart? FindBodyPart(BodyPart part, BodyPartType type)
+        {
+            if (part.Type == type)
+                return part;
+            foreach (BodyPart child in part.Children)
+            {
+                BodyPart? match = FindBodyPart(child, type);
+                if (match != null)
+                    return match;
+            }
+            return null;
         }
 
         public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
@@ -350,10 +385,30 @@ namespace TacticalSim.GodotClient
             if (!_pendingMedicalAction.HasValue)
                 return;
 
-            if (_pendingMedicalAction == MedicalAction.ApplyChestSeal)
-                Dummy.Physiology.ApplyChestSeal();
-            else
-                Dummy.Physiology.PerformNeedleDecompression();
+            switch (_pendingMedicalAction)
+            {
+                case MedicalAction.ApplyChestSeal:
+                    Dummy.Physiology.ApplyChestSeal();
+                    break;
+                case MedicalAction.NeedleDecompression:
+                    Dummy.Physiology.PerformNeedleDecompression();
+                    break;
+                case MedicalAction.ApplyLeftArmTourniquet:
+                    Dummy.Physiology.ApplyTourniquet(BodyPartType.LeftArm);
+                    break;
+                case MedicalAction.ApplyRightArmTourniquet:
+                    Dummy.Physiology.ApplyTourniquet(BodyPartType.RightArm);
+                    break;
+                case MedicalAction.ApplyLeftLegTourniquet:
+                    Dummy.Physiology.ApplyTourniquet(BodyPartType.LeftLeg);
+                    break;
+                case MedicalAction.ApplyRightLegTourniquet:
+                    Dummy.Physiology.ApplyTourniquet(BodyPartType.RightLeg);
+                    break;
+                case MedicalAction.PackAbdominalWound:
+                    Dummy.Physiology.PackExternalWound(BodyPartType.Abdomen);
+                    break;
+            }
             _pendingMedicalAction = null;
         }
 

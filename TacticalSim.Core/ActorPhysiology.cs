@@ -42,6 +42,7 @@ namespace TacticalSim.Core.Physiology
         
         // Interventions
         public bool HasTourniquet { get; set; }
+        public bool HasWoundPacking { get; private set; }
         public float IschemiaDuration { get; set; } // seconds
         public bool IsNecrotic { get; set; }
 
@@ -79,6 +80,11 @@ namespace TacticalSim.Core.Physiology
                         OrganType.Mouth => 0.005f, 
                         _ => 0.005f
                     };
+                    // Packing and sustained direct pressure can control bleeding from
+                    // an accessible abdominal-wall wound. They cannot tamponade a
+                    // injured solid organ or other non-compressible internal bleed.
+                    if (HasWoundPacking && Type == BodyPartType.Abdomen && voxel.Organ == OrganType.Muscle)
+                        rate *= 0.2f;
                     activeRate += rate * volCc;
                 }
             }
@@ -89,6 +95,25 @@ namespace TacticalSim.Core.Physiology
         private bool IsExtremity(BodyPartType type) =>
             type == BodyPartType.LeftArm || type == BodyPartType.RightArm ||
             type == BodyPartType.LeftLeg || type == BodyPartType.RightLeg;
+
+        internal bool TryApplyTourniquet()
+        {
+            if (!IsExtremity(Type) || HasTourniquet || GetActiveBleedRate() <= 0f)
+                return false;
+
+            HasTourniquet = true;
+            return true;
+        }
+
+        internal bool TryApplyWoundPacking()
+        {
+            if (Type != BodyPartType.Abdomen || HasWoundPacking ||
+                !Voxels.Exists(voxel => voxel.IsDestroyed && voxel.Organ == OrganType.Muscle))
+                return false;
+
+            HasWoundPacking = true;
+            return true;
+        }
 
         public void ApplyTrauma(Vector3 impactPoint, float kineticEnergy)
         {
@@ -140,6 +165,8 @@ namespace TacticalSim.Core.Physiology
         void AdministerAnalgesic(float strength);
         void ApplyChestSeal();
         void PerformNeedleDecompression();
+        bool ApplyTourniquet(BodyPartType extremity);
+        bool PackExternalWound(BodyPartType bodyPart);
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -191,6 +218,25 @@ namespace TacticalSim.Core.Physiology
         public void PerformNeedleDecompression()
         {
             TensionPneumothoraxLevel = 0f;
+        }
+
+        public bool ApplyTourniquet(BodyPartType extremity) =>
+            FindBodyPart(RootBodyPart, extremity)?.TryApplyTourniquet() ?? false;
+
+        public bool PackExternalWound(BodyPartType bodyPart) =>
+            FindBodyPart(RootBodyPart, bodyPart)?.TryApplyWoundPacking() ?? false;
+
+        private static BodyPart? FindBodyPart(BodyPart part, BodyPartType type)
+        {
+            if (part.Type == type)
+                return part;
+            foreach (BodyPart child in part.Children)
+            {
+                BodyPart? match = FindBodyPart(child, type);
+                if (match != null)
+                    return match;
+            }
+            return null;
         }
 
         public void TickPhysiology(float dt)
