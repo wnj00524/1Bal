@@ -218,10 +218,14 @@ namespace TacticalSim.GodotClient
             _reportText.Text = report.AssessmentText;
             _penetrationLabel.Text = _simulationManager.HasCompletePenetration
                 ? "Penetration: THROUGH (ENTRY → EXIT)"
-                : "Penetration: none";
+                : _simulationManager.HasMaterialHit
+                    ? "Penetration: HIT (STOPPED)"
+                    : "Penetration: none";
             _penetrationLabel.Modulate = _simulationManager.HasCompletePenetration
                 ? new Color(0.25f, 1f, 0.7f)
-                : Colors.White;
+                : _simulationManager.HasMaterialHit
+                    ? new Color(1f, 0.65f, 0.15f)
+                    : Colors.White;
             System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
             RefreshProjectileTelemetry();
         }

@@ -29,7 +29,11 @@ public class ProjectileFlightTerminationTests
     [Fact]
     public void Evaluate_StopsWhenEnergyIsDepleted()
     {
-        var state = new ProjectileState { Position = new Vector3(0f, 2f, 0f), Velocity = Vector3.One };
+        var state = new ProjectileState
+        {
+            Position = new Vector3(0f, 2f, 0f),
+            Velocity = new Vector3(1f, 0f, 0f)
+        };
 
         Assert.Equal(ProjectileTerminationReason.EnergyDepleted,
             ProjectileFlightTermination.Evaluate(state, Profile(), Bounds));

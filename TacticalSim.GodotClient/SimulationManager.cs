@@ -48,8 +48,10 @@ namespace TacticalSim.GodotClient
         public bool HasPendingMove => _pendingMoveDestination.HasValue;
         public bool IsProjectileSelected => _isProjectileSelected;
         public bool HasCompletePenetration { get; private set; }
+        public bool HasMaterialHit { get; private set; }
         public System.Numerics.Vector3? PenetrationEntryPoint { get; private set; }
         public System.Numerics.Vector3? PenetrationExitPoint { get; private set; }
+        public System.Numerics.Vector3? MaterialHitPoint { get; private set; }
         public ProjectileTelemetry? SelectedProjectileTelemetry =>
             _isProjectileSelected && _projectileState.HasValue
                 ? ProjectileTelemetry.From(_projectileState.Value, ActiveAmmo.Ballistics)
@@ -472,6 +474,19 @@ namespace TacticalSim.GodotClient
                 // Backstop material interaction
                 if (impactState.Position.Z >= 1.5f)
                 {
+                    // Keep the terminal state on the stopping plane. The physics step
+                    // can advance past it before the next termination check runs.
+                    var backstopContact = new System.Numerics.Vector3(
+                        impactState.Position.X,
+                        impactState.Position.Y,
+                        1.5f);
+                    if (!firstMaterialContact.HasValue)
+                    {
+                        firstMaterialContact = backstopContact;
+                        lastMaterialContact = backstopContact;
+                    }
+
+                    impactState.Position = backstopContact;
                     impactState.Velocity = System.Numerics.Vector3.Zero;
                 }
             }
@@ -519,13 +534,27 @@ namespace TacticalSim.GodotClient
                 }
             }
             
+            // A material stop is reported at the material contact, not at the last
+            // integration point. This keeps the rendered projectile attached to the
+            // object that stopped it and keeps its telemetry at the terminal point.
+            if (firstMaterialContact.HasValue
+                && lastMaterialContact.HasValue
+                && !HasTravelledBeyondMaterial(
+                    impactState.Position,
+                    lastMaterialContact.Value,
+                    impactDir))
+            {
+                impactState.Position = firstMaterialContact.Value;
+                impactState.Velocity = System.Numerics.Vector3.Zero;
+            }
+
             _projectileState = impactState;
             UpdatePenetrationVisualization(
                 firstMaterialContact,
                 lastMaterialContact,
                 impactState.Position,
                 impactDir);
-            _bulletMesh.Position = new Godot.Vector3(impactState.Position.X, impactState.Position.Y, impactState.Position.Z);
+            _bulletMesh.GlobalPosition = ToGodot(impactState.Position);
             
             // Look in the direction of velocity
             if (impactState.Velocity.LengthSquared() > 0)
@@ -547,8 +576,10 @@ namespace TacticalSim.GodotClient
         private void ClearPenetrationVisualization()
         {
             HasCompletePenetration = false;
+            HasMaterialHit = false;
             PenetrationEntryPoint = null;
             PenetrationExitPoint = null;
+            MaterialHitPoint = null;
 
             if (_penetrationVisualization != null)
             {
@@ -567,11 +598,14 @@ namespace TacticalSim.GodotClient
             if (!firstContact.HasValue || !lastContact.HasValue)
                 return;
 
-            float travelBeyondMaterial = System.Numerics.Vector3.Dot(
-                projectilePosition - lastContact.Value,
-                direction);
-            if (travelBeyondMaterial <= 0.01f)
+            HasMaterialHit = true;
+
+            if (!HasTravelledBeyondMaterial(projectilePosition, lastContact.Value, direction))
+            {
+                MaterialHitPoint = firstContact;
+                AddPenetrationMarker(firstContact.Value, "HIT", new Color(1f, 0.55f, 0.05f));
                 return;
+            }
 
             HasCompletePenetration = true;
             PenetrationEntryPoint = firstContact;
@@ -580,6 +614,14 @@ namespace TacticalSim.GodotClient
             AddPenetrationMarker(firstContact.Value, "ENTRY", new Color(1f, 0.2f, 0.08f));
             AddPenetrationMarker(lastContact.Value, "EXIT", new Color(0.1f, 0.9f, 1f));
             AddPenetrationChannel(firstContact.Value, lastContact.Value);
+        }
+
+        private static bool HasTravelledBeyondMaterial(
+            System.Numerics.Vector3 projectilePosition,
+            System.Numerics.Vector3 lastContact,
+            System.Numerics.Vector3 direction)
+        {
+            return System.Numerics.Vector3.Dot(projectilePosition - lastContact, direction) > 0.01f;
         }
 
         private void AddPenetrationMarker(System.Numerics.Vector3 position, string text, Color color)
@@ -594,9 +636,9 @@ namespace TacticalSim.GodotClient
                     Emission = color,
                     EmissionEnergyMultiplier = 3f
                 },
-                Position = ToGodot(position)
             };
             _penetrationVisualization.AddChild(marker);
+            marker.GlobalPosition = ToGodot(position);
 
             var label = new Label3D
             {
@@ -605,9 +647,9 @@ namespace TacticalSim.GodotClient
                 Modulate = color,
                 OutlineSize = 8,
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-                Position = ToGodot(position) + new Godot.Vector3(0f, 0.1f, 0f)
             };
             _penetrationVisualization.AddChild(label);
+            label.GlobalPosition = ToGodot(position) + new Godot.Vector3(0f, 0.1f, 0f);
         }
 
         private void AddPenetrationChannel(
@@ -632,10 +674,10 @@ namespace TacticalSim.GodotClient
                     Emission = new Color(1f, 0.25f, 0.02f),
                     EmissionEnergyMultiplier = 2f
                 },
-                Position = (entry + exit) * 0.5f,
-                Basis = new Basis(new Godot.Quaternion(Godot.Vector3.Up, channel.Normalized()))
             };
             _penetrationVisualization.AddChild(channelMesh);
+            channelMesh.GlobalPosition = (entry + exit) * 0.5f;
+            channelMesh.GlobalBasis = new Basis(new Godot.Quaternion(Godot.Vector3.Up, channel.Normalized()));
         }
 
         private static Godot.Vector3 ToGodot(System.Numerics.Vector3 value) =>
