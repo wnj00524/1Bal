@@ -21,6 +21,8 @@ namespace TacticalSim.GodotClient
         private Label _scenarioLabel = null!;
         private Label _timeLabel = null!;
         private RichTextLabel _reportText = null!;
+        private PopupPanel _targetMenu = null!;
+        private TargetSilhouetteMenu _targetSilhouette = null!;
 
         private readonly string[] _sceneProfiles = { "Training Dummy Outside" };
 
@@ -52,6 +54,8 @@ namespace TacticalSim.GodotClient
             _scenarioLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/ScenarioLbl");
             _timeLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/TimeLbl");
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+            _targetMenu = GetNode<PopupPanel>("Control/TargetContextMenu");
+            _targetSilhouette = GetNode<TargetSilhouetteMenu>("Control/TargetContextMenu/Margin/VBox/Silhouette");
 
             foreach (string scene in _sceneProfiles)
                 _sceneSelect.AddItem(scene);
@@ -63,9 +67,27 @@ namespace TacticalSim.GodotClient
             GetNode<Button>("Control/SetupPanel/Margin/VBox/LoadBtn").Pressed += OnLoadScenarioPressed;
             GetNode<Button>("Control/ScenarioPanel/Margin/HBox/AdvanceBtn").Pressed += OnAdvancePressed;
             GetNode<Button>("Control/ScenarioPanel/Margin/HBox/ChangeBtn").Pressed += OnChangeScenarioPressed;
+            _targetSilhouette.TargetSelected += OnContextTargetSelected;
 
             _scenarioControls.Hide();
             _reportText.Text = "Choose a scene and loadout to begin.";
+        }
+
+        public override void _UnhandledInput(InputEvent @event)
+        {
+            if (@event is not InputEventMouseButton
+                {
+                    ButtonIndex: MouseButton.Right,
+                    Pressed: true
+                } click || !_simulationManager.IsScenarioLoaded)
+                return;
+
+            if (_simulationManager.IsDummyAtScreenPosition(click.Position))
+            {
+                _targetMenu.Position = new Vector2I((int)click.Position.X + 12, (int)click.Position.Y + 12);
+                _targetMenu.Popup();
+                GetViewport().SetInputAsHandled();
+            }
         }
 
         private void OnLoadScenarioPressed()
@@ -89,10 +111,25 @@ namespace TacticalSim.GodotClient
 
         private void OnChangeScenarioPressed()
         {
+            _targetMenu.Hide();
             _simulationManager.UnloadScenario();
             _scenarioControls.Hide();
             _setupPanel.Show();
             _reportText.Text = "Choose a scene and loadout to begin.";
+        }
+
+        private void OnContextTargetSelected(string target)
+        {
+            _simulationManager.ActiveTarget = target;
+            _targetSelect.Select(System.Array.IndexOf(_targetProfiles, target));
+            UpdateScenarioLabel();
+            _targetMenu.Hide();
+        }
+
+        private void UpdateScenarioLabel()
+        {
+            _scenarioLabel.Text = $"{_simulationManager.LoadedScenarioName}  |  "
+                + $"{_simulationManager.ActiveAmmo.Name}  |  {_simulationManager.ActiveTarget}";
         }
 
         private void RefreshScenarioStatus()
