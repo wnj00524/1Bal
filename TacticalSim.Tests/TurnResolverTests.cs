@@ -23,6 +23,26 @@ namespace TacticalSim.Tests
             Assert.Empty(resolver.GetActiveActions());
         }
 
+        [Fact]
+        public void AdvanceTowards_MovesAtMetersPerSecond_ForElapsedTime()
+        {
+            Vector3 result = MoveTacticalAction.AdvanceTowards(
+                Vector3.Zero, new Vector3(20f, 0f, 0f), 1.4f, 5f);
+
+            Assert.Equal(new Vector3(7f, 0f, 0f), result);
+        }
+
+        [Fact]
+        public void AdvanceTowards_WhenTravelWouldOvershoot_StopsAtDestination()
+        {
+            var destination = new Vector3(3f, 0f, 4f);
+
+            Vector3 result = MoveTacticalAction.AdvanceTowards(
+                Vector3.Zero, destination, 1.4f, 5f);
+
+            Assert.Equal(destination, result);
+        }
+
         [Theory]
         [InlineData(0.0f)]
         [InlineData(-0.1f)]
