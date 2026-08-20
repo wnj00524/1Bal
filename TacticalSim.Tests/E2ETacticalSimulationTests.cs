@@ -8,6 +8,7 @@ using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.World;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -192,7 +193,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F1_GlobalSimulationTimeline_AdvancesMonotonically()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             Assert.Equal(0.0f, resolver.GlobalTime);
 
             float lastTime = resolver.GlobalTime;
@@ -226,7 +228,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F1_GlobalSimulationTimeline_RejectsInvalidDeltaTime()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             Assert.Throws<ArgumentException>(() => resolver.Tick(0.0f));
             Assert.Throws<ArgumentException>(() => resolver.Tick(-0.5f));
@@ -237,7 +240,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F2_ConcurrentMultiEntityScheduling_ExecutesSimultaneously()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             var actor1 = Guid.NewGuid();
             var actor2 = Guid.NewGuid();
@@ -278,7 +282,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F3_FractionatedTUAdvancement_SubSteppingWithCarryover()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action1 = new GenericTacticalAction(actorId, 1.5f);
@@ -308,7 +313,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F4_TacticalActionLifecycleStateMachine_TransitionsCorrectly()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var tracker = new LifecycleTrackerTacticalAction(actorId, 1.0f);
@@ -333,7 +339,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F4_TacticalActionLifecycle_CancellationAndFailureIsolation()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorA = Guid.NewGuid();
             var actorB = Guid.NewGuid();
 
@@ -365,7 +372,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier1_F5_TurnResolverObservabilityEvents_EmitInStrictOrder()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var eventLog = new List<string>();
@@ -704,7 +712,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier2_SubTickMicroSteps_AccumulatesAccurately()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action = new GenericTacticalAction(actorId, 1.0f);
@@ -726,7 +735,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier2_ExactCostMatch_CompletesWithoutOverOrUnderflow()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action = new GenericTacticalAction(actorId, 0.75f);
@@ -745,7 +755,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier2_ActionCancellation_MidExecution_PromotesQueuedAction()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var action1 = new GenericTacticalAction(actorId, 2.0f);
@@ -781,7 +792,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier2_ActorActionCancellation_ClearsActiveAndQueuedActions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var actorId = Guid.NewGuid();
 
             var a1 = new GenericTacticalAction(actorId, 1.0f);
@@ -890,7 +902,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier3_CombatSequence_ActorSuppressionAndActionInterruption()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             var operatorId = Guid.NewGuid();
             var enemyId = Guid.NewGuid();
@@ -978,7 +991,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier4_Scenario1_MultiActorBreachAndClearFirefight()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var registry = new MaterialRegistry();
             var penetrationSystem = new MaterialPenetrationSystem();
 
@@ -1136,7 +1150,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier4_Scenario3_ConcurrentSnipersShootingThroughGlassAndWall_WithFractionatedInterleaving()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var registry = new MaterialRegistry();
             var penetrationSystem = new MaterialPenetrationSystem();
 
@@ -1205,7 +1220,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tier4_Scenario4_SuppressiveFireSequence_WithActionInterruptionAndCancellation()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             var gunnerId = Guid.NewGuid();
             var flankerId = Guid.NewGuid();
