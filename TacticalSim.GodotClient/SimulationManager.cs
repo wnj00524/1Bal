@@ -179,21 +179,50 @@ namespace TacticalSim.GodotClient
             if (collider == _shooterVisual)
             {
                 FocusAgent(Shooter);
-                return "Shooter focused. Left click the ground to assign movement.";
+                return "Shooter focused. Right click the ground for commands.";
             }
 
             if (collider == _dummyVisual)
             {
                 FocusAgent(Dummy);
-                return "Dummy focused. Left click the ground to assign movement.";
+                return "Dummy focused. Right click the ground for commands.";
             }
 
-            if (_focusedAgent == null)
-                return "Select an agent before assigning a command.";
+            return _focusedAgent == null
+                ? "Select an agent before assigning a command."
+                : "Right click the ground and select Move.";
+        }
 
-            Godot.Vector3 destination = hit["position"].AsVector3();
-            _pendingMoveDestination = new Godot.Vector3(destination.X, 0.9f, destination.Z);
-            return "Movement assigned. Advance the simulation to execute it.";
+        public bool TryGetMoveDestination(Godot.Vector2 screenPosition, out Godot.Vector3 destination)
+        {
+            destination = default;
+            if (!IsScenarioLoaded || _focusedAgent == null)
+                return false;
+
+            Camera3D? camera = GetViewport().GetCamera3D();
+            if (camera == null)
+                return false;
+
+            Godot.Vector3 rayOrigin = camera.ProjectRayOrigin(screenPosition);
+            Godot.Vector3 rayEnd = rayOrigin + camera.ProjectRayNormal(screenPosition) * 1000f;
+            var query = PhysicsRayQueryParameters3D.Create(rayOrigin, rayEnd);
+            Godot.Collections.Dictionary hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            if (!hit.TryGetValue("collider", out Variant colliderVariant)
+                || colliderVariant.AsGodotObject() is not Node collider
+                || collider.Name != "Ground")
+                return false;
+
+            Godot.Vector3 hitPosition = hit["position"].AsVector3();
+            destination = new Godot.Vector3(hitPosition.X, 0.9f, hitPosition.Z);
+            return true;
+        }
+
+        public void AssignMoveDestination(Godot.Vector3 destination)
+        {
+            if (_focusedAgent == null)
+                throw new InvalidOperationException("Select an agent before assigning movement.");
+
+            _pendingMoveDestination = destination;
         }
 
         private void FocusAgent(TacticalEntity agent)

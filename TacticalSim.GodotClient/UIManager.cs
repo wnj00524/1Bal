@@ -28,6 +28,9 @@ namespace TacticalSim.GodotClient
         private RichTextLabel _reportText = null!;
         private PopupPanel _targetMenu = null!;
         private TargetSilhouetteMenu _targetSilhouette = null!;
+        private PopupPanel _commandMenu = null!;
+        private RadialCommandMenu _radialCommands = null!;
+        private Vector3 _commandDestination;
 
         private readonly string[] _sceneProfiles = { "Training Dummy Outside" };
 
@@ -66,6 +69,8 @@ namespace TacticalSim.GodotClient
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
             _targetMenu = GetNode<PopupPanel>("Control/TargetContextMenu");
             _targetSilhouette = GetNode<TargetSilhouetteMenu>("Control/TargetContextMenu/Margin/VBox/Silhouette");
+            _commandMenu = GetNode<PopupPanel>("Control/CommandMenu");
+            _radialCommands = GetNode<RadialCommandMenu>("Control/CommandMenu/RadialCommands");
 
             foreach (string scene in _sceneProfiles)
                 _sceneSelect.AddItem(scene);
@@ -78,6 +83,7 @@ namespace TacticalSim.GodotClient
             GetNode<Button>("Control/ScenarioPanel/Margin/HBox/AdvanceBtn").Pressed += OnAdvancePressed;
             GetNode<Button>("Control/ScenarioPanel/Margin/HBox/ChangeBtn").Pressed += OnChangeScenarioPressed;
             _targetSilhouette.TargetSelected += OnContextTargetSelected;
+            _radialCommands.MoveSelected += OnMoveSelected;
 
             _scenarioControls.Hide();
             _projectilePanel.Hide();
@@ -107,8 +113,20 @@ namespace TacticalSim.GodotClient
 
             if (_simulationManager.IsDummyAtScreenPosition(click.Position))
             {
+                _commandMenu.Hide();
                 _targetMenu.Position = new Vector2I((int)click.Position.X + 12, (int)click.Position.Y + 12);
                 _targetMenu.Popup();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (_simulationManager.TryGetMoveDestination(click.Position, out _commandDestination))
+            {
+                _targetMenu.Hide();
+                _commandMenu.Position = new Vector2I(
+                    (int)click.Position.X - 76,
+                    (int)click.Position.Y - 76);
+                _commandMenu.Popup();
                 GetViewport().SetInputAsHandled();
             }
         }
@@ -135,12 +153,20 @@ namespace TacticalSim.GodotClient
         private void OnChangeScenarioPressed()
         {
             _targetMenu.Hide();
+            _commandMenu.Hide();
             _simulationManager.UnloadScenario();
             _scenarioControls.Hide();
             _setupPanel.Show();
             _reportText.Text = "Choose a scene and loadout to begin.";
             _focusLabel.Text = "Focus: none";
             _projectilePanel.Hide();
+        }
+
+        private void OnMoveSelected()
+        {
+            _simulationManager.AssignMoveDestination(_commandDestination);
+            _focusLabel.Text = "Move assigned. Advance the simulation to execute it.";
+            _commandMenu.Hide();
         }
 
         private void OnContextTargetSelected(string target)
