@@ -5,6 +5,7 @@ using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Cover;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Simulation;
+using TacticalSim.Core.World;
 
 namespace TacticalSim.Core.DependencyInjection
 {
@@ -55,7 +56,9 @@ namespace TacticalSim.Core.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(services);
 
-            services.AddTransient<ITurnResolver, TurnResolver>();
+            services.AddSingleton<ITacticalWorld>(_ => new TacticalWorld(WorldBounds.CreateDefault()));
+            services.AddTransient<ITurnResolver>(provider =>
+                new TurnResolver(provider.GetRequiredService<ITacticalWorld>()));
 
             return services;
         }

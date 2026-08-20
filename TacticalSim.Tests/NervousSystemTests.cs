@@ -116,8 +116,10 @@ namespace TacticalSim.Tests
             painfulAction.Execute(1f);
             var painfulState = painfulAction.FinalState;
 
-            Vector3 healthyDir = Vector3.Normalize(healthyState.Value.Velocity);
-            Vector3 painfulDir = Vector3.Normalize(painfulState.Value.Velocity);
+            Assert.True(healthyState.HasValue);
+            Assert.True(painfulState.HasValue);
+            Vector3 healthyDir = Vector3.Normalize(healthyState.GetValueOrDefault().Velocity);
+            Vector3 painfulDir = Vector3.Normalize(painfulState.GetValueOrDefault().Velocity);
             
             float dotProduct = Vector3.Dot(healthyDir, painfulDir);
             Assert.True(dotProduct < 0.999f, "High pain should cause angular deviation in the trajectory.");

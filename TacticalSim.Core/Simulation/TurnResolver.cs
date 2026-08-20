@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TacticalSim.Core.Entities;
+using TacticalSim.Core.World;
 
 namespace TacticalSim.Core.Simulation
 {
@@ -16,7 +16,12 @@ namespace TacticalSim.Core.Simulation
         private float _globalTime = 0.0f;
         private readonly Dictionary<Guid, TacticalAction> _activeActions = new();
         private readonly Dictionary<Guid, Queue<TacticalAction>> _actorQueues = new();
-        private readonly Dictionary<Guid, IEntity> _registeredEntities = new();
+        private readonly ITacticalWorld _world;
+
+        public TurnResolver(ITacticalWorld world)
+        {
+            _world = world ?? throw new ArgumentNullException(nameof(world));
+        }
 
         /// <inheritdoc />
         public float GlobalTime => _globalTime;
@@ -47,55 +52,6 @@ namespace TacticalSim.Core.Simulation
 
         /// <inheritdoc />
         public event EventHandler<TimeAdvancedEventArgs>? TimeAdvanced;
-
-        /// <inheritdoc />
-        public event EventHandler<EntityEventArgs>? EntityRegistered;
-
-        /// <inheritdoc />
-        public event EventHandler<EntityEventArgs>? EntityUnregistered;
-
-        /// <inheritdoc />
-        public void RegisterEntity(IEntity entity)
-        {
-            ArgumentNullException.ThrowIfNull(entity);
-
-            if (entity.Id == Guid.Empty)
-            {
-                throw new ArgumentException("Entity Id cannot be empty.", nameof(entity));
-            }
-
-            _registeredEntities[entity.Id] = entity;
-            EntityRegistered?.Invoke(this, new EntityEventArgs(entity, _globalTime));
-        }
-
-        /// <inheritdoc />
-        public bool UnregisterEntity(Guid entityId)
-        {
-            if (entityId == Guid.Empty)
-            {
-                return false;
-            }
-
-            if (_registeredEntities.Remove(entityId, out var entity))
-            {
-                EntityUnregistered?.Invoke(this, new EntityEventArgs(entity, _globalTime));
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <inheritdoc />
-        public IReadOnlyCollection<IEntity> GetRegisteredEntities()
-        {
-            return _registeredEntities.Values.OrderBy(e => e.Id).ToList().AsReadOnly();
-        }
-
-        /// <inheritdoc />
-        public IEntity? GetEntity(Guid entityId)
-        {
-            return _registeredEntities.TryGetValue(entityId, out var entity) ? entity : null;
-        }
 
         /// <inheritdoc />
         public void ScheduleAction(TacticalAction action)
@@ -280,7 +236,7 @@ namespace TacticalSim.Core.Simulation
             }
 
             // Advance physiology for all registered entities in deterministic order (by Id)
-            var entities = _registeredEntities.Values.OrderBy(e => e.Id).ToList();
+            var entities = _world.GetEntities().OrderBy(e => e.Id).ToList();
             foreach (var entity in entities)
             {
                 entity.Physiology?.TickPhysiology(dt);
@@ -441,7 +397,6 @@ namespace TacticalSim.Core.Simulation
             _globalTime = 0.0f;
             _activeActions.Clear();
             _actorQueues.Clear();
-            _registeredEntities.Clear();
         }
     }
 }

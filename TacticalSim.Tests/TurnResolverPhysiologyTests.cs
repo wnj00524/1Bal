@@ -9,6 +9,7 @@ using TacticalSim.Core.Entities;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.World;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -61,18 +62,19 @@ namespace TacticalSim.Tests
         [Fact]
         public void RegisterEntity_ValidEntity_AddsEntityAndFiresEntityRegisteredEvent()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, _, _) = CreateTestEntity();
 
             EntityEventArgs? receivedEvent = null;
-            resolver.EntityRegistered += (_, e) => receivedEvent = e;
+            world.EntityAdded += (_, e) => receivedEvent = e;
 
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
-            var registered = resolver.GetRegisteredEntities();
+            var registered = world.GetEntities();
             Assert.Single(registered);
             Assert.Same(entity, registered.First());
-            Assert.Same(entity, resolver.GetEntity(entity.Id));
+            Assert.Same(entity, world.GetEntity(entity.Id));
 
             Assert.NotNull(receivedEvent);
             Assert.Same(entity, receivedEvent.Entity);
@@ -82,8 +84,9 @@ namespace TacticalSim.Tests
         [Fact]
         public void RegisterEntity_NullEntity_ThrowsArgumentNullException()
         {
-            var resolver = new TurnResolver();
-            Assert.Throws<ArgumentNullException>(() => resolver.RegisterEntity(null!));
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
+            Assert.Throws<ArgumentNullException>(() => world.AddEntity(null!));
         }
 
         private class MockEntityWithEmptyId : IEntity
@@ -97,27 +100,29 @@ namespace TacticalSim.Tests
         [Fact]
         public void RegisterEntity_EmptyEntityId_ThrowsArgumentException()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var invalidEntity = new MockEntityWithEmptyId();
 
-            Assert.Throws<ArgumentException>(() => resolver.RegisterEntity(invalidEntity));
+            Assert.Throws<ArgumentException>(() => world.AddEntity(invalidEntity));
         }
 
         [Fact]
         public void UnregisterEntity_ExistingEntity_RemovesAndFiresEntityUnregisteredEvent()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, _, _) = CreateTestEntity();
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             EntityEventArgs? unregisterEvent = null;
-            resolver.EntityUnregistered += (_, e) => unregisterEvent = e;
+            world.EntityRemoved += (_, e) => unregisterEvent = e;
 
-            bool removed = resolver.UnregisterEntity(entity.Id);
+            bool removed = world.RemoveEntity(entity.Id);
 
             Assert.True(removed);
-            Assert.Empty(resolver.GetRegisteredEntities());
-            Assert.Null(resolver.GetEntity(entity.Id));
+            Assert.Empty(world.GetEntities());
+            Assert.Null(world.GetEntity(entity.Id));
 
             Assert.NotNull(unregisterEvent);
             Assert.Same(entity, unregisterEvent.Entity);
@@ -126,19 +131,21 @@ namespace TacticalSim.Tests
         [Fact]
         public void UnregisterEntity_NonExistentOrEmptyGuid_ReturnsFalse()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
-            bool emptyResult = resolver.UnregisterEntity(Guid.Empty);
+            bool emptyResult = world.RemoveEntity(Guid.Empty);
             Assert.False(emptyResult);
 
-            bool nonExistentResult = resolver.UnregisterEntity(Guid.NewGuid());
+            bool nonExistentResult = world.RemoveEntity(Guid.NewGuid());
             Assert.False(nonExistentResult);
         }
 
         [Fact]
         public void GetRegisteredEntities_ReturnsDeterministicOrderingSortedById()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             var id1 = Guid.Parse("00000000-0000-0000-0000-000000000001");
             var id2 = Guid.Parse("00000000-0000-0000-0000-000000000002");
@@ -153,11 +160,11 @@ namespace TacticalSim.Tests
             var mock3 = new MockCustomIdEntity(id2, phys2);
 
             // Register in disordered order: 3, 1, 2
-            resolver.RegisterEntity(mock1);
-            resolver.RegisterEntity(mock2);
-            resolver.RegisterEntity(mock3);
+            world.AddEntity(mock1);
+            world.AddEntity(mock2);
+            world.AddEntity(mock3);
 
-            var registered = resolver.GetRegisteredEntities().ToList();
+            var registered = world.GetEntities().ToList();
             Assert.Equal(3, registered.Count);
             Assert.Equal(id1, registered[0].Id);
             Assert.Equal(id2, registered[1].Id);
@@ -173,11 +180,12 @@ namespace TacticalSim.Tests
         }
 
         [Fact]
-        public void Reset_ClearsRegisteredEntitiesAlongWithActionQueuesAndGlobalTime()
+        public void Reset_ClearsResolverStateWithoutChangingWorldEntities()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, _, _) = CreateTestEntity();
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             var action = new GenericTacticalAction(entity.Id, 2.0f);
             resolver.ScheduleAction(action);
@@ -185,15 +193,15 @@ namespace TacticalSim.Tests
             resolver.Tick(0.5f);
             Assert.Equal(0.5f, resolver.GlobalTime, 4);
             Assert.True(resolver.HasActiveActions);
-            Assert.NotEmpty(resolver.GetRegisteredEntities());
+            Assert.NotEmpty(world.GetEntities());
 
             resolver.Reset();
 
             Assert.Equal(0.0f, resolver.GlobalTime);
             Assert.False(resolver.HasActiveActions);
             Assert.Equal(0, resolver.ActiveActorCount);
-            Assert.Empty(resolver.GetRegisteredEntities());
-            Assert.Null(resolver.GetEntity(entity.Id));
+            Assert.Single(world.GetEntities());
+            Assert.Same(entity, world.GetEntity(entity.Id));
         }
 
         #endregion
@@ -203,10 +211,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_RegisteredEntity_WithActiveBleed_ReducesBloodVolumeAccurately()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Total bleed rate = 15 (arterial) + 5 (venous) = 20 ml/s
             var (entity, physiology, _) = CreateTestEntity(arterialBleed: 15f, venousBleed: 5f);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             Assert.Equal(5000f, physiology.TotalBloodVolume);
 
@@ -222,11 +231,12 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_RegisteredEntity_WithTourniquet_AdvancesIschemiaDuration()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity, physiology, arm) = CreateTestEntity(arterialBleed: 25f, bodyPartType: BodyPartType.LeftArm);
             arm.HasTourniquet = true;
 
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             // Bleed is completely halted by tourniquet on extremity
             Assert.Equal(0f, arm.GetActiveBleedRate());
@@ -246,12 +256,13 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_UnregisteredEntity_PhysiologyNotTickedByResolver()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (entity1, phys1, _) = CreateTestEntity(arterialBleed: 20f);
             var (entity2, phys2, _) = CreateTestEntity(arterialBleed: 20f);
 
             // Only register entity1
-            resolver.RegisterEntity(entity1);
+            world.AddEntity(entity1);
 
             resolver.Tick(2.0f);
 
@@ -269,10 +280,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_IncapacitatedEntity_ConsciousnessZero_AutomaticallyCancelsActiveAndQueuedActions()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Bleed rate of 3000 ml/s -> 1.0s drops blood volume from 5000ml to 2000ml (60% lost, Fatal, consciousness = 0)
             var (entity, physiology, _) = CreateTestEntity(arterialBleed: 3000f);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             var activeAction = new GenericTacticalAction(entity.Id, 10.0f);
             var queuedAction1 = new GenericTacticalAction(entity.Id, 5.0f);
@@ -304,10 +316,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void Tick_ConsciousEntity_ActionsExecuteAndCompleteNormally()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             // Healthy entity (0 bleed, consciousness = 1.0)
             var (entity, physiology, _) = CreateTestEntity();
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
             var action1 = new GenericTacticalAction(entity.Id, 1.0f);
             var action2 = new GenericTacticalAction(entity.Id, 1.0f);
@@ -334,10 +347,11 @@ namespace TacticalSim.Tests
         [Fact]
         public void ShootTacticalAction_ExecutionInTurnResolver_DoesNotDoubleIncrementProgress()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (shooter, _, _) = CreateTestEntity();
             shooter.EquippedWeapon = CreateTestWeapon(muzzleVelocity: 800f, tuCost: 10f);
-            resolver.RegisterEntity(shooter);
+            world.AddEntity(shooter);
 
             var environment = new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0));
             var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment);
@@ -367,7 +381,8 @@ namespace TacticalSim.Tests
         [Fact]
         public void ShootTacticalAction_MissingAmmunition_FailsGracefullyInTurnResolver()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
             var (shooter, _, _) = CreateTestEntity();
             shooter.EquippedWeapon = new WeaponProfile
             {
@@ -375,7 +390,7 @@ namespace TacticalSim.Tests
                 LoadedAmmunition = null!,
                 BaseTUCostToFire = 5f
             };
-            resolver.RegisterEntity(shooter);
+            world.AddEntity(shooter);
 
             var environment = new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0));
             var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment);
@@ -421,11 +436,12 @@ namespace TacticalSim.Tests
         [Fact]
         public void TurnResolver_MultipleEntities_InterleavesPhysiologyAndActionsDeterministically()
         {
-            var resolver = new TurnResolver();
+            var world = new TacticalWorld(WorldBounds.CreateDefault());
+            var resolver = new TurnResolver(world);
 
             // Entity A: Moderate bleed (10 ml/s) + 2x 1.0 TU actions
             var (entityA, physA, _) = CreateTestEntity(arterialBleed: 10f);
-            resolver.RegisterEntity(entityA);
+            world.AddEntity(entityA);
             var actionA1 = new GenericTacticalAction(entityA.Id, 1.0f);
             var actionA2 = new GenericTacticalAction(entityA.Id, 1.0f);
             resolver.ScheduleAction(actionA1);
@@ -433,7 +449,7 @@ namespace TacticalSim.Tests
 
             // Entity B: No bleed + 1x 1.5 TU action
             var (entityB, physB, _) = CreateTestEntity();
-            resolver.RegisterEntity(entityB);
+            world.AddEntity(entityB);
             var actionB1 = new GenericTacticalAction(entityB.Id, 1.5f);
             resolver.ScheduleAction(actionB1);
 
@@ -472,14 +488,15 @@ namespace TacticalSim.Tests
             var provider = services.BuildServiceProvider();
 
             var resolver = provider.GetRequiredService<ITurnResolver>();
+            var world = provider.GetRequiredService<ITacticalWorld>();
             Assert.NotNull(resolver);
             Assert.IsType<TurnResolver>(resolver);
 
             var (entity, _, _) = CreateTestEntity(arterialBleed: 10f);
-            resolver.RegisterEntity(entity);
+            world.AddEntity(entity);
 
-            Assert.Single(resolver.GetRegisteredEntities());
-            Assert.Same(entity, resolver.GetEntity(entity.Id));
+            Assert.Single(world.GetEntities());
+            Assert.Same(entity, world.GetEntity(entity.Id));
 
             resolver.Tick(1.0f);
             Assert.Equal(1.0f, resolver.GlobalTime, 4);
