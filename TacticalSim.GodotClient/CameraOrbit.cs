@@ -27,7 +27,6 @@ public partial class CameraOrbit : Camera3D
     private float _yaw;
     private float _pitch = Mathf.Pi / 2.1f;
     private bool _isPanning;
-    private bool _isOrbiting;
 
     public override void _Ready()
     {
@@ -69,16 +68,26 @@ public partial class CameraOrbit : Camera3D
                 case MouseButton.Middle:
                     _isPanning = mouseButton.Pressed;
                     break;
-                case MouseButton.Right:
-                    _isOrbiting = mouseButton.Pressed;
-                    break;
                 case MouseButton.WheelUp when mouseButton.Pressed:
-                    _distance = Mathf.Clamp(_distance - ZoomSpeed, MinZoom, MaxZoom);
-                    UpdateCameraPosition();
+                    ZoomIn();
                     break;
                 case MouseButton.WheelDown when mouseButton.Pressed:
-                    _distance = Mathf.Clamp(_distance + ZoomSpeed, MinZoom, MaxZoom);
-                    UpdateCameraPosition();
+                    ZoomOut();
+                    break;
+            }
+
+            return;
+        }
+
+        if (@event is InputEventKey { Pressed: true, Echo: false } keyEvent)
+        {
+            switch (keyEvent.Keycode)
+            {
+                case Key.Bracketleft:
+                    ZoomOut();
+                    break;
+                case Key.Bracketright:
+                    ZoomIn();
                     break;
             }
 
@@ -98,7 +107,7 @@ public partial class CameraOrbit : Camera3D
                 * PanSensitivity;
         }
 
-        if (_isOrbiting)
+        if (mouseMotion.AltPressed)
         {
             _yaw -= mouseMotion.Relative.X * RotationSpeed;
             _pitch = Mathf.Clamp(
@@ -107,10 +116,26 @@ public partial class CameraOrbit : Camera3D
                 Mathf.Pi / 2.1f);
         }
 
-        if (_isPanning || _isOrbiting)
+        if (_isPanning || mouseMotion.AltPressed)
         {
             UpdateCameraPosition();
         }
+    }
+
+    private void ZoomIn()
+    {
+        SetZoom(_distance - ZoomSpeed);
+    }
+
+    private void ZoomOut()
+    {
+        SetZoom(_distance + ZoomSpeed);
+    }
+
+    private void SetZoom(float distance)
+    {
+        _distance = Mathf.Clamp(distance, MinZoom, MaxZoom);
+        UpdateCameraPosition();
     }
 
     private void UpdateCameraPosition()
