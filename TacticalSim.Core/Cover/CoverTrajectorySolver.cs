@@ -25,13 +25,11 @@ public sealed class CoverTrajectorySolver : ICoverTrajectorySolver
         IEnumerable<CoverPolygon> cover)
     {
         ArgumentNullException.ThrowIfNull(cover);
-        Vector2 from = new(start.Position.X, start.Position.Z);
-        Vector2 to = new(end.Position.X, end.Position.Z);
         var crossings = new List<(CoverPolygon Cover, CoverIntersection Hit)>();
         foreach (CoverPolygon polygon in cover)
         {
             ArgumentNullException.ThrowIfNull(polygon);
-            if (polygon.TryIntersect(from, to, out CoverIntersection hit))
+            if (polygon.TryIntersect(start.Position, end.Position, out CoverIntersection hit))
             {
                 crossings.Add((polygon, hit));
             }
@@ -51,9 +49,12 @@ public sealed class CoverTrajectorySolver : ICoverTrajectorySolver
                 Velocity = velocity,
                 Time = start.Time + (end.Time - start.Time) * crossing.Hit.PathFraction
             };
-            Vector3 normal = new(crossing.Hit.SurfaceNormal.X, 0f, crossing.Hit.SurfaceNormal.Y);
             PenetrationResult result = _penetration.CalculatePenetration(
-                impactState, profile, _materials.GetMaterial(crossing.Cover.Material), crossing.Cover.Thickness, normal);
+                impactState,
+                profile,
+                _materials.GetMaterial(crossing.Cover.Material),
+                crossing.Cover.Thickness,
+                crossing.Hit.SurfaceNormal);
             impacts.Add(result);
             velocity = result.ExitVelocityVector;
 
