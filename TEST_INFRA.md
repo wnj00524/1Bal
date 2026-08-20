@@ -28,7 +28,7 @@
 ---
 
 ## Test Architecture
-- **Test Framework**: xUnit (`net8.0`)
+- **Test Framework**: xUnit (`net10.0`)
 - **Test Runner Command**: `dotnet test TacticalSim.slnx --verbosity normal`
 - **Pass / Fail Semantics**: 0 test failures, 0 compiler warnings, 0 compiler errors.
 - **Directory Layout**:

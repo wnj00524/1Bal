@@ -1,7 +1,7 @@
 # Project: TacticalSim - Issue #3 Fractionated TU Turn Resolver & Physiological Integration
 
 ## Architecture
-TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .NET 8.0 with `System.Numerics.Vector3` mathematics and `Microsoft.Extensions.DependencyInjection` service composition.
+TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .NET 10.0 with `System.Numerics.Vector3` mathematics and `Microsoft.Extensions.DependencyInjection` service composition.
 
 ### Core Architecture Components:
 1. **`TacticalSim.Core.Simulation`**:
