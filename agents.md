@@ -1,7 +1,7 @@
 # Agent Instructions: TacticalSim
 
 ## Overview
-This repository contains the foundational architecture for a high-fidelity, turn-based tactical simulator (`TacticalSim`). The environment is strictly deterministic and written in C# (.NET 8.0). It focuses on external ballistics, localized physiological trauma, and a decoupled architecture between the computational logic and the presentation layer.
+This repository contains the foundational architecture for a high-fidelity, turn-based tactical simulator (`TacticalSim`). The environment is strictly deterministic and written in C# (.NET 10.0). It focuses on external ballistics, localized physiological trauma, and a decoupled architecture between the computational logic and the presentation layer.
 
 ## Architecture Guidelines
 - **Strict Decoupling**: Keep the mathematical simulation (`TacticalSim.Core`) entirely independent of the UI/rendering engine.
