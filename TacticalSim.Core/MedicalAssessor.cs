@@ -112,6 +112,16 @@ namespace TacticalSim.Core
             if (dummy.BloodOxygenation < 0.85f)
                 sb.AppendLine($">>> HYPOXIA ALARM: SpO2 DANGEROUSLY LOW ({(dummy.BloodOxygenation*100f):F0}%) <<<");
 
+            if (report.LungCapacityLostPercentage >= 15f)
+            {
+                if (!dummy.HasChestSeal)
+                    sb.AppendLine(">>> PROGNOSIS: FATAL WITHIN 5 MINUTES WITHOUT FIRST AID <<<");
+                else if (dummy.TensionPneumothoraxLevel > 0f)
+                    sb.AppendLine(">>> PROGNOSIS: DETERIORATION HALTED; NEEDLE DECOMPRESSION REQUIRED <<<");
+                else
+                    sb.AppendLine(">>> PROGNOSIS: STABILIZED BY FIRST AID <<<");
+            }
+
             if (report.DestroyedVolumeCc.ContainsKey(OrganType.Heart) || report.LungCapacityLostPercentage > 5f || dummy.AirwayObstruction > 0.1f || dummy.BloodOxygenation < 0.85f)
                 sb.AppendLine();
 
