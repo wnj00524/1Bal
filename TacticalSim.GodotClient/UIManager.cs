@@ -134,6 +134,13 @@ namespace TacticalSim.GodotClient
 
         private void OnContextTargetSelected(string target)
         {
+            if (!_simulationManager.HasFocusedAgent)
+            {
+                _focusLabel.Text = "Select an agent before assigning a shot target.";
+                _targetMenu.Hide();
+                return;
+            }
+
             _simulationManager.QueueTargetedShot(target);
             _targetSelect.Select(System.Array.IndexOf(_targetProfiles, target));
             UpdateScenarioLabel();
