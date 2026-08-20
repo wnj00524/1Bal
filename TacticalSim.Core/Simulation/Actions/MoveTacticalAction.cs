@@ -16,6 +16,30 @@ namespace TacticalSim.Core.Simulation.Actions
 
         public float Distance => Vector3.Distance(StartPosition, TargetPosition);
 
+        /// <summary>
+        /// Advances a position toward a destination using SI units without overshooting it.
+        /// </summary>
+        public static Vector3 AdvanceTowards(
+            Vector3 currentPosition,
+            Vector3 targetPosition,
+            float movementSpeedMetersPerSecond,
+            float elapsedSeconds)
+        {
+            if (!float.IsFinite(movementSpeedMetersPerSecond) || movementSpeedMetersPerSecond < 0f)
+                throw new ArgumentOutOfRangeException(nameof(movementSpeedMetersPerSecond));
+            if (!float.IsFinite(elapsedSeconds) || elapsedSeconds < 0f)
+                throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
+
+            Vector3 displacement = targetPosition - currentPosition;
+            float remainingDistance = displacement.Length();
+            float travelDistance = movementSpeedMetersPerSecond * elapsedSeconds;
+
+            if (remainingDistance == 0f || travelDistance >= remainingDistance)
+                return targetPosition;
+
+            return currentPosition + displacement / remainingDistance * travelDistance;
+        }
+
         public MoveTacticalAction()
         {
         }

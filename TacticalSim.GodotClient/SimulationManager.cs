@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalSim.Core.Simulation;
+using TacticalSim.Core.Simulation.Actions;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.DependencyInjection;
@@ -15,6 +16,7 @@ namespace TacticalSim.GodotClient
 {
     public partial class SimulationManager : Node
     {
+        private const float WalkingSpeedMetersPerSecond = 1.4f;
         private IServiceProvider _serviceProvider = null!;
         
         public TacticalEntity Shooter { get; private set; } = null!;
@@ -101,7 +103,7 @@ namespace TacticalSim.GodotClient
             if (seconds != 5f)
                 throw new ArgumentOutOfRangeException(nameof(seconds), "Scenarios advance in five-second increments.");
 
-            ApplyPendingMovement();
+            ApplyPendingMovement(seconds);
 
             if (IsTargetedShotPending)
             {
@@ -119,6 +121,8 @@ namespace TacticalSim.GodotClient
         {
             if (!IsScenarioLoaded)
                 throw new InvalidOperationException("Load a scenario before selecting a shot target.");
+            if (_focusedAgent == null)
+                throw new InvalidOperationException("Select an agent before assigning a shot target.");
             if (string.IsNullOrWhiteSpace(target))
                 throw new ArgumentException("A target region is required.", nameof(target));
 
@@ -186,20 +190,28 @@ namespace TacticalSim.GodotClient
             _pendingMoveDestination = null;
         }
 
-        private void ApplyPendingMovement()
+        private void ApplyPendingMovement(float elapsedSeconds)
         {
             if (_focusedAgent == null || !_pendingMoveDestination.HasValue)
                 return;
 
             Godot.Vector3 destination = _pendingMoveDestination.Value;
-            _focusedAgent.Position = new System.Numerics.Vector3(
-                destination.X,
-                _focusedAgent.Position.Y,
-                destination.Z);
+            var targetPosition = new System.Numerics.Vector3(
+                destination.X, _focusedAgent.Position.Y, destination.Z);
+            _focusedAgent.Position = MoveTacticalAction.AdvanceTowards(
+                _focusedAgent.Position,
+                targetPosition,
+                WalkingSpeedMetersPerSecond,
+                elapsedSeconds);
 
             Node3D visual = ReferenceEquals(_focusedAgent, Shooter) ? _shooterVisual : _dummyVisual;
-            visual.Position = destination;
-            _pendingMoveDestination = null;
+            visual.Position = new Godot.Vector3(
+                _focusedAgent.Position.X,
+                destination.Y,
+                _focusedAgent.Position.Z);
+
+            if (_focusedAgent.Position == targetPosition)
+                _pendingMoveDestination = null;
         }
 
         public bool IsDummyAtScreenPosition(Godot.Vector2 screenPosition)
