@@ -11,6 +11,7 @@ namespace TacticalSim.Core
             
             var root = new BodyPart { Type = BodyPartType.Thorax };
             physiology.SetRoot(root);
+            var abdomen = new BodyPart { Type = BodyPartType.Abdomen, Parent = root };
             
             var neck = new BodyPart { Type = BodyPartType.Neck, Parent = root };
             var head = new BodyPart { Type = BodyPartType.Head, Parent = neck };
@@ -21,6 +22,7 @@ namespace TacticalSim.Core
             var rightLeg = new BodyPart { Type = BodyPartType.RightLeg, Parent = root };
             
             root.Children.Add(neck);
+            root.Children.Add(abdomen);
             neck.Children.Add(head);
             
             root.Children.Add(leftArm);
@@ -28,7 +30,7 @@ namespace TacticalSim.Core
             root.Children.Add(leftLeg);
             root.Children.Add(rightLeg);
             
-            PopulateTorsoVoxels(root);
+            PopulateTorsoVoxels(root, abdomen);
             PopulateHeadNeckVoxels(neck, head);
             PopulateLimbVoxels(leftArm, new Vector3(-0.3f, 0.25f, 0f), new Vector3(0.1f, 0.25f, 0.1f)); // Left Arm
             PopulateLimbVoxels(rightArm, new Vector3(0.3f, 0.25f, 0f), new Vector3(0.1f, 0.25f, 0.1f)); // Right Arm
@@ -80,7 +82,7 @@ namespace TacticalSim.Core
             }
         }
         
-        private static void PopulateTorsoVoxels(BodyPart torso)
+        private static void PopulateTorsoVoxels(BodyPart thorax, BodyPart abdomen)
         {
             float voxelSize = 0.01f; // 1cm voxels for high-res physiological modeling
             
@@ -96,7 +98,10 @@ namespace TacticalSim.Core
                         if (tissue != null)
                         {
                             var voxel = new PhysiologicalVoxel(pos, voxelSize, tissue.Value, organ);
-                            torso.Voxels.Add(voxel);
+                            // The abdomen is a distinct treatment region. Keep upper
+                            // thoracic structures (heart/lungs) on the thorax while
+                            // routing the lower torso to the abdominal body part.
+                            (y < 0.20f ? abdomen : thorax).Voxels.Add(voxel);
                         }
                     }
                 }
