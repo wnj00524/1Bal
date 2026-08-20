@@ -207,6 +207,10 @@ text = "Scenario"
 layout_mode = 2
 text = "Elapsed: 0s"
 
+[node name="FocusLbl" type="Label" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
+layout_mode = 2
+text = "Focus: none"
+
 [node name="AdvanceBtn" type="Button" parent="UIManager/Control/ScenarioPanel/Margin/HBox"]
 layout_mode = 2
 text = "Advance +5 Seconds"
@@ -262,6 +266,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, -10)
 radius = 0.3
 height = 1.8
 sides = 32
+use_collision = true
 
 [node name="DummyCircle" type="CSGCylinder3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)

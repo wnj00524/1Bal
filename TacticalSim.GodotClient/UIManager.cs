@@ -20,6 +20,7 @@ namespace TacticalSim.GodotClient
         private OptionButton _targetSelect = null!;
         private Label _scenarioLabel = null!;
         private Label _timeLabel = null!;
+        private Label _focusLabel = null!;
         private RichTextLabel _reportText = null!;
         private PopupPanel _targetMenu = null!;
         private TargetSilhouetteMenu _targetSilhouette = null!;
@@ -53,6 +54,7 @@ namespace TacticalSim.GodotClient
             _targetSelect = GetNode<OptionButton>("Control/SetupPanel/Margin/VBox/TargetSelect");
             _scenarioLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/ScenarioLbl");
             _timeLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/TimeLbl");
+            _focusLabel = GetNode<Label>("Control/ScenarioPanel/Margin/HBox/FocusLbl");
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
             _targetMenu = GetNode<PopupPanel>("Control/TargetContextMenu");
             _targetSilhouette = GetNode<TargetSilhouetteMenu>("Control/TargetContextMenu/Margin/VBox/Silhouette");
@@ -75,6 +77,17 @@ namespace TacticalSim.GodotClient
 
         public override void _UnhandledInput(InputEvent @event)
         {
+            if (@event is InputEventMouseButton
+                {
+                    ButtonIndex: MouseButton.Left,
+                    Pressed: true
+                } leftClick && _simulationManager.IsScenarioLoaded)
+            {
+                _focusLabel.Text = _simulationManager.HandleLeftClick(leftClick.Position);
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
             if (@event is not InputEventMouseButton
                 {
                     ButtonIndex: MouseButton.Right,
@@ -116,6 +129,7 @@ namespace TacticalSim.GodotClient
             _scenarioControls.Hide();
             _setupPanel.Show();
             _reportText.Text = "Choose a scene and loadout to begin.";
+            _focusLabel.Text = "Focus: none";
         }
 
         private void OnContextTargetSelected(string target)
