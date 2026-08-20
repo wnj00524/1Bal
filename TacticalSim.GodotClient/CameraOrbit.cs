@@ -25,7 +25,7 @@ public partial class CameraOrbit : Camera3D
     private Vector3 _targetPosition = new(0.0f, 1.25f, 0.0f);
     private float _distance = 3.0f;
     private float _yaw;
-    private float _pitch;
+    private float _pitch = Mathf.Pi / 2.1f;
     private bool _isPanning;
     private bool _isOrbiting;
 
