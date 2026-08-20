@@ -6,6 +6,7 @@ using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
+using TacticalSim.Core.World;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -36,6 +37,12 @@ namespace TacticalSim.Tests
             var turnResolver = provider.GetService<ITurnResolver>();
             Assert.NotNull(turnResolver);
             Assert.IsType<TurnResolver>(turnResolver);
+
+            var world = provider.GetService<ITacticalWorld>();
+            Assert.NotNull(world);
+            Assert.IsType<TacticalWorld>(world);
+            Assert.Equal(new Vector3(-50f, 0f, -50f), world.Bounds.Min);
+            Assert.Equal(new Vector3(50f, 30f, 50f), world.Bounds.Max);
 
             var dragModel = provider.GetService<IDragModel>();
             Assert.NotNull(dragModel);
@@ -88,6 +95,10 @@ namespace TacticalSim.Tests
             var env1 = provider.GetRequiredService<IEnvironmentModel>();
             var env2 = provider.GetRequiredService<IEnvironmentModel>();
             Assert.Same(env1, env2);
+
+            var world1 = provider.GetRequiredService<ITacticalWorld>();
+            var world2 = provider.GetRequiredService<ITacticalWorld>();
+            Assert.Same(world1, world2);
         }
 
         [Fact]

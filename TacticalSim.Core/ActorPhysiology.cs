@@ -62,19 +62,22 @@ namespace TacticalSim.Core.Physiology
                     float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
                     float rate = voxel.Organ switch
                     {
-                        OrganType.Heart => 10.0f,
-                        OrganType.Liver => 2.0f,
-                        OrganType.Spleen => 3.0f, // Highly vascular
-                        OrganType.Kidney => 2.5f, // Renal artery/vein
-                        OrganType.Lung => 0.5f,
-                        OrganType.Intestines => 0.2f, // Moderate bleeding
-                        OrganType.Muscle => 0.05f,
-                        OrganType.Stomach => 0.1f,
-                        OrganType.Bone => 0.8f,
-                        OrganType.Brain => 5.0f, // Highly vascular, intracranial pressure ignores
-                        OrganType.Airway => 1.0f, // Bleeds into lungs
-                        OrganType.Mouth => 0.5f, // Bleeds into airway
-                        _ => 0.05f
+                        // Cardiac muscle is continuously perfused under arterial
+                        // pressure; a destroyed cubic centimeter represents a
+                        // catastrophic rather than a generic soft-tissue bleed.
+                        OrganType.Heart => 6.0f,
+                        OrganType.Liver => 0.02f,
+                        OrganType.Spleen => 0.03f, 
+                        OrganType.Kidney => 0.03f, 
+                        OrganType.Lung => 0.005f,
+                        OrganType.Intestines => 0.002f, 
+                        OrganType.Muscle => 0.01f, // 100cc muscle tear = 1 ml/sec
+                        OrganType.Stomach => 0.002f,
+                        OrganType.Bone => 0.015f, // Highly vascular marrow, but not an artery
+                        OrganType.Brain => 0.05f, 
+                        OrganType.Airway => 0.01f, 
+                        OrganType.Mouth => 0.005f, 
+                        _ => 0.005f
                     };
                     activeRate += rate * volCc;
                 }
@@ -97,6 +100,10 @@ namespace TacticalSim.Core.Physiology
                     voxel.ApplyKineticEnergy(kineticEnergy, impactPoint);
                 }
             }
+            foreach (var child in Children)
+            {
+                child.ApplyTrauma(impactPoint, kineticEnergy);
+            }
         }
     }
 
@@ -110,13 +117,29 @@ namespace TacticalSim.Core.Physiology
         float ConsciousnessLevel { get; } // 0.0 to 1.0
         float HeartRateBpm { get; }
         float MeanArterialPressureMmhg { get; }
+        float BreathingRatePerMinute { get; }
+        float AutonomicDrive { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
 
         // Respiratory System
         float BloodOxygenation { get; } // 1.0 down to 0.0
         float AirwayObstruction { get; } // 0.0 to 1.0
         float AlveolarBloodAccumulation { get; } // ml
+        float TensionPneumothoraxLevel { get; } // 0.0 to 1.0
+        bool HasChestSeal { get; }
         
+        // Nervous System
+        float PainLevel { get; }
+        float ShockLevel { get; }
+        float AnalgesicLevel { get; }
+        
+        // Motor System
+        float MobilityLevel { get; } // 1.0 down to 0.0
+        float WeaponHandlingLevel { get; } // 1.0 down to 0.0
+        
+        void AdministerAnalgesic(float strength);
+        void ApplyChestSeal();
+        void PerformNeedleDecompression();
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -130,13 +153,45 @@ namespace TacticalSim.Core.Physiology
         
         public float HeartRateBpm { get; private set; } = 80f;
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
+        public float BreathingRatePerMinute { get; private set; } = 12f;
+        public float AutonomicDrive { get; private set; } = 1f;
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
-        public float AirwayObstruction { get; private set; } = 0.0f;
-        public float AlveolarBloodAccumulation { get; private set; } = 0.0f;
+        public float AirwayObstruction { get; private set; } = 0f;
+        public float AlveolarBloodAccumulation { get; private set; } = 0f;
+        public float TensionPneumothoraxLevel { get; private set; } = 0f;
+        public bool HasChestSeal { get; private set; }
 
-        public void SetRoot(BodyPart root) => RootBodyPart = root;
+        public float PainLevel { get; private set; } = 0f;
+        public float ShockLevel { get; private set; } = 0f;
+        public float AnalgesicLevel => _analgesicLevel;
+        
+        public float MobilityLevel { get; private set; } = 1.0f;
+        public float WeaponHandlingLevel { get; private set; } = 1.0f;
+
+        private float _analgesicLevel = 0f;
+        private float _cardiacFunction = 1f;
+
+        public void SetRoot(BodyPart root)
+        {
+            RootBodyPart = root;
+        }
+
+        public void AdministerAnalgesic(float strength)
+        {
+            _analgesicLevel = Math.Clamp(_analgesicLevel + MathF.Max(0f, strength), 0f, 1f);
+        }
+
+        public void ApplyChestSeal()
+        {
+            HasChestSeal = true;
+        }
+
+        public void PerformNeedleDecompression()
+        {
+            TensionPneumothoraxLevel = 0f;
+        }
 
         public void TickPhysiology(float dt)
         {
@@ -153,8 +208,99 @@ namespace TacticalSim.Core.Physiology
             }
 
             TickIschemia(RootBodyPart, dt);
+            UpdateAutonomicControl();
             UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
+            UpdateNervousSystemState(dt);
+            UpdateMotorState();
+        }
+
+        private void UpdateAutonomicControl()
+        {
+            AutonomicDrive = CalculateOrganFunction(OrganType.Brain);
+            _cardiacFunction = CalculateOrganFunction(OrganType.Heart);
+            BreathingRatePerMinute = 12f * AutonomicDrive;
+        }
+
+        private float CalculateOrganFunction(OrganType organ)
+        {
+            float total = 0f;
+            float destroyed = 0f;
+            CountOrganVoxels(RootBodyPart, organ, ref total, ref destroyed);
+            return total > 0f ? Math.Clamp(1f - (destroyed / total), 0f, 1f) : 1f;
+        }
+
+        private static void CountOrganVoxels(
+            BodyPart part,
+            OrganType organ,
+            ref float total,
+            ref float destroyed)
+        {
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.Organ != organ)
+                    continue;
+
+                total += 1f;
+                if (voxel.IsDestroyed)
+                    destroyed += 1f;
+            }
+
+            foreach (var child in part.Children)
+                CountOrganVoxels(child, organ, ref total, ref destroyed);
+        }
+
+        private void UpdateMotorState()
+        {
+            float legBoneTotal = 0, legBoneDest = 0;
+            float armBoneTotal = 0, armBoneDest = 0;
+            float legMuscleTotal = 0, legMuscleDest = 0;
+            float armMuscleTotal = 0, armMuscleDest = 0;
+
+            CalculateMotorDamage(RootBodyPart, ref legBoneTotal, ref legBoneDest, ref legMuscleTotal, ref legMuscleDest, ref armBoneTotal, ref armBoneDest, ref armMuscleTotal, ref armMuscleDest);
+
+            if (legBoneTotal > 0)
+            {
+                float boneLoss = legBoneDest / legBoneTotal;
+                float muscleLoss = legMuscleTotal > 0 ? (legMuscleDest / legMuscleTotal) : 0f;
+                // 20% bone destruction or 50% muscle destruction will completely disable the limb
+                MobilityLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+            }
+            
+            if (armBoneTotal > 0)
+            {
+                float boneLoss = armBoneDest / armBoneTotal;
+                float muscleLoss = armMuscleTotal > 0 ? (armMuscleDest / armMuscleTotal) : 0f;
+                WeaponHandlingLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+            }
+        }
+
+        private void CalculateMotorDamage(BodyPart part, ref float lbTotal, ref float lbDest, ref float lmTotal, ref float lmDest, ref float abTotal, ref float abDest, ref float amTotal, ref float amDest)
+        {
+            bool isLeg = (part.Type == BodyPartType.LeftLeg || part.Type == BodyPartType.RightLeg);
+            bool isArm = (part.Type == BodyPartType.LeftArm || part.Type == BodyPartType.RightArm);
+            
+            if (isLeg || isArm)
+            {
+                foreach (var voxel in part.Voxels)
+                {
+                    if (voxel.Organ == OrganType.Bone)
+                    {
+                        if (isLeg) { lbTotal += 1f; if (voxel.IsDestroyed) lbDest += 1f; }
+                        else       { abTotal += 1f; if (voxel.IsDestroyed) abDest += 1f; }
+                    }
+                    else if (voxel.Organ == OrganType.Muscle)
+                    {
+                        if (isLeg) { lmTotal += 1f; if (voxel.IsDestroyed) lmDest += 1f; }
+                        else       { amTotal += 1f; if (voxel.IsDestroyed) amDest += 1f; }
+                    }
+                }
+            }
+            
+            foreach (var child in part.Children)
+            {
+                CalculateMotorDamage(child, ref lbTotal, ref lbDest, ref lmTotal, ref lmDest, ref abTotal, ref abDest, ref amTotal, ref amDest);
+            }
         }
 
         private float CalculateBleedRate(BodyPart part, out float airwayBleed)
@@ -222,8 +368,22 @@ namespace TacticalSim.Core.Physiology
                 lungCapacityLost = destroyedLungVoxels / totalLungVoxels;
             float remainingCapacity = 1.0f - lungCapacityLost;
 
+            // A penetrating lung injury leaks air into the pleural cavity. A chest
+            // seal prevents further ingress; decompression is required to remove
+            // pressure that has already accumulated.
+            if (destroyedLungVoxels > 0f && !HasChestSeal)
+            {
+                float punctureFraction = destroyedLungVoxels / totalLungVoxels;
+                TensionPneumothoraxLevel = MathF.Min(1f,
+                    TensionPneumothoraxLevel + (punctureFraction * 0.02f * dt));
+            }
+
             // 4. Respiration Effectiveness
-            float effectiveness = (1.0f - AirwayObstruction) * remainingCapacity;
+            float effectiveness = (1.0f - AirwayObstruction)
+                * remainingCapacity
+                * (1.0f - TensionPneumothoraxLevel)
+                * AutonomicDrive
+                * _cardiacFunction;
 
             // 5. Hypoxia Calculation
             if (effectiveness < 0.8f) // Demand threshold
@@ -256,9 +416,10 @@ namespace TacticalSim.Core.Physiology
                     if (voxel.IsDestroyed) lungDest += 1f;
                 }
             }
-
             foreach (var child in part.Children)
+            {
                 CalculateRespiratoryDamage(child, ref airwayTotal, ref airwayDest, ref lungTotal, ref lungDest);
+            }
         }
 
         private void UpdateCardiovascularState()
@@ -331,6 +492,55 @@ namespace TacticalSim.Core.Physiology
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f;
             }
+
+            HeartRateBpm *= AutonomicDrive * _cardiacFunction;
+            MeanArterialPressureMmhg *= AutonomicDrive * _cardiacFunction;
+
+            if (HeartRateBpm <= 0f)
+            {
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+            }
+
+            if (AutonomicDrive <= 0f)
+                ConsciousnessLevel = 0f;
+        }
+
+        private void UpdateNervousSystemState(float dt)
+        {
+            float rawPain = CalculateNociception(RootBodyPart);
+            
+            if (_analgesicLevel > 0)
+            {
+                _analgesicLevel -= 0.01f * dt; // Slow decay
+                _analgesicLevel = MathF.Max(0f, _analgesicLevel);
+            }
+            
+            float endorphinBuffer = 0.1f;
+            
+            PainLevel = MathF.Max(0f, rawPain - endorphinBuffer - _analgesicLevel);
+            PainLevel = MathF.Min(1.0f, PainLevel);
+            
+            float bloodLossRatio = (_baselineBloodVolume - TotalBloodVolume) / _baselineBloodVolume;
+            ShockLevel = MathF.Min(1.0f, (PainLevel * 0.5f) + (bloodLossRatio * 2.0f));
+            
+        }
+
+        private float CalculateNociception(BodyPart part)
+        {
+            float pain = 0f;
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.IsDestroyed || voxel.DepositedEnergy > 0)
+                {
+                    pain += (voxel.DepositedEnergy * voxel.Tissue.PainReceptorDensity) * 0.001f;
+                }
+            }
+            foreach (var child in part.Children)
+            {
+                pain += CalculateNociception(child);
+            }
+            return pain;
         }
 
         public void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint)

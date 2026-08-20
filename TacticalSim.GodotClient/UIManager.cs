@@ -22,6 +22,19 @@ namespace TacticalSim.GodotClient
         private bool _hasExportedReport = false;
 
         private OptionButton _ammoSelectButton = null!;
+        private OptionButton _targetSelectButton = null!;
+        
+        private readonly string[] _targetProfiles = new[]
+        {
+            "Chest",
+            "Head",
+            "Neck",
+            "Abdomen",
+            "Left Arm",
+            "Right Arm",
+            "Left Leg",
+            "Right Leg"
+        };
         
         private readonly System.Collections.Generic.List<TacticalSim.Core.Entities.AmmunitionProfile> _ammoProfiles = new()
         {
@@ -80,6 +93,13 @@ namespace TacticalSim.GodotClient
             }
             _ammoSelectButton.ItemSelected += OnAmmoSelected;
             
+            _targetSelectButton = GetNode<OptionButton>("Control/Panel/Margin/VBox/HBox/TargetSelect");
+            foreach (var target in _targetProfiles)
+            {
+                _targetSelectButton.AddItem(target);
+            }
+            _targetSelectButton.ItemSelected += OnTargetSelected;
+            
             _playPauseButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/PlayBtn");
             _playPauseButton.Pressed += OnPlayPausePressed;
             
@@ -91,21 +111,40 @@ namespace TacticalSim.GodotClient
             _medTickButton = GetNode<Button>("Control/Panel/Margin/VBox/HBox/MedTickBtn");
             _medTickButton.Pressed += OnMedTickPressed;
             
+            var hbox = GetNode<Godot.BoxContainer>("Control/Panel/Margin/VBox/HBox");
+            var analgesicBtn = new Godot.Button { Text = "Give Analgesic" };
+            hbox.AddChild(analgesicBtn);
+            analgesicBtn.Pressed += () => {
+                if (_simulationManager.Dummy != null)
+                {
+                    _simulationManager.Dummy.Physiology.AdministerAnalgesic(0.5f);
+                    var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
+                    _reportText.Text = report.AssessmentText;
+                }
+            };
+            
             _reportText = GetNode<RichTextLabel>("Control/ReportPanel/Margin/ReportText");
+            
+            // Initialize with default ammo and target to set bounds correctly
+            OnTargetSelected(0);
+            OnAmmoSelected(0);
+        }
+
+        private void OnTargetSelected(long index)
+        {
+            _simulationManager.ActiveTarget = _targetProfiles[(int)index];
+            _currentPlaybackTime = 0f;
+            _timelineSlider.Value = 0f;
+            UpdateScrubber(0f);
         }
 
         private void OnAmmoSelected(long index)
         {
             _simulationManager.ActiveAmmo = _ammoProfiles[(int)index];
             
-            if (_simulationManager.ActiveAmmo.MuzzleVelocity < 100f)
-            {
-                _maxPlaybackTime = 0.040f; // 40ms for slow projectiles (knife)
-            }
-            else 
-            {
-                _maxPlaybackTime = 0.010f; // 10ms for bullets
-            }
+            // Calculate time to travel to the target + a little extra for pass-through/cavitation
+            float dist = _simulationManager.ActiveAmmo.Name.Contains("Knife") ? 1.0f : 10.0f;
+            _maxPlaybackTime = (dist / _simulationManager.ActiveAmmo.MuzzleVelocity) + 0.005f;
 
             _timelineSlider.MaxValue = _maxPlaybackTime;
             
@@ -115,14 +154,30 @@ namespace TacticalSim.GodotClient
             UpdateScrubber(0f);
         }
 
+        private float _postImpactTime = 0f;
+
         private void OnMedTickPressed()
         {
             if (_simulationManager.Dummy != null)
             {
                 _simulationManager.Dummy.Physiology.TickPhysiology(10.0f);
+                _postImpactTime += 10.0f;
+                UpdateTimeLabel();
                 
                 var report = TacticalSim.Core.MedicalAssessor.AssessTrauma(_simulationManager.Dummy.Physiology);
                 _reportText.Text = report.AssessmentText;
+            }
+        }
+
+        private void UpdateTimeLabel()
+        {
+            if (_postImpactTime > 0f)
+            {
+                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s  [+{_postImpactTime:F0}s]";
+            }
+            else
+            {
+                _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
             }
         }
 
@@ -143,7 +198,9 @@ namespace TacticalSim.GodotClient
         private void UpdateScrubber(float time)
         {
             _currentPlaybackTime = time;
-            _timeLabel.Text = $"{_currentPlaybackTime:F4} / {_maxPlaybackTime:F4} s";
+            _postImpactTime = 0f;
+            UpdateTimeLabel();
+            
             _simulationManager.ScrubToTime(_currentPlaybackTime);
             
             // Generate live medical assessment
@@ -169,8 +226,9 @@ namespace TacticalSim.GodotClient
         {
             if (_isPlaying)
             {
-                // Playback speed: extremely slow motion for 10ms flight/cavitation
-                float nextTime = _currentPlaybackTime + (float)delta * 0.005f; 
+                // Playback speed: scaled so full flight takes about 2 seconds of real time
+                float playbackSpeed = _maxPlaybackTime / 2.0f;
+                float nextTime = _currentPlaybackTime + (float)delta * playbackSpeed; 
                 if (nextTime >= _maxPlaybackTime)
                 {
                     nextTime = _maxPlaybackTime;

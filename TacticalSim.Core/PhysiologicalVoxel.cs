@@ -9,6 +9,7 @@ namespace TacticalSim.Core.Physiology
         public float Density; // kg/m^3
         public float Elasticity; // Resistance to permanent tearing from stretch
         public float ShearStrength; // MPa, resistance to permanent tearing
+        public float PainReceptorDensity;
     }
     
     public struct CavitationEvent
@@ -102,6 +103,18 @@ namespace TacticalSim.Core.Physiology
 
             float speed = projectile.Velocity.Length();
             float initialEnergy = 0.5f * profile.Mass * (speed * speed);
+
+            if (Organ == OrganType.Bone)
+            {
+                Vector3 impactNormal = CalculateImpactNormal(projectile.Position, rayDirection);
+                BoneImpactResult impact = InternalRicochetSolver.Resolve(
+                    projectile.Velocity, profile, impactNormal, Tissue, distanceInMeters);
+                projectile.Velocity = impact.Velocity;
+                if (impact.Outcome == BoneImpactOutcome.Ricocheted)
+                    return ApplyKineticEnergy(impact.TransferredEnergy, projectile.Position);
+
+                ApplyKineticEnergy(impact.TransferredEnergy, projectile.Position);
+            }
             
             // Simplified ballistic gel/tissue penetration drag: F_d = 0.5 * rho_tissue * v^2 * Cd * A
             // We use the tissue density instead of air density.
@@ -120,8 +133,10 @@ namespace TacticalSim.Core.Physiology
             // Update projectile state
             projectile.Velocity = rayDirection * exitSpeed;
             projectile.Position += rayDirection * distanceInMeters; // Advance projectile to exit point
+            
+            float directCrushVolume = profile.CrossSectionalArea * distanceInMeters;
 
-            return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)));
+            return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)), directCrushVolume);
         }
 
         public bool Contains(Vector3 point)
@@ -141,6 +156,18 @@ namespace TacticalSim.Core.Physiology
             Vector3 rayDirection = Vector3.Normalize(projectile.Velocity);
             float speed = projectile.Velocity.Length();
             float initialEnergy = 0.5f * profile.Mass * (speed * speed);
+
+            if (Organ == OrganType.Bone)
+            {
+                Vector3 impactNormal = CalculateNearestSurfaceNormal(projectile.Position);
+                BoneImpactResult impact = InternalRicochetSolver.Resolve(
+                    projectile.Velocity, profile, impactNormal, Tissue, MathF.Min(distanceInMeters, Size));
+                projectile.Velocity = impact.Velocity;
+                if (impact.Outcome == BoneImpactOutcome.Ricocheted)
+                    return ApplyKineticEnergy(impact.TransferredEnergy, projectile.Position);
+
+                ApplyKineticEnergy(impact.TransferredEnergy, projectile.Position);
+            }
             
             // Simplified ballistic gel/tissue penetration drag: F_d = 0.5 * rho_tissue * v^2 * Cd * A
             float dragForce = 0.5f * Tissue.Density * (speed * speed) * profile.DragModel.GetDragCoefficient(0) * profile.CrossSectionalArea;
@@ -162,6 +189,51 @@ namespace TacticalSim.Core.Physiology
             return ApplyKineticEnergy(energyLost, projectile.Position, directCrushVolume);
         }
 
+        private Vector3 CalculateImpactNormal(Vector3 origin, Vector3 direction)
+        {
+            if (Contains(origin)) return CalculateNearestSurfaceNormal(origin);
+
+            float entryTime = float.NegativeInfinity;
+            Vector3 normal = CalculateNearestSurfaceNormal(origin);
+
+            CheckEntryPlane(MinBounds.X, MaxBounds.X, origin.X, direction.X,
+                -Vector3.UnitX, Vector3.UnitX, ref entryTime, ref normal);
+            CheckEntryPlane(MinBounds.Y, MaxBounds.Y, origin.Y, direction.Y,
+                -Vector3.UnitY, Vector3.UnitY, ref entryTime, ref normal);
+            CheckEntryPlane(MinBounds.Z, MaxBounds.Z, origin.Z, direction.Z,
+                -Vector3.UnitZ, Vector3.UnitZ, ref entryTime, ref normal);
+            return normal;
+        }
+
+        private static void CheckEntryPlane(float minimum, float maximum, float origin, float direction,
+            Vector3 minimumNormal, Vector3 maximumNormal, ref float entryTime, ref Vector3 normal)
+        {
+            if (MathF.Abs(direction) < 1e-6f) return;
+            float time = ((direction > 0f ? minimum : maximum) - origin) / direction;
+            if (time > entryTime)
+            {
+                entryTime = time;
+                normal = direction > 0f ? minimumNormal : maximumNormal;
+            }
+        }
+
+        private Vector3 CalculateNearestSurfaceNormal(Vector3 point)
+        {
+            float xMin = MathF.Abs(point.X - MinBounds.X);
+            float xMax = MathF.Abs(point.X - MaxBounds.X);
+            float yMin = MathF.Abs(point.Y - MinBounds.Y);
+            float yMax = MathF.Abs(point.Y - MaxBounds.Y);
+            float zMin = MathF.Abs(point.Z - MinBounds.Z);
+            float zMax = MathF.Abs(point.Z - MaxBounds.Z);
+            float minimum = MathF.Min(MathF.Min(MathF.Min(xMin, xMax), MathF.Min(yMin, yMax)), MathF.Min(zMin, zMax));
+
+            if (minimum == xMin) return -Vector3.UnitX;
+            if (minimum == xMax) return Vector3.UnitX;
+            if (minimum == yMin) return -Vector3.UnitY;
+            if (minimum == yMax) return Vector3.UnitY;
+            return minimum == zMin ? -Vector3.UnitZ : Vector3.UnitZ;
+        }
+
         /// <summary>
         /// Applies kinetic energy transfer to the voxel directly (e.g. from adjacent blast).
         /// </summary>
@@ -170,42 +242,52 @@ namespace TacticalSim.Core.Physiology
             if (IsDestroyed) return null;
 
             DepositedEnergy += deltaE;
-            
-            // Temporary cavity volume calculation
-            // Energy creates a cavity volume inversely proportional to elasticity and density
-            float stretchFactor = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
-            TemporaryCavityVolume += stretchFactor;
-            
-            // Calculate spherical radius of the temporary cavity (V = 4/3 * pi * r^3 -> r = cbrt(V / (4/3 * pi)))
-            float cavityRadius = MathF.Cbrt(TemporaryCavityVolume / (4f/3f * MathF.PI));
-
-            // Permanent damage consists of direct crush + stretch tearing
             PermanentCavityVolume += directCrushVolume;
 
-            // Permanent cavity from stretch occurs when accumulated stretch stress exceeds shear strength
-            // The threshold scales linearly with Voxel Size since smaller voxels receive proportionally less of the bullet's continuous energy dump
-            if (TemporaryCavityVolume > Tissue.ShearStrength * 0.1f * Size) 
+            CavitationEvent? result = null;
+
+            if (directCrushVolume > 0f)
             {
-                PermanentCavityVolume += stretchFactor * 0.1f; // 10% of temporary becomes permanent
-            }
-            
-            if (PermanentCavityVolume > (Size * Size * Size * 0.5f)) // Destroyed if 50% of volume is carved out
-            {
-                IsDestroyed = true;
-            }
-            
-            // If cavity radius exceeds half voxel size, we need to propagate
-            if (cavityRadius > (Size * 0.5f))
-            {
-                return new CavitationEvent
+                // This is a direct hit from the bullet.
+                // Calculate the macroscopic temporary cavity created by this energy dump.
+                float macroscopicStretch = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
+                float cavityRadius = MathF.Cbrt(macroscopicStretch / (4f/3f * MathF.PI));
+                
+                result = new CavitationEvent
                 {
                     Origin = originPoint,
-                    Radius = cavityRadius,
-                    Energy = deltaE * 0.5f // Dissipate energy radially
+                    Energy = deltaE,
+                    Radius = cavityRadius
                 };
             }
+            else
+            {
+                // This is a neighbor receiving energy from the blast wave.
+                // We calculate the local stretch volume created by THIS voxel's share of the energy.
+                float localStretchVolume = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
+                float voxelVolume = Size * Size * Size;
+                
+                // If the local stretch exceeds the shear limits of the tissue, it tears permanently.
+                // The threshold is based on ShearStrength. Brittle tissues (liver, brain, bone) tear easily.
+                float tearThreshold = Tissue.ShearStrength * 0.1f * voxelVolume;
+                
+                if (localStretchVolume > tearThreshold)
+                {
+                    // Tissues with high elasticity (like muscle) snap back and suffer less permanent tearing
+                    // Brittle tissues (like liver, bone) suffer massive permanent tearing
+                    float tearingFactor = 0.1f * (1.0f - Tissue.Elasticity);
+                    PermanentCavityVolume += localStretchVolume * tearingFactor;
+                }
+            }
             
-            return null;
+            // If the voxel has accumulated enough permanent tearing/crush (50% of its volume), it is destroyed.
+            if (PermanentCavityVolume > (Size * Size * Size * 0.5f))
+            {
+                IsDestroyed = true;
+                PermanentCavityVolume = Size * Size * Size;
+            }
+
+            return result;
         }
     }
 }

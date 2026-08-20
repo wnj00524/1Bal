@@ -11,33 +11,41 @@ public partial class CameraOrbit : Camera3D
     public float PanSensitivity { get; set; } = 0.01f;
 
     [Export]
-    public float OrbitSensitivity { get; set; } = 0.2f;
+    public float RotationSpeed { get; set; } = 0.005f;
 
     [Export]
-    public float ZoomStep { get; set; } = 0.75f;
+    public float ZoomSpeed { get; set; } = 0.5f;
 
+    [Export]
+    public float MinZoom { get; set; } = 0.5f;
+
+    [Export]
+    public float MaxZoom { get; set; } = 10.0f;
+
+    private Vector3 _targetPosition = new(0.0f, 1.25f, 0.0f);
+    private float _distance = 3.0f;
+    private float _yaw;
+    private float _pitch;
     private bool _isPanning;
     private bool _isOrbiting;
 
+    public override void _Ready()
+    {
+        UpdateCameraPosition();
+    }
+
     public override void _Process(double delta)
     {
-        Vector3 movement = Vector3.Zero;
         Vector3 forward = -GlobalTransform.Basis.Z;
         Vector3 right = GlobalTransform.Basis.X;
 
         forward.Y = 0.0f;
         right.Y = 0.0f;
 
-        if (!forward.IsZeroApprox())
-        {
-            forward = forward.Normalized();
-        }
+        if (!forward.IsZeroApprox()) forward = forward.Normalized();
+        if (!right.IsZeroApprox()) right = right.Normalized();
 
-        if (!right.IsZeroApprox())
-        {
-            right = right.Normalized();
-        }
-
+        Vector3 movement = Vector3.Zero;
         if (Input.IsPhysicalKeyPressed(Key.W)) movement += forward;
         if (Input.IsPhysicalKeyPressed(Key.S)) movement -= forward;
         if (Input.IsPhysicalKeyPressed(Key.A)) movement -= right;
@@ -47,7 +55,8 @@ public partial class CameraOrbit : Camera3D
 
         if (!movement.IsZeroApprox())
         {
-            GlobalPosition += movement.Normalized() * MoveSpeed * (float)delta;
+            _targetPosition += movement.Normalized() * MoveSpeed * (float)delta;
+            UpdateCameraPosition();
         }
     }
 
@@ -60,14 +69,17 @@ public partial class CameraOrbit : Camera3D
                 case MouseButton.Middle:
                     _isPanning = mouseButton.Pressed;
                     break;
+                case MouseButton.Left:
                 case MouseButton.Right:
                     _isOrbiting = mouseButton.Pressed;
                     break;
                 case MouseButton.WheelUp when mouseButton.Pressed:
-                    GlobalPosition -= GlobalTransform.Basis.Z * ZoomStep;
+                    _distance = Mathf.Clamp(_distance - ZoomSpeed, MinZoom, MaxZoom);
+                    UpdateCameraPosition();
                     break;
                 case MouseButton.WheelDown when mouseButton.Pressed:
-                    GlobalPosition += GlobalTransform.Basis.Z * ZoomStep;
+                    _distance = Mathf.Clamp(_distance + ZoomSpeed, MinZoom, MaxZoom);
+                    UpdateCameraPosition();
                     break;
             }
 
@@ -81,24 +93,35 @@ public partial class CameraOrbit : Camera3D
 
         if (_isPanning)
         {
-            Vector3 pan =
+            _targetPosition +=
                 (-GlobalTransform.Basis.X * mouseMotion.Relative.X
                  + GlobalTransform.Basis.Y * mouseMotion.Relative.Y)
                 * PanSensitivity;
-
-            GlobalPosition += pan;
         }
 
         if (_isOrbiting)
         {
-            Vector3 rotation = RotationDegrees;
-            rotation.X = Mathf.Clamp(
-                rotation.X - mouseMotion.Relative.Y * OrbitSensitivity,
-                -89.0f,
-                89.0f);
-            rotation.Y -= mouseMotion.Relative.X * OrbitSensitivity;
-            rotation.Z = 0.0f;
-            RotationDegrees = rotation;
+            _yaw -= mouseMotion.Relative.X * RotationSpeed;
+            _pitch = Mathf.Clamp(
+                _pitch - mouseMotion.Relative.Y * RotationSpeed,
+                -Mathf.Pi / 2.1f,
+                Mathf.Pi / 2.1f);
         }
+
+        if (_isPanning || _isOrbiting)
+        {
+            UpdateCameraPosition();
+        }
+    }
+
+    private void UpdateCameraPosition()
+    {
+        Vector3 offset = new(
+            _distance * Mathf.Cos(_pitch) * Mathf.Sin(_yaw),
+            _distance * Mathf.Sin(_pitch),
+            _distance * Mathf.Cos(_pitch) * Mathf.Cos(_yaw));
+
+        GlobalPosition = _targetPosition + offset;
+        LookAt(_targetPosition, Vector3.Up);
     }
 }

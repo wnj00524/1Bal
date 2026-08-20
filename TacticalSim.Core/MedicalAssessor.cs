@@ -18,7 +18,15 @@ namespace TacticalSim.Core
         public static MedicalReport AssessTrauma(IActorPhysiology dummy)
         {
             var report = new MedicalReport();
-            var voxels = dummy.RootBodyPart.Voxels;
+            
+            var allVoxels = new List<PhysiologicalVoxel>();
+            void Collect(BodyPart p) {
+                allVoxels.AddRange(p.Voxels);
+                foreach (var c in p.Children) Collect(c);
+            }
+            Collect(dummy.RootBodyPart);
+
+            var voxels = allVoxels;
 
             float totalLungVolume = 0;
             float destroyedLungVolume = 0;
@@ -126,6 +134,25 @@ namespace TacticalSim.Core
             sb.AppendLine($"Heart Rate: {dummy.HeartRateBpm:F0} BPM");
             sb.AppendLine($"Hemorrhage Class: {dummy.CurrentHemorrhageClass}");
             sb.AppendLine($"SpO2 (Oxygenation): {(dummy.BloodOxygenation*100f):F0}%");
+            
+            sb.AppendLine($"Pain Level: {(dummy.PainLevel*100f):F0}%");
+            if (dummy.ShockLevel > 0f)
+                sb.AppendLine($"Shock Level: {(dummy.ShockLevel*100f):F0}%");
+                
+            if (dummy.MobilityLevel < 1.0f)
+                sb.AppendLine($"Mobility Level: {(dummy.MobilityLevel*100f):F0}%");
+            if (dummy.WeaponHandlingLevel < 1.0f)
+                sb.AppendLine($"Weapon Handling Level: {(dummy.WeaponHandlingLevel*100f):F0}%");
+                
+            if (dummy.PainLevel > 0.8f)
+                sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE AGONY (Accuracy Degraded) <<<");
+            if (dummy.ShockLevel > 0.5f)
+                sb.AppendLine(">>> NEUROLOGICAL ALARM: SEVERE SHOCK DETECTED <<<");
+                
+            if (dummy.MobilityLevel < 0.5f)
+                sb.AppendLine(">>> MOTOR ALARM: SEVERE LEG TRAUMA (Mobility Impaired) <<<");
+            if (dummy.WeaponHandlingLevel < 0.5f)
+                sb.AppendLine(">>> MOTOR ALARM: SEVERE ARM TRAUMA (Weapon Handling Impaired) <<<");
             
             if (dummy.ConsciousnessLevel <= 0f)
             {

@@ -2,8 +2,10 @@ using System;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Cover;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Simulation;
+using TacticalSim.Core.World;
 
 namespace TacticalSim.Core.DependencyInjection
 {
@@ -40,6 +42,7 @@ namespace TacticalSim.Core.DependencyInjection
 
             services.AddSingleton<IMaterialRegistry, MaterialRegistry>();
             services.AddTransient<IMaterialPenetrationSystem, MaterialPenetrationSystem>();
+            services.AddTransient<ICoverTrajectorySolver, CoverTrajectorySolver>();
 
             return services;
         }
@@ -53,7 +56,9 @@ namespace TacticalSim.Core.DependencyInjection
         {
             ArgumentNullException.ThrowIfNull(services);
 
-            services.AddTransient<ITurnResolver, TurnResolver>();
+            services.AddSingleton<ITacticalWorld>(_ => new TacticalWorld(WorldBounds.CreateDefault()));
+            services.AddTransient<ITurnResolver>(provider =>
+                new TurnResolver(provider.GetRequiredService<ITacticalWorld>()));
 
             return services;
         }

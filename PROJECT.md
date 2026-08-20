@@ -45,6 +45,8 @@ TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .N
 | 20 | E2E Tier 3 Tests (Cross-Feature Combinations) | Concurrent multi-actor action chains running alongside active trauma progression, tourniquet ischemia, and mid-tick failure isolation. | M2 | `ORIGINAL_REQUEST.md` AC |
 | 21 | E2E Tier 4 Tests (Real-World Scenarios) | Multi-actor tactical combat scenarios with movement, aiming, shooting, injury, tourniquet application, and turn progression. | M2 | `ORIGINAL_REQUEST.md` AC |
 | 22 | Solution Clean Build & 100% Tests Pass | Zero warnings, zero errors (`dotnet build`), 100% test pass rate (`dotnet test`). | M3 | `ORIGINAL_REQUEST.md` AC |
+| 23 | Bounded 3D World | AABB world bounds, `ITacticalWorld`/`TacticalWorld` as spatial authority, entity management moved from `TurnResolver`. Default 100m×100m×30m for UK house scenarios. | M4 | `docs/issues/ISSUE-005-BOUNDED-3D-WORLD.md` |
+| 24 | Architecture Tests | Automated reflection-based tests ensuring `TacticalSim.Core` has no UI/presentation dependencies. | M3 | `ArchitectureTests.cs` |
 
 ---
 
@@ -55,6 +57,7 @@ TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .N
 | M1 | Core Turn Resolver & Physiology Integration | Enhance `ITurnResolver` and `TurnResolver` with entity management, physiological ticking, clean action math, and DI registration. | none | DONE |
 | M2 | Comprehensive E2E Testing Suite | Develop Tiers 1-4 comprehensive xUnit test suite for turn resolution, multi-actor interleaving, and physiological integration; publish `TEST_READY.md`. | M1 | DONE |
 | M3 | Verification, Hardening & Acceptance Gate | Run full test suite, execute adversarial challenger verification, forensic integrity audit, and ensure 0 warnings/0 errors. | M1, M2 | DONE |
+| M4 | Bounded 3D World & Entity Refactor | Implement bounded 3D world, refactor entity ownership from TurnResolver to TacticalWorld, migrate all tests. See `docs/issues/ISSUE-005-BOUNDED-3D-WORLD.md`. | M3 | TODO |
 
 ---
 
