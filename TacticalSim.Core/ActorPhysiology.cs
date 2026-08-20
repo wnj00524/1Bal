@@ -114,22 +114,29 @@ namespace TacticalSim.Core.Physiology
         float ConsciousnessLevel { get; } // 0.0 to 1.0
         float HeartRateBpm { get; }
         float MeanArterialPressureMmhg { get; }
+        float BreathingRatePerMinute { get; }
+        float AutonomicDrive { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
 
         // Respiratory System
         float BloodOxygenation { get; } // 1.0 down to 0.0
         float AirwayObstruction { get; } // 0.0 to 1.0
         float AlveolarBloodAccumulation { get; } // ml
+        float TensionPneumothoraxLevel { get; } // 0.0 to 1.0
+        bool HasChestSeal { get; }
         
         // Nervous System
         float PainLevel { get; }
         float ShockLevel { get; }
+        float AnalgesicLevel { get; }
         
         // Motor System
         float MobilityLevel { get; } // 1.0 down to 0.0
         float WeaponHandlingLevel { get; } // 1.0 down to 0.0
         
         void AdministerAnalgesic(float strength);
+        void ApplyChestSeal();
+        void PerformNeedleDecompression();
         void TickPhysiology(float dt);
         void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
     }
@@ -143,19 +150,25 @@ namespace TacticalSim.Core.Physiology
         
         public float HeartRateBpm { get; private set; } = 80f;
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
+        public float BreathingRatePerMinute { get; private set; } = 12f;
+        public float AutonomicDrive { get; private set; } = 1f;
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
         public float AirwayObstruction { get; private set; } = 0f;
         public float AlveolarBloodAccumulation { get; private set; } = 0f;
+        public float TensionPneumothoraxLevel { get; private set; } = 0f;
+        public bool HasChestSeal { get; private set; }
 
         public float PainLevel { get; private set; } = 0f;
         public float ShockLevel { get; private set; } = 0f;
+        public float AnalgesicLevel => _analgesicLevel;
         
         public float MobilityLevel { get; private set; } = 1.0f;
         public float WeaponHandlingLevel { get; private set; } = 1.0f;
 
         private float _analgesicLevel = 0f;
+        private float _cardiacFunction = 1f;
 
         public void SetRoot(BodyPart root)
         {
@@ -164,7 +177,17 @@ namespace TacticalSim.Core.Physiology
 
         public void AdministerAnalgesic(float strength)
         {
-            _analgesicLevel = MathF.Min(1.0f, _analgesicLevel + strength);
+            _analgesicLevel = Math.Clamp(_analgesicLevel + MathF.Max(0f, strength), 0f, 1f);
+        }
+
+        public void ApplyChestSeal()
+        {
+            HasChestSeal = true;
+        }
+
+        public void PerformNeedleDecompression()
+        {
+            TensionPneumothoraxLevel = 0f;
         }
 
         public void TickPhysiology(float dt)
@@ -182,10 +205,46 @@ namespace TacticalSim.Core.Physiology
             }
 
             TickIschemia(RootBodyPart, dt);
+            UpdateAutonomicControl();
             UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
             UpdateNervousSystemState(dt);
             UpdateMotorState();
+        }
+
+        private void UpdateAutonomicControl()
+        {
+            AutonomicDrive = CalculateOrganFunction(OrganType.Brain);
+            _cardiacFunction = CalculateOrganFunction(OrganType.Heart);
+            BreathingRatePerMinute = 12f * AutonomicDrive;
+        }
+
+        private float CalculateOrganFunction(OrganType organ)
+        {
+            float total = 0f;
+            float destroyed = 0f;
+            CountOrganVoxels(RootBodyPart, organ, ref total, ref destroyed);
+            return total > 0f ? Math.Clamp(1f - (destroyed / total), 0f, 1f) : 1f;
+        }
+
+        private static void CountOrganVoxels(
+            BodyPart part,
+            OrganType organ,
+            ref float total,
+            ref float destroyed)
+        {
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.Organ != organ)
+                    continue;
+
+                total += 1f;
+                if (voxel.IsDestroyed)
+                    destroyed += 1f;
+            }
+
+            foreach (var child in part.Children)
+                CountOrganVoxels(child, organ, ref total, ref destroyed);
         }
 
         private void UpdateMotorState()
@@ -306,8 +365,22 @@ namespace TacticalSim.Core.Physiology
                 lungCapacityLost = destroyedLungVoxels / totalLungVoxels;
             float remainingCapacity = 1.0f - lungCapacityLost;
 
+            // A penetrating lung injury leaks air into the pleural cavity. A chest
+            // seal prevents further ingress; decompression is required to remove
+            // pressure that has already accumulated.
+            if (destroyedLungVoxels > 0f && !HasChestSeal)
+            {
+                float punctureFraction = destroyedLungVoxels / totalLungVoxels;
+                TensionPneumothoraxLevel = MathF.Min(1f,
+                    TensionPneumothoraxLevel + (punctureFraction * 0.02f * dt));
+            }
+
             // 4. Respiration Effectiveness
-            float effectiveness = (1.0f - AirwayObstruction) * remainingCapacity;
+            float effectiveness = (1.0f - AirwayObstruction)
+                * remainingCapacity
+                * (1.0f - TensionPneumothoraxLevel)
+                * AutonomicDrive
+                * _cardiacFunction;
 
             // 5. Hypoxia Calculation
             if (effectiveness < 0.8f) // Demand threshold
@@ -416,6 +489,18 @@ namespace TacticalSim.Core.Physiology
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f;
             }
+
+            HeartRateBpm *= AutonomicDrive * _cardiacFunction;
+            MeanArterialPressureMmhg *= AutonomicDrive * _cardiacFunction;
+
+            if (HeartRateBpm <= 0f)
+            {
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+            }
+
+            if (AutonomicDrive <= 0f)
+                ConsciousnessLevel = 0f;
         }
 
         private void UpdateNervousSystemState(float dt)
