@@ -69,7 +69,6 @@ public partial class CameraOrbit : Camera3D
                 case MouseButton.Middle:
                     _isPanning = mouseButton.Pressed;
                     break;
-                case MouseButton.Left:
                 case MouseButton.Right:
                     _isOrbiting = mouseButton.Pressed;
                     break;
