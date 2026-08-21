@@ -241,6 +241,7 @@ namespace TacticalSim.Core.Physiology
         {
             if (IsDestroyed) return null;
 
+            float previouslyDepositedEnergy = DepositedEnergy;
             DepositedEnergy += deltaE;
             PermanentCavityVolume += directCrushVolume;
 
@@ -262,21 +263,29 @@ namespace TacticalSim.Core.Physiology
             }
             else
             {
-                // This is a neighbor receiving energy from the blast wave.
-                // We calculate the local stretch volume created by THIS voxel's share of the energy.
-                float localStretchVolume = deltaE / (Tissue.Density * Tissue.Elasticity * 50f + 1e-4f);
+                // This is a neighbor receiving energy from the blast wave. Tissue
+                // damage is cumulative: repeated loads must be evaluated against
+                // energy already deposited in this voxel rather than treating every
+                // impact as though it were acting on pristine tissue.
+                float stretchDenominator = Tissue.Density * Tissue.Elasticity * 50f + 1e-4f;
+                float previousStretchVolume = previouslyDepositedEnergy / stretchDenominator;
+                float cumulativeStretchVolume = DepositedEnergy / stretchDenominator;
                 float voxelVolume = Size * Size * Size;
                 
                 // If the local stretch exceeds the shear limits of the tissue, it tears permanently.
                 // The threshold is based on ShearStrength. Brittle tissues (liver, brain, bone) tear easily.
                 float tearThreshold = Tissue.ShearStrength * 0.1f * voxelVolume;
                 
-                if (localStretchVolume > tearThreshold)
+                if (cumulativeStretchVolume > tearThreshold)
                 {
                     // Tissues with high elasticity (like muscle) snap back and suffer less permanent tearing
                     // Brittle tissues (like liver, bone) suffer massive permanent tearing
                     float tearingFactor = 0.1f * (1.0f - Tissue.Elasticity);
-                    PermanentCavityVolume += localStretchVolume * tearingFactor;
+                    float previousTearingVolume = previousStretchVolume > tearThreshold
+                        ? previousStretchVolume * tearingFactor
+                        : 0f;
+                    float cumulativeTearingVolume = cumulativeStretchVolume * tearingFactor;
+                    PermanentCavityVolume += cumulativeTearingVolume - previousTearingVolume;
                 }
             }
             
