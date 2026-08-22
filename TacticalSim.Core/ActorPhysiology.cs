@@ -144,14 +144,22 @@ namespace TacticalSim.Core.Physiology
         float MeanArterialPressureMmhg { get; }
         float BreathingRatePerMinute { get; }
         float AutonomicDrive { get; }
+        float BrainstemFunction { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
 
         // Respiratory System
         float BloodOxygenation { get; } // 1.0 down to 0.0
         float AirwayObstruction { get; } // 0.0 to 1.0
+        float AirwayPatency { get; } // 1.0 down to 0.0
+        float VentilationEffectiveness { get; } // effective movement of air, 1.0 down to 0.0
         float AlveolarBloodAccumulation { get; } // ml
         float TensionPneumothoraxLevel { get; } // 0.0 to 1.0
         bool HasChestSeal { get; }
+
+        // Circulatory and cerebral oxygen delivery
+        float CirculationEffectiveness { get; } // systemic perfusion, 1.0 down to 0.0
+        float CerebralOxygenation { get; } // oxygen delivery to the brain, 1.0 down to 0.0
+        float BrainHypoxiaSeconds { get; }
         
         // Nervous System
         float PainLevel { get; }
@@ -182,13 +190,19 @@ namespace TacticalSim.Core.Physiology
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
         public float BreathingRatePerMinute { get; private set; } = 12f;
         public float AutonomicDrive { get; private set; } = 1f;
+        public float BrainstemFunction { get; private set; } = 1f;
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
         public float AirwayObstruction { get; private set; } = 0f;
+        public float AirwayPatency => 1f - AirwayObstruction;
+        public float VentilationEffectiveness { get; private set; } = 1f;
         public float AlveolarBloodAccumulation { get; private set; } = 0f;
         public float TensionPneumothoraxLevel { get; private set; } = 0f;
         public bool HasChestSeal { get; private set; }
+        public float CirculationEffectiveness { get; private set; } = 1f;
+        public float CerebralOxygenation { get; private set; } = 1f;
+        public float BrainHypoxiaSeconds { get; private set; }
 
         public float PainLevel { get; private set; } = 0f;
         public float ShockLevel { get; private set; } = 0f;
@@ -199,6 +213,7 @@ namespace TacticalSim.Core.Physiology
 
         private float _analgesicLevel = 0f;
         private float _cardiacFunction = 1f;
+        private float _hypoxicBrainFunction = 1f;
 
         public void SetRoot(BodyPart root)
         {
@@ -255,15 +270,17 @@ namespace TacticalSim.Core.Physiology
 
             TickIschemia(RootBodyPart, dt);
             UpdateAutonomicControl();
-            UpdateRespiratoryState(dt);
             UpdateCardiovascularState();
+            UpdateRespiratoryState(dt);
+            UpdateCerebralState(dt);
             UpdateNervousSystemState(dt);
             UpdateMotorState();
         }
 
         private void UpdateAutonomicControl()
         {
-            AutonomicDrive = CalculateOrganFunction(OrganType.Brain);
+            BrainstemFunction = CalculateOrganFunction(OrganType.Brain);
+            AutonomicDrive = BrainstemFunction * _hypoxicBrainFunction;
             _cardiacFunction = CalculateOrganFunction(OrganType.Heart);
             BreathingRatePerMinute = 12f * AutonomicDrive;
         }
@@ -425,17 +442,21 @@ namespace TacticalSim.Core.Physiology
             }
 
             // 4. Respiration Effectiveness
-            float effectiveness = (1.0f - AirwayObstruction)
+            VentilationEffectiveness = AirwayPatency
                 * remainingCapacity
                 * (1.0f - TensionPneumothoraxLevel)
-                * AutonomicDrive
-                * _cardiacFunction;
+                * AutonomicDrive;
+
+            // Gas exchange and tissue oxygen delivery require both ventilation
+            // and blood flow. A patent airway cannot oxygenate a patient in
+            // cardiac arrest, and circulation cannot compensate for apnoea.
+            float oxygenDelivery = VentilationEffectiveness * CirculationEffectiveness;
 
             // 5. Hypoxia Calculation
-            if (effectiveness < 0.8f) // Demand threshold
+            if (oxygenDelivery < 0.8f) // Demand threshold
             {
                 // Deplete oxygen
-                float depletionRate = (0.8f - effectiveness) * 0.05f; // Drops SpO2 over time
+                float depletionRate = (0.8f - oxygenDelivery) * 0.05f; // Drops SpO2 over time
                 BloodOxygenation -= depletionRate * dt;
                 BloodOxygenation = MathF.Max(0f, BloodOxygenation);
             }
@@ -445,6 +466,36 @@ namespace TacticalSim.Core.Physiology
                 BloodOxygenation += 0.05f * dt;
                 BloodOxygenation = MathF.Min(1.0f, BloodOxygenation);
             }
+        }
+
+        private void UpdateCerebralState(float dt)
+        {
+            CerebralOxygenation = BloodOxygenation * CirculationEffectiveness;
+
+            if (CerebralOxygenation < 0.6f)
+            {
+                BrainHypoxiaSeconds += (0.6f - CerebralOxygenation) / 0.6f * dt;
+            }
+            else
+            {
+                // A short hypoxic episode can recover, while accumulated injury
+                // takes substantially longer to clear than it took to acquire.
+                BrainHypoxiaSeconds = MathF.Max(0f, BrainHypoxiaSeconds - (0.1f * dt));
+            }
+
+            // Neurological control begins failing after roughly ten equivalent
+            // seconds of profound cerebral hypoxia and is absent by sixty.
+            _hypoxicBrainFunction = Math.Clamp(
+                1f - ((BrainHypoxiaSeconds - 10f) / 50f), 0f, 1f);
+            UpdateAutonomicControl();
+
+            // Loss of cerebral perfusion is not an instantaneous binary switch:
+            // usable oxygen remains briefly before consciousness falls away.
+            float hypoxicConsciousness = Math.Clamp(
+                1f - ((BrainHypoxiaSeconds - 5f) / 10f), 0f, 1f);
+            ConsciousnessLevel = MathF.Min(ConsciousnessLevel, hypoxicConsciousness);
+            if (AutonomicDrive <= 0f)
+                ConsciousnessLevel = 0f;
         }
 
         private void CalculateRespiratoryDamage(BodyPart part, ref float airwayTotal, ref float airwayDest, ref float lungTotal, ref float lungDest)
@@ -550,6 +601,8 @@ namespace TacticalSim.Core.Physiology
 
             if (AutonomicDrive <= 0f)
                 ConsciousnessLevel = 0f;
+
+            CirculationEffectiveness = Math.Clamp(MeanArterialPressureMmhg / 93f, 0f, 1f);
         }
 
         private void UpdateNervousSystemState(float dt)
