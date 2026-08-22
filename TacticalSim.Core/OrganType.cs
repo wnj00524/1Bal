@@ -15,6 +15,7 @@ namespace TacticalSim.Core.Physiology
         Airway,
         Mouth,
         Eye,
-        Brain
+        Brain,
+        AutonomicNerve
     }
 }

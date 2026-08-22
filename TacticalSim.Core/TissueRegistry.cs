@@ -51,6 +51,15 @@ namespace TacticalSim.Core.Physiology
             ShearStrength = 0.05f,
             PainReceptorDensity = 0.0f
         };
+
+        public static readonly TissueProperties Nerve = new TissueProperties
+        {
+            Density = 1075f,
+            Elasticity = 0.2f,
+            ShearStrength = 0.05f,
+            PainReceptorDensity = 0.2f
+        };
+
         public static readonly TissueProperties Heart = new TissueProperties
         {
             Density = 1060f,
