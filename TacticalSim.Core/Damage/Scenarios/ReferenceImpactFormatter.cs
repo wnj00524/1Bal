@@ -71,7 +71,8 @@ public static class ReferenceImpactFormatter
             CultureInfo.InvariantCulture,
             $"Capability: {result.CapabilityTimeline.Count} samples; "
             + $"mobility {firstCapability.State.Mobility:R} -> {lastCapability.State.Mobility:R}; "
-            + $"weapon handling {firstCapability.State.WeaponHandling:R} -> {lastCapability.State.WeaponHandling:R}"));
+            + $"weapon handling {firstCapability.State.WeaponHandling:R} -> {lastCapability.State.WeaponHandling:R}; "
+            + $"can stand {firstCapability.State.CanStand} -> {lastCapability.State.CanStand}"));
         text.AppendLine(
             $"Random: root seed {result.RandomMetadata.RootSeed}; "
             + string.Join(", ", result.RandomMetadata.Streams.Select(

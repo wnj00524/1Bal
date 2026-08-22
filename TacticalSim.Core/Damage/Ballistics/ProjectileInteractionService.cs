@@ -7,6 +7,7 @@ using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Randomness;
 using TacticalSim.Core.Units;
 using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using System.Text.Json;
 
 namespace TacticalSim.Core.Damage.Ballistics;
@@ -400,6 +401,8 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         {
             generatedLesions = _lesionGenerator.Generate(woundTrack, target.Anatomy);
             target.LesionRepository.AddRange(generatedLesions);
+            if (target is IMusculoskeletalFunctionalTarget functionalTarget)
+                functionalTarget.RefreshMusculoskeletalFunctionalState();
         }
         PhysiologyDebugSnapshot physiologyAfter = PhysiologyDebugSnapshot.Capture(request.TargetPhysiology);
         CapabilityDebugSnapshot capabilityAfter = CapabilityDebugSnapshot.Capture(request.TargetPhysiology);

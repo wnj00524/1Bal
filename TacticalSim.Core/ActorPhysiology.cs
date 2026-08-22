@@ -4,6 +4,7 @@ using System.Numerics;
 using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Anatomy;
 using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Physiology
@@ -190,6 +191,7 @@ namespace TacticalSim.Core.Physiology
         // Motor System
         float MobilityLevel { get; } // 1.0 down to 0.0
         float WeaponHandlingLevel { get; } // 1.0 down to 0.0
+        bool CanStand => MobilityLevel > 0f;
         
         void AdministerAnalgesic(float strength);
         void ApplyChestSeal();
@@ -208,10 +210,17 @@ namespace TacticalSim.Core.Physiology
             DamageModelVersion modelVersion);
     }
 
-    public class TacticalActorPhysiology : IActorPhysiology, IAnatomicalInjuryTarget
+    public class TacticalActorPhysiology :
+        IActorPhysiology,
+        IAnatomicalInjuryTarget,
+        IMusculoskeletalFunctionalTarget
     {
+        private readonly IMusculoskeletalFunctionalResolver _musculoskeletalFunctionalResolver;
+
         public IAnatomicalStructureCatalog Anatomy { get; private set; } = new AnatomicalStructureCatalog([]);
         public ILesionRepository LesionRepository { get; } = new LesionRepository();
+        public MusculoskeletalFunctionalState MusculoskeletalFunctionalState { get; private set; } =
+            MusculoskeletalFunctionalState.Healthy;
         public BodyPart RootBodyPart { get; private set; } = null!;
         public float TotalBloodVolume { get; private set; } = 5000f; // 5L baseline
         private float _baselineBloodVolume = 5000f;
@@ -252,10 +261,25 @@ namespace TacticalSim.Core.Physiology
         
         public float MobilityLevel { get; private set; } = 1.0f;
         public float WeaponHandlingLevel { get; private set; } = 1.0f;
+        public bool CanStand => MusculoskeletalFunctionalState.CanStand;
 
         private float _analgesicLevel = 0f;
         private float _cardiacFunction = 1f;
         private float _hypoxicBrainFunction = 1f;
+        private float _legacyVoxelMobilityLevel = 1f;
+        private float _legacyVoxelWeaponHandlingLevel = 1f;
+
+        public TacticalActorPhysiology()
+            : this(new MusculoskeletalFunctionalResolver())
+        {
+        }
+
+        public TacticalActorPhysiology(
+            IMusculoskeletalFunctionalResolver musculoskeletalFunctionalResolver)
+        {
+            _musculoskeletalFunctionalResolver = musculoskeletalFunctionalResolver
+                ?? throw new ArgumentNullException(nameof(musculoskeletalFunctionalResolver));
+        }
 
         public void SetRoot(BodyPart root)
         {
@@ -414,15 +438,46 @@ namespace TacticalSim.Core.Physiology
                 float boneLoss = legBoneDest / legBoneTotal;
                 float muscleLoss = legMuscleTotal > 0 ? (legMuscleDest / legMuscleTotal) : 0f;
                 // 20% bone destruction or 50% muscle destruction will completely disable the limb
-                MobilityLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+                _legacyVoxelMobilityLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
             }
             
             if (armBoneTotal > 0)
             {
                 float boneLoss = armBoneDest / armBoneTotal;
                 float muscleLoss = armMuscleTotal > 0 ? (armMuscleDest / armMuscleTotal) : 0f;
-                WeaponHandlingLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
+                _legacyVoxelWeaponHandlingLevel = MathF.Max(0f, 1.0f - (boneLoss * 5.0f) - (muscleLoss * 2.0f));
             }
+
+            RefreshMusculoskeletalFunctionalState();
+        }
+
+        /// <summary>
+        /// Re-resolves the direct fracture-to-function bridge after a discrete
+        /// lesion change. Time-dependent physiology remains tick-driven.
+        /// </summary>
+        public void RefreshMusculoskeletalFunctionalState()
+        {
+            MusculoskeletalFunctionalState fractureState = _musculoskeletalFunctionalResolver.Resolve(
+                LesionRepository.Lesions,
+                Anatomy);
+
+            float standingCapacity = MathF.Min(
+                _legacyVoxelMobilityLevel,
+                fractureState.StandingCapacity);
+            float movementCapacity = MathF.Min(
+                _legacyVoxelMobilityLevel,
+                fractureState.MovementCapacity);
+            float upperLimbCapacity = MathF.Min(
+                _legacyVoxelWeaponHandlingLevel,
+                fractureState.UpperLimbCapacity);
+
+            MusculoskeletalFunctionalState = new MusculoskeletalFunctionalState(
+                standingCapacity,
+                movementCapacity,
+                upperLimbCapacity,
+                fractureState.CanStand && standingCapacity > 0f);
+            MobilityLevel = movementCapacity;
+            WeaponHandlingLevel = upperLimbCapacity;
         }
 
         private void CalculateMotorDamage(BodyPart part, ref float lbTotal, ref float lbDest, ref float lmTotal, ref float lmDest, ref float abTotal, ref float abDest, ref float amTotal, ref float amDest)

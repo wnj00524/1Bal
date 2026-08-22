@@ -34,13 +34,14 @@ With no comparison models supplied, `--compare` uses `legacy-v1` as the baseline
 
 Each result contains:
 
+- the `reference-impact-result-v2` output schema identifier (`reference-impact-comparison-v2` for comparisons);
 - versioned scenario and projectile inputs;
 - model identifier and a model-independent comparison key;
 - the authoritative wound track and energy ledger;
-- an explicit empty lesion collection marked deferred to M6;
+- persistent lesion output for the authoritative model (legacy comparison runs remain lesion-free);
 - an explicit serializable final-projectile state;
 - immediate and timed physiology snapshots;
-- current M5 capability snapshots, pending the M7 capability resolver;
+- capability snapshots including mobility, weapon handling, standing, consciousness, and action state;
 - the requested root seed plus named-stream seeds and draw counts;
 - numerical warnings;
 - a lowercase SHA-256 deterministic hash.
@@ -57,6 +58,11 @@ names such as `kilograms`, `squareMeters`, `seconds`, `cubicMeters`, and
 
 Cross-model comparison runs the baseline and candidate independently. Each run asks the scenario for
 a fresh target, preventing baseline mutations from leaking into the candidate.
+
+DM-104 advanced result and comparison output from v1 to v2 because capability snapshots gained the
+additive `CanStand` field. Consumers that deserialize a fixed v1 shape must migrate explicitly; the
+scenario input schema and model-independent comparison key remain unchanged. The standing value is
+the bounded musculoskeletal bridge, not the full DM-207 capability resolver.
 
 M5 projectile interaction does not draw random values. Later stochastic terminal behavior must draw
 from the same request-scoped provider before the service captures its trace snapshot.

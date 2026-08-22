@@ -10,7 +10,31 @@ namespace TacticalSim.Core.Damage.Lesions;
 public enum LesionKind { VesselLaceration, VesselTransection, ParenchymalInjury, Fracture, NerveInjury, AirwayDisruption, PleuralBreach, CardiacInjury, BrainOrSpinalInjury, OpenSoftTissueWound }
 public enum LesionTreatmentState { Untreated, TemporarilyControlled, DefinitivelyTreated }
 public enum FractureStability { Stable, Displaced, Unstable }
+public enum FractureFunctionalConsequence { LimitedUse, SevereRestriction, StructuralFunctionLost }
 public enum NerveDamageGrade { Neuropraxia, PartialDisruption, CompleteDisruption }
+
+/// <summary>
+/// Classifies generated fractures using the existing M6 severity boundaries.
+/// Both comparisons are intentionally strict: 0.30 remains stable and 0.65
+/// remains displaced. The thresholds are provisional gameplay calibration.
+/// </summary>
+public static class FractureStabilityClassifier
+{
+    public const float DisplacedSeverityThreshold = 0.30f;
+    public const float UnstableSeverityThreshold = 0.65f;
+
+    public static FractureStability Classify(float severity)
+    {
+        if (!float.IsFinite(severity) || severity is < 0f or > 1f)
+            throw new ArgumentOutOfRangeException(nameof(severity));
+
+        return severity > UnstableSeverityThreshold
+            ? FractureStability.Unstable
+            : severity > DisplacedSeverityThreshold
+                ? FractureStability.Displaced
+                : FractureStability.Stable;
+    }
+}
 
 public sealed record LesionGeometry(Vector3 Center, Vector3 TrackDirection, Distance Length, Distance Radius);
 
@@ -52,6 +76,20 @@ public sealed record FractureLesion : Lesion
         : base(id,structureId,originImpactId,LesionKind.Fracture,severity,geometry,treatmentState,createdAt) { Stability=stability; WeightBearing=weightBearing; }
     public FractureStability Stability { get; init; }
     public bool WeightBearing { get; init; }
+
+    /// <summary>
+    /// Deterministic functional interpretation of the persisted stability class.
+    /// This is computed rather than serialized so the fracture JSON contract and
+    /// its existing constructor remain unchanged.
+    /// </summary>
+    [JsonIgnore]
+    public FractureFunctionalConsequence FunctionalConsequence => Stability switch
+    {
+        FractureStability.Stable => FractureFunctionalConsequence.LimitedUse,
+        FractureStability.Displaced => FractureFunctionalConsequence.SevereRestriction,
+        FractureStability.Unstable => FractureFunctionalConsequence.StructuralFunctionLost,
+        _ => throw new InvalidOperationException($"Unknown fracture stability '{Stability}'.")
+    };
 }
 public sealed record NerveLesion : Lesion
 {
@@ -128,7 +166,7 @@ public sealed class LesionGenerator : ILesionGenerator
         DateTimeOffset created=DateTimeOffset.UnixEpoch;
         if(s.Type is AnatomicalStructureType.Artery or AnatomicalStructureType.Vein)
         { bool transection=g.Radius.Meters*2>=s.Calibre.Meters; return new VesselLesion(id,s.Id,impact,transection?LesionKind.VesselTransection:LesionKind.VesselLaceration,severity,g,LesionTreatmentState.Untreated,created,Distance.FromMeters(MathF.Min(s.Calibre.Meters,g.Radius.Meters*2)),s.PressureRegime,transection); }
-        if(s.Type==AnatomicalStructureType.Bone) return new FractureLesion(id,s.Id,impact,severity,g,LesionTreatmentState.Untreated,created,severity>.65f?FractureStability.Unstable:severity>.3f?FractureStability.Displaced:FractureStability.Stable,s.FunctionalRole==FunctionalRole.WeightBearing);
+        if(s.Type==AnatomicalStructureType.Bone) return new FractureLesion(id,s.Id,impact,severity,g,LesionTreatmentState.Untreated,created,FractureStabilityClassifier.Classify(severity),s.FunctionalRole==FunctionalRole.WeightBearing);
         if(s.Type==AnatomicalStructureType.Nerve) return new NerveLesion(id,s.Id,impact,s.FunctionalRole==FunctionalRole.SpinalCord?LesionKind.BrainOrSpinalInjury:LesionKind.NerveInjury,severity,g,LesionTreatmentState.Untreated,created,severity>.7f?NerveDamageGrade.CompleteDisruption:severity>.3f?NerveDamageGrade.PartialDisruption:NerveDamageGrade.Neuropraxia,s.Laterality,s.FunctionalRole==FunctionalRole.SpinalCord?InferSpinalLevel(g.Center.Y):null);
         LesionKind kind=s.Type switch { AnatomicalStructureType.Airway=>LesionKind.AirwayDisruption, AnatomicalStructureType.Pleura=>LesionKind.PleuralBreach, AnatomicalStructureType.Pericardium=>LesionKind.CardiacInjury, AnatomicalStructureType.Organ=>LesionKind.ParenchymalInjury, _=>LesionKind.OpenSoftTissueWound };
         return new TissueLesion(id,s.Id,impact,kind,severity,g,LesionTreatmentState.Untreated,created);
@@ -137,9 +175,33 @@ public sealed class LesionGenerator : ILesionGenerator
     private static string InferSpinalLevel(float y)=>y>.5f?"cervical":y>.2f?"thoracic":"lumbar";
 }
 
-public sealed record LesionDebugItem(string LesionId,string StructureId,string StructureName,LesionKind Type,float Severity,LesionTreatmentState TreatmentState,string OriginImpactId,string Details);
+public sealed record LesionDebugItem(string LesionId,string StructureId,string StructureName,LesionKind Type,float Severity,LesionTreatmentState TreatmentState,string OriginImpactId,string Details)
+{
+    /// <summary>Lesion center in the anatomy catalog's body-local metre coordinate system.</summary>
+    public Vector3 BodyLocalCenter { get; init; }
+
+    /// <summary>Present only for fracture rows.</summary>
+    public FractureFunctionalConsequence? FunctionalConsequence { get; init; }
+}
 public static class LesionDebugInspector
 {
     public static IReadOnlyList<LesionDebugItem> Inspect(IAnatomicalInjuryTarget target) => target.LesionRepository.Lesions.Select(l =>
-    { string name; try{name=target.Anatomy.GetRequired(l.StructureId).DisplayName;}catch(KeyNotFoundException){name=l.StructureId;} string details=l switch { VesselLesion v=>$"{v.PressureRegime}; aperture={v.Aperture.Meters:F4}m; transection={v.CompleteTransection}", FractureLesion f=>$"{f.Stability}; weightBearing={f.WeightBearing}", NerveLesion n=>$"{n.Grade}; side={n.Laterality??"midline"}; level={n.NeurologicalLevel??"n/a"}", _=>"persistent tissue lesion" }; return new LesionDebugItem(l.Id,l.StructureId,name,l.Kind,l.Severity,l.TreatmentState,l.OriginImpactId,details); }).ToArray();
+    {
+        string name;
+        try{name=target.Anatomy.GetRequired(l.StructureId).DisplayName;}catch(KeyNotFoundException){name=l.StructureId;}
+        string center=FormattableString.Invariant(
+            $"({l.Geometry.Center.X:F4}, {l.Geometry.Center.Y:F4}, {l.Geometry.Center.Z:F4})m body-local");
+        string details=l switch
+        {
+            VesselLesion v=>FormattableString.Invariant($"{v.PressureRegime}; aperture={v.Aperture.Meters:F4}m; transection={v.CompleteTransection}; center={center}"),
+            FractureLesion f=>FormattableString.Invariant($"{f.Stability}; consequence={f.FunctionalConsequence}; weightBearing={f.WeightBearing}; center={center}"),
+            NerveLesion n=>FormattableString.Invariant($"{n.Grade}; side={n.Laterality??"midline"}; level={n.NeurologicalLevel??"n/a"}; center={center}"),
+            _=>$"persistent tissue lesion; center={center}"
+        };
+        return new LesionDebugItem(l.Id,l.StructureId,name,l.Kind,l.Severity,l.TreatmentState,l.OriginImpactId,details)
+        {
+            BodyLocalCenter = l.Geometry.Center,
+            FunctionalConsequence = (l as FractureLesion)?.FunctionalConsequence
+        };
+    }).ToArray();
 }

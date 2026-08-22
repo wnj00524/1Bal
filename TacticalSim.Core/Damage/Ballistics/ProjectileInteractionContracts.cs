@@ -115,20 +115,23 @@ public sealed record PhysiologyDebugSnapshot(
 }
 
 /// <summary>
-/// M5 snapshot of existing tactical-capability values. A richer resolver-owned
-/// capability contract is deliberately deferred to M7.
+/// Snapshot of the existing tactical-capability values plus the bounded DM-104
+/// standing bridge. A richer resolver-owned capability contract is deliberately
+/// deferred to DM-207 in M7.
 /// </summary>
 public sealed record CapabilityDebugSnapshot(
     float Mobility,
     float WeaponHandling,
     float Consciousness,
-    bool CanAct)
+    bool CanAct,
+    bool CanStand)
 {
     internal static CapabilityDebugSnapshot Capture(IActorPhysiology physiology) => new(
         physiology.MobilityLevel,
         physiology.WeaponHandlingLevel,
         physiology.ConsciousnessLevel,
-        !physiology.IsDead && physiology.ConsciousnessLevel > 0f);
+        !physiology.IsDead && physiology.ConsciousnessLevel > 0f,
+        physiology.CanStand);
 }
 
 /// <summary>Immutable debug representation of a direct temporary-cavity effect.</summary>
