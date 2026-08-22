@@ -16,7 +16,7 @@ namespace TacticalSim.Tests;
 public sealed class ReferenceImpactHarnessTests
 {
     [Fact]
-    public void Run_UsesAuthoritativeServiceAndEmitsCompleteM5Output()
+    public void Run_UsesAuthoritativeServiceAndEmitsPersistentM6Lesions()
     {
         var recordingService = new RecordingInteractionService(CreateInteractionService(ambientSeed: 999UL));
         var runner = new ReferenceImpactRunner(recordingService, CreateCatalog());
@@ -43,9 +43,9 @@ public sealed class ReferenceImpactHarnessTests
         Assert.Same(result.WoundTrack.EnergyLedger, result.EnergyLedger);
         Assert.NotEmpty(result.WoundTrack.Segments);
         Assert.True(result.FinalProjectileState.Elapsed.Seconds > 0f);
-        Assert.True(result.Lesions.IsDeferred);
-        Assert.Contains("M6", result.Lesions.DeferredTo);
-        Assert.Empty(result.Lesions.Items);
+        Assert.False(result.Lesions.IsDeferred);
+        Assert.Equal("none", result.Lesions.DeferredTo);
+        Assert.NotEmpty(result.Lesions.Items);
         Assert.Collection(
             result.PhysiologyTimeline.Take(2),
             point => Assert.Equal("before-impact", point.Phase),
@@ -192,7 +192,7 @@ public sealed class ReferenceImpactHarnessTests
         Assert.Equal(42UL, document.RootElement.GetProperty("randomMetadata").GetProperty("rootSeed").GetUInt64());
         Assert.Contains(result.ComparisonKey, text);
         Assert.Contains(result.DeterministicHash, text);
-        Assert.Contains("deferred to M6", text);
+        Assert.Contains("available", text);
     }
 
     [Fact]

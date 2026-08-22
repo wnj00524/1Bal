@@ -73,8 +73,8 @@ public sealed class ReferenceImpactRunner : IReferenceImpactRunner
             out IReadOnlyList<CapabilityTimelinePoint> capabilityTimeline);
 
         var lesions = new ReferenceLesionOutput(
-            isDeferred: true,
-            deferredTo: "M6: Anatomical structures and persistent lesions",
+            isDeferred: false,
+            deferredTo: "none",
             items: interaction.DebugTrace.GeneratedLesions);
         return new ReferenceImpactResult(
             input,

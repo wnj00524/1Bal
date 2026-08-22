@@ -6,6 +6,8 @@ using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Randomness;
 using TacticalSim.Core.Units;
+using TacticalSim.Core.Damage.Lesions;
+using System.Text.Json;
 
 namespace TacticalSim.Core.Damage.Ballistics;
 
@@ -29,13 +31,16 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
 
     private readonly DamageModelOptions _options;
     private readonly IDeterministicRandomStreamProvider _randomStreams;
+    private readonly ILesionGenerator _lesionGenerator;
 
     public ProjectileInteractionService(
         DamageModelOptions options,
-        IDeterministicRandomStreamProvider randomStreams)
+        IDeterministicRandomStreamProvider randomStreams,
+        ILesionGenerator? lesionGenerator = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _randomStreams = randomStreams ?? throw new ArgumentNullException(nameof(randomStreams));
+        _lesionGenerator = lesionGenerator ?? new LesionGenerator();
     }
 
     public ProjectileInteractionResult? Resolve(ProjectileInteractionRequest request)
@@ -390,6 +395,12 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         IEnumerable<CavitationDebugSnapshot> cavitationEffects,
         IEnumerable<string> numericalWarnings)
     {
+        IReadOnlyList<Lesion> generatedLesions = Array.Empty<Lesion>();
+        if (woundTrack.ModelVersion != DamageModelVersion.LegacyV1 && request.TargetPhysiology is IAnatomicalInjuryTarget target)
+        {
+            generatedLesions = _lesionGenerator.Generate(woundTrack, target.Anatomy);
+            target.LesionRepository.AddRange(generatedLesions);
+        }
         PhysiologyDebugSnapshot physiologyAfter = PhysiologyDebugSnapshot.Capture(request.TargetPhysiology);
         CapabilityDebugSnapshot capabilityAfter = CapabilityDebugSnapshot.Capture(request.TargetPhysiology);
         var trace = new ImpactDebugTrace(
@@ -404,7 +415,7 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
             capabilityBefore,
             capabilityAfter,
             randomStreams.CaptureSnapshot(),
-            generatedLesions: Array.Empty<string>(),
+            generatedLesions: generatedLesions.Select(lesion => JsonSerializer.Serialize<Lesion>(lesion, DamageModelJson.CreateOptions())),
             bleedingSources: CaptureBleedingSources(request.TargetPhysiology.RootBodyPart),
             bloodDestinations: Array.Empty<string>(),
             activeTreatments: CaptureActiveTreatments(request.TargetPhysiology),
