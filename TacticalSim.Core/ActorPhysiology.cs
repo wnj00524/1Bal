@@ -525,6 +525,7 @@ namespace TacticalSim.Core.Physiology
         private void UpdateCardiovascularState()
         {
             float lostPercent = 1.0f - (TotalBloodVolume / _baselineBloodVolume);
+            bool cardiacArrest = false;
             
             if (lostPercent < 0.15f)
             {
@@ -560,6 +561,7 @@ namespace TacticalSim.Core.Physiology
                 HeartRateBpm = 0f;
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f; // Dead
+                cardiacArrest = true;
             }
 
             // Hypoxia override
@@ -583,6 +585,7 @@ namespace TacticalSim.Core.Physiology
                 HeartRateBpm = 0f;
                 MeanArterialPressureMmhg = 0f;
                 ConsciousnessLevel = 0f;
+                cardiacArrest = true;
             }
             
             // Fatal hemorrhage check ensures dead stats stay zero
@@ -593,7 +596,21 @@ namespace TacticalSim.Core.Physiology
                 ConsciousnessLevel = 0f;
             }
 
-            HeartRateBpm *= AutonomicDrive * _cardiacFunction;
+            if (!cardiacArrest)
+            {
+                // A denervated, otherwise viable heart retains its intrinsic
+                // pacemaker rhythm (about 100 BPM); autonomic control normally
+                // slows that rhythm at rest and produces tachycardia in response
+                // to hemorrhage or hypoxia. Interpolating from the intrinsic rate
+                // therefore blunts the *change* in rate as autonomic drive is lost,
+                // instead of scaling the whole heart rate toward zero while still
+                // showing an apparently intact compensatory response.
+                const float intrinsicPacemakerRateBpm = 100f;
+                HeartRateBpm = intrinsicPacemakerRateBpm
+                    + ((HeartRateBpm - intrinsicPacemakerRateBpm) * AutonomicDrive);
+            }
+
+            HeartRateBpm *= _cardiacFunction;
             MeanArterialPressureMmhg *= AutonomicDrive * _cardiacFunction;
 
             if (HeartRateBpm <= 0f)
