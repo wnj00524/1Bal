@@ -1,6 +1,9 @@
 using System;
 using System.Numerics;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Units;
+using TissueDensity = TacticalSim.Core.Units.Density;
+using DepositedEnergyUnit = TacticalSim.Core.Units.Energy;
 
 namespace TacticalSim.Core.Physiology
 {
@@ -10,6 +13,9 @@ namespace TacticalSim.Core.Physiology
         public float Elasticity; // Resistance to permanent tearing from stretch
         public float ShearStrength; // MPa, resistance to permanent tearing
         public float PainReceptorDensity;
+
+        public readonly TissueDensity MassDensity => TissueDensity.FromKilogramsPerCubicMeter(Density);
+        public readonly Pressure ShearStrengthPressure => Pressure.FromMegapascals(ShearStrength);
     }
     
     public struct CavitationEvent
@@ -17,6 +23,9 @@ namespace TacticalSim.Core.Physiology
         public Vector3 Origin;
         public float Radius;
         public float Energy;
+
+        public readonly Distance RadiusDistance => Distance.FromMeters(Radius);
+        public readonly DepositedEnergyUnit DepositedEnergyValue => DepositedEnergyUnit.FromJoules(Energy);
     }
 
     /// <summary>
@@ -37,6 +46,12 @@ namespace TacticalSim.Core.Physiology
         public float TemporaryCavityVolume { get; private set; }
         public float PermanentCavityVolume { get; private set; }
         public bool IsDestroyed { get; private set; }
+
+        public Volume VoxelVolume => Volume.FromCubicMeters(Size * Size * Size);
+        public Distance VoxelSize => Distance.FromMeters(Size);
+        public DepositedEnergyUnit DepositedEnergyAmount => DepositedEnergyUnit.FromJoules(DepositedEnergy);
+        public Volume TemporaryCavityVolumeAmount => Volume.FromCubicMeters(TemporaryCavityVolume);
+        public Volume PermanentCavityVolumeAmount => Volume.FromCubicMeters(PermanentCavityVolume);
         
         public PhysiologicalVoxel(Vector3 center, float size, TissueProperties tissue, OrganType organ = OrganType.None)
         {
@@ -102,7 +117,7 @@ namespace TacticalSim.Core.Physiology
             if (distanceInMeters <= 0.0001f) return null;
 
             float speed = projectile.Velocity.Length();
-            float initialEnergy = 0.5f * profile.Mass * (speed * speed);
+            float initialEnergy = Energy.FromJoules(0.5f * profile.MassKilograms.Kilograms * (speed * speed)).Joules;
 
             if (Organ == OrganType.Bone)
             {
@@ -134,7 +149,7 @@ namespace TacticalSim.Core.Physiology
             projectile.Velocity = rayDirection * exitSpeed;
             projectile.Position += rayDirection * distanceInMeters; // Advance projectile to exit point
             
-            float directCrushVolume = profile.CrossSectionalArea * distanceInMeters;
+            float directCrushVolume = Volume.FromCubicMeters(profile.CrossSectionalAreaSquareMeters.SquareMeters * distanceInMeters).CubicMeters;
 
             return ApplyKineticEnergy(energyLost, projectile.Position - (rayDirection * (distanceInMeters * 0.5f)), directCrushVolume);
         }
@@ -155,7 +170,7 @@ namespace TacticalSim.Core.Physiology
 
             Vector3 rayDirection = Vector3.Normalize(projectile.Velocity);
             float speed = projectile.Velocity.Length();
-            float initialEnergy = 0.5f * profile.Mass * (speed * speed);
+            float initialEnergy = Energy.FromJoules(0.5f * profile.MassKilograms.Kilograms * (speed * speed)).Joules;
 
             if (Organ == OrganType.Bone)
             {
@@ -184,7 +199,7 @@ namespace TacticalSim.Core.Physiology
             projectile.Velocity = rayDirection * exitSpeed;
 
             // Direct crush damage from the physical bullet passing through
-            float directCrushVolume = profile.CrossSectionalArea * distanceInMeters;
+            float directCrushVolume = Volume.FromCubicMeters(profile.CrossSectionalAreaSquareMeters.SquareMeters * distanceInMeters).CubicMeters;
 
             return ApplyKineticEnergy(energyLost, projectile.Position, directCrushVolume);
         }
@@ -241,9 +256,11 @@ namespace TacticalSim.Core.Physiology
         {
             if (IsDestroyed) return null;
 
+            Energy depositedEnergy = Energy.FromJoules(deltaE);
+            Volume directVolume = Volume.FromCubicMeters(directCrushVolume);
             float previouslyDepositedEnergy = DepositedEnergy;
-            DepositedEnergy += deltaE;
-            PermanentCavityVolume += directCrushVolume;
+            DepositedEnergy = (DepositedEnergyAmount + depositedEnergy).Joules;
+            PermanentCavityVolume = (PermanentCavityVolumeAmount + directVolume).CubicMeters;
 
             CavitationEvent? result = null;
 
@@ -257,7 +274,7 @@ namespace TacticalSim.Core.Physiology
                 result = new CavitationEvent
                 {
                     Origin = originPoint,
-                    Energy = deltaE,
+                    Energy = depositedEnergy.Joules,
                     Radius = cavityRadius
                 };
             }
@@ -270,7 +287,7 @@ namespace TacticalSim.Core.Physiology
                 float stretchDenominator = Tissue.Density * Tissue.Elasticity * 50f + 1e-4f;
                 float previousStretchVolume = previouslyDepositedEnergy / stretchDenominator;
                 float cumulativeStretchVolume = DepositedEnergy / stretchDenominator;
-                float voxelVolume = Size * Size * Size;
+                float voxelVolume = VoxelVolume.CubicMeters;
                 
                 // If the local stretch exceeds the shear limits of the tissue, it tears permanently.
                 // The threshold is based on ShearStrength. Brittle tissues (liver, brain, bone) tear easily.
@@ -285,15 +302,15 @@ namespace TacticalSim.Core.Physiology
                         ? previousStretchVolume * tearingFactor
                         : 0f;
                     float cumulativeTearingVolume = cumulativeStretchVolume * tearingFactor;
-                    PermanentCavityVolume += cumulativeTearingVolume - previousTearingVolume;
+                    PermanentCavityVolume = (PermanentCavityVolumeAmount + Volume.FromCubicMeters(cumulativeTearingVolume - previousTearingVolume)).CubicMeters;
                 }
             }
             
             // If the voxel has accumulated enough permanent tearing/crush (50% of its volume), it is destroyed.
-            if (PermanentCavityVolume > (Size * Size * Size * 0.5f))
+            if (PermanentCavityVolume > (VoxelVolume.CubicMeters * 0.5f))
             {
                 IsDestroyed = true;
-                PermanentCavityVolume = Size * Size * Size;
+                PermanentCavityVolume = VoxelVolume.CubicMeters;
             }
 
             return result;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Physiology
 {
@@ -39,6 +40,9 @@ namespace TacticalSim.Core.Physiology
         // Circulatory System
         public float ArterialBleedRate { get; set; } // ml/s
         public float VenousBleedRate { get; set; } // ml/s
+
+        public FlowRate ArterialBleed => FlowRate.FromMillilitersPerSecond(ArterialBleedRate);
+        public FlowRate VenousBleed => FlowRate.FromMillilitersPerSecond(VenousBleedRate);
         
         // Interventions
         public bool HasTourniquet { get; set; }
@@ -53,14 +57,14 @@ namespace TacticalSim.Core.Physiology
                 return 0f; // Tourniquet completely halts distal bleeding
             }
             
-            float activeRate = ArterialBleedRate + VenousBleedRate;
+            FlowRate activeRate = ArterialBleed + VenousBleed;
             
             // Dynamically calculate from destroyed voxels
             foreach (var voxel in Voxels)
             {
                 if (voxel.IsDestroyed)
                 {
-                    float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
+                    float volCc = voxel.VoxelVolume.CubicCentimeters;
                     float rate = voxel.Organ switch
                     {
                         // Cardiac muscle is continuously perfused under arterial
@@ -85,11 +89,11 @@ namespace TacticalSim.Core.Physiology
                     // injured solid organ or other non-compressible internal bleed.
                     if (HasWoundPacking && Type == BodyPartType.Abdomen && voxel.Organ == OrganType.Muscle)
                         rate *= 0.2f;
-                    activeRate += rate * volCc;
+                    activeRate += FlowRate.FromMillilitersPerSecond(rate * volCc);
                 }
             }
             
-            return activeRate;
+            return activeRate.MillilitersPerSecond;
         }
 
         private bool IsExtremity(BodyPartType type) =>

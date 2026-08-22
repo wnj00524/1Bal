@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Materials
 {
@@ -21,7 +22,7 @@ namespace TacticalSim.Core.Materials
 
             if (speed < 1e-6f)
             {
-                float eZero = 0.5f * profile.Mass * speed * speed;
+                float eZero = 0.5f * profile.MassKilograms.Kilograms * speed * speed;
                 return new PenetrationResult
                 {
                     Outcome = PenetrationOutcome.Stopped,
@@ -46,7 +47,7 @@ namespace TacticalSim.Core.Materials
 
             if (nominalThickness <= 0f)
             {
-                float ek0 = 0.5f * profile.Mass * speed * speed;
+                float ek0 = 0.5f * profile.MassKilograms.Kilograms * speed * speed;
                 return new PenetrationResult
                 {
                     Outcome = PenetrationOutcome.Perforated,
@@ -104,7 +105,7 @@ namespace TacticalSim.Core.Materials
 
             if (speed < 1e-6f)
             {
-                float eZero = 0.5f * profile.Mass * speed * speed;
+                float eZero = 0.5f * profile.MassKilograms.Kilograms * speed * speed;
                 return new PenetrationResult
                 {
                     Outcome = PenetrationOutcome.Stopped,
@@ -129,7 +130,7 @@ namespace TacticalSim.Core.Materials
 
             if (effectiveThickness <= 0f)
             {
-                float ek0 = 0.5f * profile.Mass * speed * speed;
+                float ek0 = 0.5f * profile.MassKilograms.Kilograms * speed * speed;
                 return new PenetrationResult
                 {
                     Outcome = PenetrationOutcome.Perforated,
@@ -183,7 +184,7 @@ namespace TacticalSim.Core.Materials
             Vector3? explicitExitPoint)
         {
             float v0 = projectile.Velocity.Length();
-            float ek0 = 0.5f * profile.Mass * v0 * v0;
+            float ek0 = 0.5f * profile.MassKilograms.Kilograms * v0 * v0;
 
             // Check for ricochet based on critical angle of incidence threshold
             if (theta >= material.RicochetAngleThreshold)
@@ -204,7 +205,7 @@ namespace TacticalSim.Core.Materials
                 float eRem = ek0 - eLoss;
                 float eTrans = eLoss;
 
-                float vExit = MathF.Sqrt(MathF.Max(0f, 2.0f * eRem / profile.Mass));
+                float vExit = MathF.Sqrt(MathF.Max(0f, 2.0f * eRem / profile.MassKilograms.Kilograms));
                 Vector3 vExitVec = dRefl * vExit;
 
                 return new PenetrationResult
@@ -231,15 +232,15 @@ namespace TacticalSim.Core.Materials
             else
             {
                 // Terminal ballistics resistance / medium drag force
-                float fDrag = 0.5f * material.Density * material.ResistanceCoefficient * profile.CrossSectionalArea * v0 * v0;
+                float fDrag = 0.5f * material.MassDensity.KilogramsPerCubicMeter * material.ResistanceCoefficient * profile.CrossSectionalAreaSquareMeters.SquareMeters * v0 * v0;
                 float deltaE = MathF.Min(fDrag * effectiveThickness, ek0);
                 float eRem = ek0 - deltaE;
                 float eTrans = deltaE;
 
                 // Perforation criteria: residual kinetic energy > 0.001 J and initial kinetic energy >= yield threshold
-                if (eRem > 0.001f && ek0 >= material.YieldEnergyThreshold)
+                if (eRem > Energy.FromJoules(0.001f).Joules && ek0 >= material.YieldEnergy.Joules)
                 {
-                    float vExit = MathF.Sqrt(MathF.Max(0f, 2.0f * eRem / profile.Mass));
+                    float vExit = MathF.Sqrt(MathF.Max(0f, 2.0f * eRem / profile.MassKilograms.Kilograms));
                     Vector3 vExitVec = d * vExit;
                     Vector3 calculatedExitPoint = explicitExitPoint ?? (entryPoint + d * effectiveThickness);
 

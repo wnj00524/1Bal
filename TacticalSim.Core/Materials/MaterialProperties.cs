@@ -1,5 +1,8 @@
 namespace TacticalSim.Core.Materials
 {
+    using TacticalSim.Core.Units;
+    using MaterialDensity = TacticalSim.Core.Units.Density;
+
     /// <summary>
     /// Represents physical properties of an environmental cover or armor material.
     /// </summary>
@@ -46,6 +49,15 @@ namespace TacticalSim.Core.Materials
         /// Minimum initial kinetic energy in Joules required to overcome material yield strength and initiate perforation.
         /// </summary>
         public float YieldEnergyThreshold { get; set; }
+
+        /// <summary>Typed view of <see cref="Density" />, stored in kg/m³.</summary>
+        public MaterialDensity MassDensity => MaterialDensity.FromKilogramsPerCubicMeter(Density);
+
+        /// <summary>Typed view of <see cref="YieldStrength" />; the legacy field is in MPa.</summary>
+        public Pressure YieldStrengthPressure => Pressure.FromMegapascals(YieldStrength);
+
+        /// <summary>Typed view of <see cref="YieldEnergyThreshold" />, stored in joules.</summary>
+        public Energy YieldEnergy => Energy.FromJoules(YieldEnergyThreshold);
 
         public MaterialProperties(
             string name,
