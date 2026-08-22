@@ -1,0 +1,145 @@
+using System.Collections.ObjectModel;
+using System.Numerics;
+using System.Text.Json.Serialization;
+using TacticalSim.Core.Damage.Anatomy;
+using TacticalSim.Core.Damage.Ballistics;
+using TacticalSim.Core.Units;
+
+namespace TacticalSim.Core.Damage.Lesions;
+
+public enum LesionKind { VesselLaceration, VesselTransection, ParenchymalInjury, Fracture, NerveInjury, AirwayDisruption, PleuralBreach, CardiacInjury, BrainOrSpinalInjury, OpenSoftTissueWound }
+public enum LesionTreatmentState { Untreated, TemporarilyControlled, DefinitivelyTreated }
+public enum FractureStability { Stable, Displaced, Unstable }
+public enum NerveDamageGrade { Neuropraxia, PartialDisruption, CompleteDisruption }
+
+public sealed record LesionGeometry(Vector3 Center, Vector3 TrackDirection, Distance Length, Distance Radius);
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$lesionType")]
+[JsonDerivedType(typeof(VesselLesion), "vessel")]
+[JsonDerivedType(typeof(FractureLesion), "fracture")]
+[JsonDerivedType(typeof(NerveLesion), "nerve")]
+[JsonDerivedType(typeof(TissueLesion), "tissue")]
+public abstract record Lesion
+{
+    protected Lesion(string id, string structureId, string originImpactId, LesionKind kind, float severity,
+        LesionGeometry geometry, LesionTreatmentState treatmentState, DateTimeOffset createdAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id); ArgumentException.ThrowIfNullOrWhiteSpace(structureId); ArgumentException.ThrowIfNullOrWhiteSpace(originImpactId);
+        if (!float.IsFinite(severity) || severity is < 0 or > 1) throw new ArgumentOutOfRangeException(nameof(severity));
+        Id=id; StructureId=structureId; OriginImpactId=originImpactId; Kind=kind; Severity=severity; Geometry=geometry ?? throw new ArgumentNullException(nameof(geometry)); TreatmentState=treatmentState; CreatedAt=createdAt;
+    }
+    public string Id { get; init; }
+    public string StructureId { get; init; }
+    public string OriginImpactId { get; init; }
+    public LesionKind Kind { get; init; }
+    public float Severity { get; init; }
+    public LesionGeometry Geometry { get; init; }
+    public LesionTreatmentState TreatmentState { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+}
+
+public sealed record VesselLesion : Lesion
+{
+    [JsonConstructor] public VesselLesion(string id,string structureId,string originImpactId,LesionKind kind,float severity,LesionGeometry geometry,LesionTreatmentState treatmentState,DateTimeOffset createdAt,Distance aperture,PressureRegime pressureRegime,bool completeTransection)
+        : base(id,structureId,originImpactId,kind,severity,geometry,treatmentState,createdAt) { if (kind is not (LesionKind.VesselLaceration or LesionKind.VesselTransection)) throw new ArgumentException("Invalid vessel lesion kind.",nameof(kind)); Aperture=aperture; PressureRegime=pressureRegime; CompleteTransection=completeTransection; }
+    public Distance Aperture { get; init; }
+    public PressureRegime PressureRegime { get; init; }
+    public bool CompleteTransection { get; init; }
+}
+public sealed record FractureLesion : Lesion
+{
+    [JsonConstructor] public FractureLesion(string id,string structureId,string originImpactId,float severity,LesionGeometry geometry,LesionTreatmentState treatmentState,DateTimeOffset createdAt,FractureStability stability,bool weightBearing)
+        : base(id,structureId,originImpactId,LesionKind.Fracture,severity,geometry,treatmentState,createdAt) { Stability=stability; WeightBearing=weightBearing; }
+    public FractureStability Stability { get; init; }
+    public bool WeightBearing { get; init; }
+}
+public sealed record NerveLesion : Lesion
+{
+    [JsonConstructor] public NerveLesion(string id,string structureId,string originImpactId,LesionKind kind,float severity,LesionGeometry geometry,LesionTreatmentState treatmentState,DateTimeOffset createdAt,NerveDamageGrade grade,string? laterality,string? neurologicalLevel)
+        : base(id,structureId,originImpactId,kind,severity,geometry,treatmentState,createdAt) { Grade=grade; Laterality=laterality; NeurologicalLevel=neurologicalLevel; }
+    public NerveDamageGrade Grade { get; init; }
+    public string? Laterality { get; init; }
+    public string? NeurologicalLevel { get; init; }
+}
+public sealed record TissueLesion : Lesion
+{
+    [JsonConstructor] public TissueLesion(string id,string structureId,string originImpactId,LesionKind kind,float severity,LesionGeometry geometry,LesionTreatmentState treatmentState,DateTimeOffset createdAt)
+        : base(id,structureId,originImpactId,kind,severity,geometry,treatmentState,createdAt) { }
+}
+
+public interface ILesionRepository
+{
+    IReadOnlyList<Lesion> Lesions { get; }
+    void AddRange(IEnumerable<Lesion> lesions);
+    bool TrySetTreatmentState(string lesionId, LesionTreatmentState state);
+}
+
+public sealed class LesionRepository : ILesionRepository
+{
+    private readonly List<Lesion> _lesions = [];
+    public IReadOnlyList<Lesion> Lesions => new ReadOnlyCollection<Lesion>(_lesions.ToArray());
+    public void AddRange(IEnumerable<Lesion> lesions)
+    {
+        ArgumentNullException.ThrowIfNull(lesions);
+        foreach (Lesion lesion in lesions.OrderBy(x => x.Id, StringComparer.Ordinal))
+        { if (_lesions.Any(x => x.Id == lesion.Id)) throw new InvalidOperationException($"Duplicate lesion ID '{lesion.Id}'."); _lesions.Add(lesion); }
+    }
+    public bool TrySetTreatmentState(string lesionId, LesionTreatmentState state)
+    { int index=_lesions.FindIndex(x=>x.Id==lesionId); if(index<0)return false; _lesions[index]=_lesions[index] with { TreatmentState=state }; return true; }
+}
+
+public interface IAnatomicalInjuryTarget
+{
+    IAnatomicalStructureCatalog Anatomy { get; }
+    ILesionRepository LesionRepository { get; }
+}
+
+public interface ILesionGenerator { IReadOnlyList<Lesion> Generate(WoundTrack track, IAnatomicalStructureCatalog anatomy); }
+
+/// <summary>Deterministic M6 translation of wound geometry into persistent structural injury.</summary>
+public sealed class LesionGenerator : ILesionGenerator
+{
+    public IReadOnlyList<Lesion> Generate(WoundTrack track, IAnatomicalStructureCatalog anatomy)
+    {
+        ArgumentNullException.ThrowIfNull(track); ArgumentNullException.ThrowIfNull(anatomy);
+        var result = new List<Lesion>(); int ordinal=0;
+        foreach (WoundTrackSegment segment in track.Segments.Where(x=>x.TransferredEnergy.Joules>0))
+        {
+            float cavityRadius=MathF.Sqrt(MathF.Max(segment.TransferredEnergy.Joules,0))*0.00035f; // provisional gameplay-calibrated M6 mapping
+            AnatomicalStructure[] hits=anatomy.QuerySegment(segment.EntryPoint,segment.EndPoint,cavityRadius).ToArray();
+            foreach (AnatomicalStructure structure in hits)
+            {
+                float severity=Math.Clamp(segment.TransferredEnergy.Joules/MathF.Max(20f, structure.Calibre.Meters*3000f),.01f,1f);
+                var geometry=new LesionGeometry((segment.EntryPoint+segment.EndPoint)/2,Vector3.Normalize(segment.EndPoint-segment.EntryPoint),segment.PathLength,Distance.FromMeters(MathF.Max(.0005f,cavityRadius)));
+                string id=$"lesion/{track.TrackId}/{ordinal++:D4}/{structure.Id}";
+                result.Add(Create(id,track.TrackId,structure,severity,geometry));
+            }
+            if (hits.Length==0)
+            {
+                var geometry=new LesionGeometry((segment.EntryPoint+segment.EndPoint)/2,SafeDirection(segment),segment.PathLength,Distance.FromMeters(MathF.Max(.0005f,cavityRadius)));
+                result.Add(new TissueLesion($"lesion/{track.TrackId}/{ordinal++:D4}/soft-tissue",segment.StructureId,track.TrackId,LesionKind.OpenSoftTissueWound,Math.Clamp(segment.TransferredEnergy.Joules/100f,.01f,1f),geometry,LesionTreatmentState.Untreated,DateTimeOffset.UnixEpoch));
+            }
+        }
+        return result;
+    }
+
+    private static Lesion Create(string id,string impact,AnatomicalStructure s,float severity,LesionGeometry g)
+    {
+        DateTimeOffset created=DateTimeOffset.UnixEpoch;
+        if(s.Type is AnatomicalStructureType.Artery or AnatomicalStructureType.Vein)
+        { bool transection=g.Radius.Meters*2>=s.Calibre.Meters; return new VesselLesion(id,s.Id,impact,transection?LesionKind.VesselTransection:LesionKind.VesselLaceration,severity,g,LesionTreatmentState.Untreated,created,Distance.FromMeters(MathF.Min(s.Calibre.Meters,g.Radius.Meters*2)),s.PressureRegime,transection); }
+        if(s.Type==AnatomicalStructureType.Bone) return new FractureLesion(id,s.Id,impact,severity,g,LesionTreatmentState.Untreated,created,severity>.65f?FractureStability.Unstable:severity>.3f?FractureStability.Displaced:FractureStability.Stable,s.FunctionalRole==FunctionalRole.WeightBearing);
+        if(s.Type==AnatomicalStructureType.Nerve) return new NerveLesion(id,s.Id,impact,s.FunctionalRole==FunctionalRole.SpinalCord?LesionKind.BrainOrSpinalInjury:LesionKind.NerveInjury,severity,g,LesionTreatmentState.Untreated,created,severity>.7f?NerveDamageGrade.CompleteDisruption:severity>.3f?NerveDamageGrade.PartialDisruption:NerveDamageGrade.Neuropraxia,s.Laterality,s.FunctionalRole==FunctionalRole.SpinalCord?InferSpinalLevel(g.Center.Y):null);
+        LesionKind kind=s.Type switch { AnatomicalStructureType.Airway=>LesionKind.AirwayDisruption, AnatomicalStructureType.Pleura=>LesionKind.PleuralBreach, AnatomicalStructureType.Pericardium=>LesionKind.CardiacInjury, AnatomicalStructureType.Organ=>LesionKind.ParenchymalInjury, _=>LesionKind.OpenSoftTissueWound };
+        return new TissueLesion(id,s.Id,impact,kind,severity,g,LesionTreatmentState.Untreated,created);
+    }
+    private static Vector3 SafeDirection(WoundTrackSegment s) { Vector3 d=s.EndPoint-s.EntryPoint; return d.LengthSquared()>0?Vector3.Normalize(d):Vector3.Zero; }
+    private static string InferSpinalLevel(float y)=>y>.5f?"cervical":y>.2f?"thoracic":"lumbar";
+}
+
+public sealed record LesionDebugItem(string LesionId,string StructureId,string StructureName,LesionKind Type,float Severity,LesionTreatmentState TreatmentState,string OriginImpactId,string Details);
+public static class LesionDebugInspector
+{
+    public static IReadOnlyList<LesionDebugItem> Inspect(IAnatomicalInjuryTarget target) => target.LesionRepository.Lesions.Select(l =>
+    { string name; try{name=target.Anatomy.GetRequired(l.StructureId).DisplayName;}catch(KeyNotFoundException){name=l.StructureId;} string details=l switch { VesselLesion v=>$"{v.PressureRegime}; aperture={v.Aperture.Meters:F4}m; transection={v.CompleteTransection}", FractureLesion f=>$"{f.Stability}; weightBearing={f.WeightBearing}", NerveLesion n=>$"{n.Grade}; side={n.Laterality??"midline"}; level={n.NeurologicalLevel??"n/a"}", _=>"persistent tissue lesion" }; return new LesionDebugItem(l.Id,l.StructureId,name,l.Kind,l.Severity,l.TreatmentState,l.OriginImpactId,details); }).ToArray();
+}

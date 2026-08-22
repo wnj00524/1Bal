@@ -12,13 +12,13 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-004 | [Create a single core projectile-interaction service](https://github.com/wnj00524/1Bal/issues/111) | M5: Damage-model foundations | Backlog |
 | DM-005 | [Add deterministic random-source contracts](https://github.com/wnj00524/1Bal/issues/112) | M5: Damage-model foundations | Backlog |
 | DM-006 | [Build a reference impact scenario harness](https://github.com/wnj00524/1Bal/issues/113) | M5: Damage-model foundations | Backlog |
-| DM-101 | [Define anatomical structure contracts](https://github.com/wnj00524/1Bal/issues/120) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-102 | [Define persistent lesion hierarchy](https://github.com/wnj00524/1Bal/issues/121) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-103 | [Add a first-pass major-vessel map](https://github.com/wnj00524/1Bal/issues/122) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-104 | [Add clinically meaningful bone segments and fracture lesions](https://github.com/wnj00524/1Bal/issues/123) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-105 | [Add spinal cord and major peripheral nerve structures](https://github.com/wnj00524/1Bal/issues/124) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-106 | [Convert voxels into an implementation detail of spatial lookup](https://github.com/wnj00524/1Bal/issues/125) | M6: Anatomical structures and persistent lesions | Backlog |
-| DM-107 | [Add lesion serialization and debug inspection](https://github.com/wnj00524/1Bal/issues/126) | M6: Anatomical structures and persistent lesions | Backlog |
+| DM-101 | [Define anatomical structure contracts](https://github.com/wnj00524/1Bal/issues/120) | M6: Anatomical structures and persistent lesions | Done |
+| DM-102 | [Define persistent lesion hierarchy](https://github.com/wnj00524/1Bal/issues/121) | M6: Anatomical structures and persistent lesions | Done |
+| DM-103 | [Add a first-pass major-vessel map](https://github.com/wnj00524/1Bal/issues/122) | M6: Anatomical structures and persistent lesions | Done |
+| DM-104 | [Add clinically meaningful bone segments and fracture lesions](https://github.com/wnj00524/1Bal/issues/123) | M6: Anatomical structures and persistent lesions | Done |
+| DM-105 | [Add spinal cord and major peripheral nerve structures](https://github.com/wnj00524/1Bal/issues/124) | M6: Anatomical structures and persistent lesions | Done |
+| DM-106 | [Convert voxels into an implementation detail of spatial lookup](https://github.com/wnj00524/1Bal/issues/125) | M6: Anatomical structures and persistent lesions | Done |
+| DM-107 | [Add lesion serialization and debug inspection](https://github.com/wnj00524/1Bal/issues/126) | M6: Anatomical structures and persistent lesions | Done |
 | DM-201 | [Implement bleeding sources from vessel and tissue lesions](https://github.com/wnj00524/1Bal/issues/127) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
 | DM-202 | [Add blood destinations and compartment conservation](https://github.com/wnj00524/1Bal/issues/128) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
 | DM-203 | [Add simplified hemostasis, compression, and rebleeding](https://github.com/wnj00524/1Bal/issues/129) | M7: Hemorrhage, circulation, and tactical capability | Backlog |

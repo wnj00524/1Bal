@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using TacticalSim.Core.Damage;
+using TacticalSim.Core.Damage.Anatomy;
+using TacticalSim.Core.Damage.Lesions;
 using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Physiology
@@ -206,8 +208,10 @@ namespace TacticalSim.Core.Physiology
             DamageModelVersion modelVersion);
     }
 
-    public class TacticalActorPhysiology : IActorPhysiology
+    public class TacticalActorPhysiology : IActorPhysiology, IAnatomicalInjuryTarget
     {
+        public IAnatomicalStructureCatalog Anatomy { get; private set; } = new AnatomicalStructureCatalog([]);
+        public ILesionRepository LesionRepository { get; } = new LesionRepository();
         public BodyPart RootBodyPart { get; private set; } = null!;
         public float TotalBloodVolume { get; private set; } = 5000f; // 5L baseline
         private float _baselineBloodVolume = 5000f;
@@ -257,6 +261,9 @@ namespace TacticalSim.Core.Physiology
         {
             RootBodyPart = root;
         }
+
+        public void SetAnatomy(IAnatomicalStructureCatalog anatomy) =>
+            Anatomy = anatomy ?? throw new ArgumentNullException(nameof(anatomy));
 
         public void AdministerAnalgesic(float strength)
         {
