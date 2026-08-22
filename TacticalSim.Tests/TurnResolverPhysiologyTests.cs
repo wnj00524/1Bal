@@ -7,6 +7,7 @@ using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Randomness;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
 using TacticalSim.Core.World;
@@ -16,6 +17,11 @@ namespace TacticalSim.Tests
 {
     public class TurnResolverPhysiologyTests
     {
+        private static IDeterministicRandomStreamProvider CreateRandomStreams()
+        {
+            return new DeterministicRandomStreamProvider(new FixedRootSeedProvider(0UL));
+        }
+
         private static (TacticalEntity entity, TacticalActorPhysiology physiology, BodyPart root) CreateTestEntity(
             float arterialBleed = 0f,
             float venousBleed = 0f,
@@ -354,7 +360,7 @@ namespace TacticalSim.Tests
             world.AddEntity(shooter);
 
             var environment = new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0));
-            var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment);
+            var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment, CreateRandomStreams());
 
             resolver.ScheduleAction(shootAction);
 
@@ -393,7 +399,7 @@ namespace TacticalSim.Tests
             world.AddEntity(shooter);
 
             var environment = new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0));
-            var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment);
+            var shootAction = new ShootTacticalAction(shooter, Vector3.UnitX, environment, CreateRandomStreams());
 
             resolver.ScheduleAction(shootAction);
 
@@ -420,7 +426,7 @@ namespace TacticalSim.Tests
             var environment = new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0));
 
             // Passing Vector3.Zero direction shouldn't produce NaN
-            var shootAction = new ShootTacticalAction(shooter, Vector3.Zero, environment);
+            var shootAction = new ShootTacticalAction(shooter, Vector3.Zero, environment, CreateRandomStreams());
             shootAction.OnComplete();
 
             Assert.NotNull(shootAction.FinalState);

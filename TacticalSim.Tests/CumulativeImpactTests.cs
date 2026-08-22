@@ -1,5 +1,7 @@
 using System.Numerics;
+using TacticalSim.Core.Damage;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Units;
 
 namespace TacticalSim.Tests;
 
@@ -40,9 +42,17 @@ public class CumulativeImpactTests
         var physiology = new TacticalActorPhysiology();
         physiology.SetRoot(root);
 
-        physiology.ProcessImpact(Vector3.UnitZ, 1_000f, firstVoxel.Center);
+        physiology.ProcessLegacyImpact(
+            Vector3.UnitZ,
+            Energy.FromJoules(1_000f),
+            firstVoxel.Center,
+            DamageModelVersion.LegacyV1);
         float firstWoundEnergy = firstVoxel.DepositedEnergy;
-        physiology.ProcessImpact(Vector3.UnitZ, 750f, secondVoxel.Center);
+        physiology.ProcessLegacyImpact(
+            Vector3.UnitZ,
+            Energy.FromJoules(750f),
+            secondVoxel.Center,
+            DamageModelVersion.LegacyV1);
 
         Assert.Equal(firstWoundEnergy, firstVoxel.DepositedEnergy);
         Assert.Equal(750f, secondVoxel.DepositedEnergy);

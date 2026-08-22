@@ -107,7 +107,7 @@ namespace TacticalSim.Core.Physiology
         /// Calculates velocity loss, transfers energy, and calculates cavitation.
         /// Returns a CavitationEvent if radial propagation to neighbors is required.
         /// </summary>
-        public CavitationEvent? ProcessPenetration(ref ProjectileState projectile, in BallisticProfile profile)
+        internal CavitationEvent? ProcessPenetration(ref ProjectileState projectile, in BallisticProfile profile)
         {
             if (IsDestroyed) return null;
 
@@ -164,7 +164,7 @@ namespace TacticalSim.Core.Physiology
         /// <summary>
         /// Processes a projectile moving a specific distance through this voxel during a timestep.
         /// </summary>
-        public CavitationEvent? ProcessPenetrationStep(ref ProjectileState projectile, in BallisticProfile profile, float distanceInMeters)
+        internal CavitationEvent? ProcessPenetrationStep(ref ProjectileState projectile, in BallisticProfile profile, float distanceInMeters)
         {
             if (IsDestroyed || distanceInMeters <= 0.000001f) return null;
 
@@ -252,7 +252,7 @@ namespace TacticalSim.Core.Physiology
         /// <summary>
         /// Applies kinetic energy transfer to the voxel directly (e.g. from adjacent blast).
         /// </summary>
-        public CavitationEvent? ApplyKineticEnergy(float deltaE, Vector3 originPoint, float directCrushVolume = 0f)
+        internal CavitationEvent? ApplyKineticEnergy(float deltaE, Vector3 originPoint, float directCrushVolume = 0f)
         {
             if (IsDestroyed) return null;
 
@@ -289,9 +289,13 @@ namespace TacticalSim.Core.Physiology
                 float cumulativeStretchVolume = DepositedEnergy / stretchDenominator;
                 float voxelVolume = VoxelVolume.CubicMeters;
                 
-                // If the local stretch exceeds the shear limits of the tissue, it tears permanently.
-                // The threshold is based on ShearStrength. Brittle tissues (liver, brain, bone) tear easily.
-                float tearThreshold = Tissue.ShearStrength * 0.1f * voxelVolume;
+                // LegacyVoxel provisional calibration: this historical equation uses
+                // the numeric MPa value as a calibrated scalar. Keep that behavior for
+                // legacy comparison until the dimensionally coherent model replaces it.
+                // Brittle tissues (liver, brain, bone) tear more easily.
+                const float LegacyTearCalibration = 0.1f;
+                float legacyShearStrengthMegapascals = Tissue.ShearStrengthPressure.Megapascals;
+                float tearThreshold = legacyShearStrengthMegapascals * LegacyTearCalibration * voxelVolume;
                 
                 if (cumulativeStretchVolume > tearThreshold)
                 {

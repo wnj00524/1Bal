@@ -199,16 +199,32 @@ public static class UnitBoundaryConversions
 {
     public static float ToSerializedMeters(Distance value) => value.Meters;
     public static Distance FromSerializedMeters(float value) => Distance.FromMeters(value);
+    public static float ToSerializedSquareMeters(Area value) => value.SquareMeters;
+    public static Area FromSerializedSquareMeters(float value) => Area.FromSquareMeters(value);
+    public static float ToSerializedCubicMeters(Volume value) => value.CubicMeters;
+    public static Volume FromSerializedCubicMeters(float value) => Volume.FromCubicMeters(value);
     public static float ToSerializedKilograms(Mass value) => value.Kilograms;
     public static Mass FromSerializedKilograms(float value) => Mass.FromKilograms(value);
+    public static float ToSerializedKilogramsPerCubicMeter(Density value) => value.KilogramsPerCubicMeter;
+    public static Density FromSerializedKilogramsPerCubicMeter(float value) => Density.FromKilogramsPerCubicMeter(value);
     public static float ToSerializedSeconds(Time value) => value.Seconds;
     public static Time FromSerializedSeconds(float value) => Time.FromSeconds(value);
     public static float ToSerializedJoules(Energy value) => value.Joules;
     public static Energy FromSerializedJoules(float value) => Energy.FromJoules(value);
     public static float ToSerializedPascals(Pressure value) => value.Pascals;
     public static Pressure FromSerializedPascals(float value) => Pressure.FromPascals(value);
+    public static float ToSerializedCubicMetersPerSecond(FlowRate value) => value.CubicMetersPerSecond;
+    public static FlowRate FromSerializedCubicMetersPerSecond(float value) => FlowRate.FromCubicMetersPerSecond(value);
 
+    public static float ToDisplaySquareMillimeters(Area value) => value.SquareMeters * 1_000_000f;
+    public static Area FromDisplaySquareMillimeters(float value) => Area.FromSquareMeters(value / 1_000_000f);
     public static float ToDisplayMegapascals(Pressure value) => value.Megapascals;
     public static float ToDisplayCubicCentimeters(Volume value) => value.CubicCentimeters;
+    public static Volume FromDisplayCubicCentimeters(float value) => Volume.FromCubicCentimeters(value);
+    public static float ToDisplayKilogramsPerCubicMeter(Density value) => value.KilogramsPerCubicMeter;
+    public static Density FromDisplayKilogramsPerCubicMeter(float value) => Density.FromKilogramsPerCubicMeter(value);
+    public static float ToDisplayMillilitersPerSecond(FlowRate value) => value.MillilitersPerSecond;
+    public static FlowRate FromDisplayMillilitersPerSecond(float value) => FlowRate.FromMillilitersPerSecond(value);
     public static float ToDisplayMillilitersPerMinute(FlowRate value) => value.MillilitersPerMinute;
+    public static FlowRate FromDisplayMillilitersPerMinute(float value) => FlowRate.FromMillilitersPerMinute(value);
 }

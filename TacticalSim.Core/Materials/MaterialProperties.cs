@@ -74,9 +74,10 @@ namespace TacticalSim.Core.Materials
             RicochetAngleThreshold = ricochetAngleThreshold;
             YieldEnergyThreshold = yieldEnergyThreshold;
             Hardness = resistanceCoefficient;
-            // Preserve compatibility with the original energy-threshold profiles
-            // while exposing a positive strength value to geometry consumers.
-            YieldStrength = yieldEnergyThreshold;
+            // This legacy profile supplies an energy threshold, not a pressure.
+            // Strength is therefore explicitly unknown rather than inferred by
+            // reinterpreting joules as megapascals.
+            YieldStrength = 0f;
         }
 
         public MaterialProperties(
