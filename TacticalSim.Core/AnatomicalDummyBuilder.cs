@@ -147,6 +147,7 @@ namespace TacticalSim.Core
 
             // --- Bones ---
             float dCervicalSpine = SdfCapsule(pos, new Vector3(0, 0.5f, -0.08f), new Vector3(0, 0.65f, -0.08f), 0.025f);
+            float dAutonomicNerve = SdfCapsule(pos, new Vector3(0, 0.5f, -0.08f), new Vector3(0, 0.65f, -0.08f), 0.01f);
             float dSkullInner = SdfEllipsoid(pos - new Vector3(0, 0.77f, -0.03f), new Vector3(0.065f, 0.09f, 0.08f));
             float dSkullOuter = SdfEllipsoid(pos - new Vector3(0, 0.77f, -0.03f), new Vector3(0.075f, 0.10f, 0.09f));
             float dSkullShell = MathF.Max(dSkullOuter, -dSkullInner);
@@ -169,6 +170,9 @@ namespace TacticalSim.Core
             float dAirway = SdfCapsule(pos, new Vector3(0, 0.5f, -0.03f), new Vector3(0, 0.66f, -0.02f), 0.015f);
 
             // --- Evaluation Hierarchy (Inner to outer) ---
+            // The cervical autonomic pathway runs inside the protective spine and
+            // carries control signals from the brainstem to the heart and lungs.
+            if (dAutonomicNerve <= 0) return (TissueRegistry.Nerve, OrganType.AutonomicNerve);
             if (dBones <= 0) return (TissueRegistry.Bone, OrganType.Bone);
             if (dBrain <= 0) return (TissueRegistry.Brain, OrganType.Brain);
             if (dEyes <= 0) return (TissueRegistry.Eye, OrganType.Eye);

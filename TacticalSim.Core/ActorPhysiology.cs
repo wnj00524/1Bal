@@ -145,6 +145,7 @@ namespace TacticalSim.Core.Physiology
         float BreathingRatePerMinute { get; }
         float AutonomicDrive { get; }
         float BrainstemFunction { get; }
+        float AutonomicNerveFunction { get; }
         HemorrhageClass CurrentHemorrhageClass { get; }
 
         // Respiratory System
@@ -191,6 +192,7 @@ namespace TacticalSim.Core.Physiology
         public float BreathingRatePerMinute { get; private set; } = 12f;
         public float AutonomicDrive { get; private set; } = 1f;
         public float BrainstemFunction { get; private set; } = 1f;
+        public float AutonomicNerveFunction { get; private set; } = 1f;
         public HemorrhageClass CurrentHemorrhageClass { get; private set; } = HemorrhageClass.Class1;
 
         public float BloodOxygenation { get; private set; } = 1.0f;
@@ -280,7 +282,8 @@ namespace TacticalSim.Core.Physiology
         private void UpdateAutonomicControl()
         {
             BrainstemFunction = CalculateOrganFunction(OrganType.Brain);
-            AutonomicDrive = BrainstemFunction * _hypoxicBrainFunction;
+            AutonomicNerveFunction = CalculateOrganFunction(OrganType.AutonomicNerve);
+            AutonomicDrive = BrainstemFunction * AutonomicNerveFunction * _hypoxicBrainFunction;
             _cardiacFunction = CalculateOrganFunction(OrganType.Heart);
             BreathingRatePerMinute = 12f * AutonomicDrive;
         }

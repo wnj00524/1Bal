@@ -39,6 +39,38 @@ public class NeurologicalControlTests
     }
 
     [Fact]
+    public void SeveredAutonomicNervePathwayStopsHeartAndBreathing()
+    {
+        var physiology = CreateSingleOrganPhysiology(
+            OrganType.AutonomicNerve,
+            TissueRegistry.Nerve);
+        physiology.RootBodyPart.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+
+        physiology.TickPhysiology(1f);
+
+        Assert.Equal(1f, physiology.BrainstemFunction);
+        Assert.Equal(0f, physiology.AutonomicNerveFunction);
+        Assert.Equal(0f, physiology.AutonomicDrive);
+        Assert.Equal(0f, physiology.HeartRateBpm);
+        Assert.Equal(0f, physiology.MeanArterialPressureMmhg);
+        Assert.Equal(0f, physiology.BreathingRatePerMinute);
+        Assert.Equal(0f, physiology.VentilationEffectiveness);
+    }
+
+    [Fact]
+    public void PeripheralNerveLikeTissueDoesNotInterruptAutonomicControl()
+    {
+        var physiology = CreateSingleOrganPhysiology(OrganType.None, TissueRegistry.Nerve);
+        physiology.RootBodyPart.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+
+        physiology.TickPhysiology(1f);
+
+        Assert.Equal(1f, physiology.AutonomicNerveFunction);
+        Assert.Equal(80f, physiology.HeartRateBpm);
+        Assert.Equal(12f, physiology.BreathingRatePerMinute);
+    }
+
+    [Fact]
     public void DestroyedHeartStopsCirculationAndCausesProgressiveHypoxia()
     {
         var physiology = CreateSingleOrganPhysiology(OrganType.Heart, TissueRegistry.Muscle);
