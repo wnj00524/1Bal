@@ -1,5 +1,8 @@
 using System;
 using System.Numerics;
+using TacticalSim.Core.Units;
+using SimulationTime = TacticalSim.Core.Units.Time;
+using ProjectileMass = TacticalSim.Core.Units.Mass;
 
 namespace TacticalSim.Core.Ballistics
 {
@@ -11,6 +14,13 @@ namespace TacticalSim.Core.Ballistics
         public Vector3 Position;
         public Vector3 Velocity;
         public float Time;
+
+        /// <summary>Typed view of <see cref="Time" />, stored in seconds.</summary>
+        public SimulationTime TimeSeconds
+        {
+            readonly get => SimulationTime.FromSeconds(Time);
+            set => Time = value.Seconds;
+        }
     }
 
     /// <summary>
@@ -21,6 +31,12 @@ namespace TacticalSim.Core.Ballistics
         public float Mass; // kg
         public float CrossSectionalArea; // m^2
         public IDragModel DragModel;
+
+        /// <summary>Typed compatibility view of <see cref="Mass" />, stored in kilograms.</summary>
+        public readonly ProjectileMass MassKilograms => ProjectileMass.FromKilograms(Mass);
+
+        /// <summary>Typed compatibility view of <see cref="CrossSectionalArea" />, stored in m².</summary>
+        public readonly Area CrossSectionalAreaSquareMeters => Area.FromSquareMeters(CrossSectionalArea);
     }
 
     /// <summary>
@@ -51,7 +67,7 @@ namespace TacticalSim.Core.Ballistics
 
             // Aerodynamic drag force: F_d = 0.5 * rho * v^2 * Cd * A
             // Drag acceleration: a_d = F_d / m
-            float dragFactor = -0.5f * env.AirDensity * cd * profile.CrossSectionalArea / profile.Mass;
+            float dragFactor = -0.5f * env.AirDensity * cd * profile.CrossSectionalAreaSquareMeters.SquareMeters / profile.MassKilograms.Kilograms;
             
             Vector3 dragAcceleration = Vector3.Zero;
             if (speed > 0.0001f)
@@ -107,7 +123,7 @@ namespace TacticalSim.Core.Ballistics
             {
                 Position = nextP,
                 Velocity = nextV,
-                Time = state.Time + dt
+                Time = (state.TimeSeconds + SimulationTime.FromSeconds(dt)).Seconds
             };
         }
     }

@@ -1,5 +1,6 @@
 using System.Numerics;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Materials
 {
@@ -67,5 +68,11 @@ namespace TacticalSim.Core.Materials
         /// Kinematic projectile state after exiting the barrier or ricocheting.
         /// </summary>
         public ProjectileState ExitState { get; set; }
+
+        public Distance EffectiveThicknessDistance => Distance.FromMeters(EffectiveThickness);
+        public Time ExitTime => Time.FromSeconds(ExitState.Time);
+        public Energy InitialEnergy => Energy.FromJoules(InitialKineticEnergy);
+        public Energy RemainingEnergy => Energy.FromJoules(RemainingKineticEnergy);
+        public Energy TransferredEnergy => Energy.FromJoules(TransferredKineticEnergy);
     }
 }
