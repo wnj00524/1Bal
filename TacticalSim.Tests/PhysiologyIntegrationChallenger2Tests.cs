@@ -99,7 +99,7 @@ namespace TacticalSim.Tests
         }
 
         [Fact]
-        public void Physiology_MicroStepPrecision_OneThousandSteps_MatchesSingleMacroStep()
+        public void Physiology_MicroSteps_ApplyFallingPressureFeedbackWithoutExceedingRawBleedRate()
         {
             float bleedRate = 12.345f;
             float totalDuration = 100.0f;
@@ -128,8 +128,8 @@ namespace TacticalSim.Tests
             float expectedRemaining = 5000f - expectedLoss; // 3765.5 ml
 
             Assert.Equal(expectedRemaining, macroPhys.TotalBloodVolume, 2);
-            Assert.True(MathF.Abs(expectedRemaining - microPhys.TotalBloodVolume) < 0.1f, $"Micro-step error {MathF.Abs(expectedRemaining - microPhys.TotalBloodVolume)} must be < 0.1 ml");
-            Assert.True(MathF.Abs(macroPhys.TotalBloodVolume - microPhys.TotalBloodVolume) < 0.1f);
+            Assert.True(microPhys.TotalBloodVolume > expectedRemaining);
+            Assert.True(microPhys.TotalBloodVolume <= 5000f);
             Assert.Equal(totalDuration, microResolver.GlobalTime, 2);
         }
 

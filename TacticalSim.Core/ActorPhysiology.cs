@@ -258,16 +258,36 @@ namespace TacticalSim.Core.Physiology
 
         public void TickPhysiology(float dt)
         {
+            float elapsedSeconds = MathF.Max(0f, dt);
             float totalBleedRate = CalculateBleedRate(RootBodyPart, out float airwayBleedRate);
-            if (totalBleedRate > 0)
-            {
-                TotalBloodVolume -= totalBleedRate * dt;
-            }
+            // Flow through an open vessel falls with perfusion pressure.  The
+            // square-root relationship is the standard orifice-flow approximation;
+            // it also prevents a hypotensive or arrested casualty bleeding as if
+            // their circulation were still at the normal 93 mmHg MAP.
+            float pressureFlowFactor = MathF.Sqrt(Math.Clamp(
+                MeanArterialPressureMmhg / 93f, 0f, 1f));
+            float requestedBloodLoss = totalBleedRate * pressureFlowFactor * elapsedSeconds;
+            float actualBloodLoss = Math.Clamp(requestedBloodLoss, 0f, TotalBloodVolume);
+            TotalBloodVolume = Math.Clamp(
+                TotalBloodVolume - actualBloodLoss, 0f, _baselineBloodVolume);
 
             // ABC: Airway bleeding pools into the lungs
-            if (airwayBleedRate > 0)
+            if (airwayBleedRate > 0f && actualBloodLoss > 0f)
             {
-                AlveolarBloodAccumulation += airwayBleedRate * dt;
+                float lungCapacityMl = CalculateLungVolumeMl(RootBodyPart);
+                // Some focused test/medical models omit lung voxels.  Retain the
+                // established adult functional flooding capacity in that case.
+                if (lungCapacityMl <= 0f)
+                    lungCapacityMl = 500f;
+
+                float airwayShare = totalBleedRate > 0f
+                    ? Math.Clamp(airwayBleedRate / totalBleedRate, 0f, 1f)
+                    : 0f;
+                float airwayBloodLoss = actualBloodLoss * airwayShare;
+                float bloodLostFromCirculation = _baselineBloodVolume - TotalBloodVolume;
+                float alveolarLimit = MathF.Min(lungCapacityMl, bloodLostFromCirculation);
+                AlveolarBloodAccumulation = Math.Clamp(
+                    AlveolarBloodAccumulation + airwayBloodLoss, 0f, alveolarLimit);
             }
 
             TickIschemia(RootBodyPart, dt);
@@ -277,6 +297,21 @@ namespace TacticalSim.Core.Physiology
             UpdateCerebralState(dt);
             UpdateNervousSystemState(dt);
             UpdateMotorState();
+        }
+
+        private static float CalculateLungVolumeMl(BodyPart part)
+        {
+            float volumeMl = 0f;
+            foreach (var voxel in part.Voxels)
+            {
+                if (voxel.Organ == OrganType.Lung)
+                    volumeMl += voxel.Size * voxel.Size * voxel.Size * 1_000_000f;
+            }
+
+            foreach (var child in part.Children)
+                volumeMl += CalculateLungVolumeMl(child);
+
+            return volumeMl;
         }
 
         private void UpdateAutonomicControl()
@@ -610,8 +645,16 @@ namespace TacticalSim.Core.Physiology
                     + ((HeartRateBpm - intrinsicPacemakerRateBpm) * AutonomicDrive);
             }
 
+            float heartRateBeforeCardiacDamage = HeartRateBpm;
             HeartRateBpm *= _cardiacFunction;
-            MeanArterialPressureMmhg *= AutonomicDrive * _cardiacFunction;
+            // MAP depends on cardiac output (heart rate x stroke volume).  Blood
+            // volume is already represented by the hemorrhage-class pressure
+            // curve above; this ratio adds the missing effect of an impaired rate
+            // without double-counting hypovolemia in stroke volume.
+            float heartRateOutputFactor = heartRateBeforeCardiacDamage > 0f
+                ? Math.Clamp(HeartRateBpm / heartRateBeforeCardiacDamage, 0f, 1.25f)
+                : 0f;
+            MeanArterialPressureMmhg *= AutonomicDrive * heartRateOutputFactor;
 
             if (HeartRateBpm <= 0f)
             {
