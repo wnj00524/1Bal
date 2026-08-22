@@ -47,6 +47,14 @@ Adding `CanStand` to capability telemetry advances the reference result and comp
 
 This bridge closes the fracture-specific functional requirement in DM-104. It does not implement the full DM-207 physiology-to-capability resolver: posture beyond standing, aiming, firing, reloading, communication, self-aid, causal attribution, and generalized physiological incapacity remain deferred to that issue.
 
+## Neurological function bridge
+
+DM-105 divides the spinal cord into stable cervical, thoracic, and lumbar structure IDs and adds paired brachial plexus, median, radial, ulnar, sciatic, femoral, tibial, and common peroneal nerve structures. Peripheral structures carry explicit left/right laterality. Spinal lesions preserve their named level and infer left/right laterality from a wound centre more than 1 mm from the midline; central wounds remain bilateral.
+
+`NeurologicalFunctionalResolver` translates persistent `NerveLesion` grades into four independent upper/lower and left/right motor capacities. A peripheral lesion constrains only the limb named by its structure. A cervical cord lesion can constrain upper and lower limbs, while thoracic and lumbar cord lesions constrain lower limbs. Unspecified spinal laterality applies bilaterally. Multiple lesions use the same deterministic minimum-capacity aggregation rule as fractures.
+
+`TacticalActorPhysiology` combines neurological lower-limb capacity with movement and standing, and neurological upper-limb capacity with weapon handling. This state is refreshed after authoritative lesion generation and on physiology ticks. It does not consult destroyed brain or nerve voxel fractions, and it cannot improve a more restrictive legacy voxel or fracture result. Sensory loss, pain, reflexes, autonomic pathways, hand-specific actions, gait selection, and the general DM-207 capability model remain outside this bounded bridge.
+
 ## Serialization and inspection
 
 The lesion base contract uses explicit JSON polymorphism and round-trips every subtype through `DamageModelJson`. `LesionDebugInspector` returns read-only rows containing structure, lesion kind, severity, treatment state, origin impact, and subtype detail. Reference impact outputs now mark lesions available and include their serialized representations.
@@ -65,5 +73,10 @@ The lesion base contract uses explicit JSON polymorphism and round-trips every s
 | Severe-restriction capacity | `0.40` | provisional gameplay mapping; not clinically validated | displaced-fracture standing, movement, or upper-limb capacity |
 | Structural-function-lost capacity | `0.00` | provisional gameplay mapping; not clinically validated | unstable-fracture capacity; prevents standing when weight-bearing |
 | Multiple-fracture aggregation | minimum capacity (worst effect) | provisional deterministic rule; not clinically validated | stable and order-independent, but does not model additive or synergistic injury |
+| Spinal midline tolerance | `0.001 m` | inferred geometry boundary | classify central wounds as bilateral rather than assigning unstable floating-point laterality |
+| Neuropraxia motor capacity | `0.80` | provisional gameplay mapping; not clinically validated | bounded transient-grade motor constraint |
+| Partial nerve disruption capacity | `0.40` | provisional gameplay mapping; not clinically validated | bounded partial motor constraint |
+| Complete nerve disruption capacity | `0.00` | provisional gameplay mapping; not clinically validated | loss of the relevant motor pathway |
+| Multiple nerve lesion aggregation | minimum capacity (worst effect) | provisional deterministic rule; not clinically validated | order-independent per-limb result |
 
 The standard map is deliberately coarse and is not a clinical predictor. Pleural volumes are represented as intersectable centreline capsules rather than exact membranes. Membrane-accurate geometry and finer solid-organ substructures remain follow-up refinements. M7 owns pressure-dependent bleeding and the general physiology-to-capability model; DM-104 supplies only the bounded musculoskeletal bridge described above. Legacy voxel-derived physiology remains temporarily active behind the existing migration boundary.

@@ -53,6 +53,7 @@ namespace TacticalSim.Core.DependencyInjection
             services.TryAddSingleton(options ?? new DamageModelOptions());
             services.TryAddSingleton<ILesionGenerator, LesionGenerator>();
             services.TryAddSingleton<IMusculoskeletalFunctionalResolver, MusculoskeletalFunctionalResolver>();
+            services.TryAddSingleton<INeurologicalFunctionalResolver, NeurologicalFunctionalResolver>();
             services.TryAddSingleton<IProjectileInteractionService, ProjectileInteractionService>();
             services.TryAddSingleton<IReferenceImpactScenarioCatalog>(
                 _ => new ReferenceImpactScenarioCatalog());
