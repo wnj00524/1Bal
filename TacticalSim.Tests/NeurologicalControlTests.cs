@@ -53,6 +53,49 @@ public class NeurologicalControlTests
         Assert.True(physiology.BloodOxygenation < initialOxygenation);
     }
 
+    [Fact]
+    public void AirwayObstructionStopsVentilationDespiteIntactCirculation()
+    {
+        var physiology = CreateSingleOrganPhysiology(OrganType.Airway, TissueRegistry.Airway);
+        physiology.RootBodyPart.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+
+        physiology.TickPhysiology(5f);
+
+        Assert.Equal(0f, physiology.AirwayPatency);
+        Assert.Equal(0f, physiology.VentilationEffectiveness);
+        Assert.Equal(1f, physiology.CirculationEffectiveness);
+        Assert.True(physiology.BloodOxygenation < 1f);
+    }
+
+    [Fact]
+    public void CardiacArrestStopsCerebralOxygenDeliveryWithPatentAirway()
+    {
+        var physiology = CreateSingleOrganPhysiology(OrganType.Heart, TissueRegistry.Muscle);
+        physiology.RootBodyPart.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+
+        physiology.TickPhysiology(1f);
+
+        Assert.Equal(1f, physiology.AirwayPatency);
+        Assert.Equal(1f, physiology.VentilationEffectiveness);
+        Assert.Equal(0f, physiology.CirculationEffectiveness);
+        Assert.Equal(0f, physiology.CerebralOxygenation);
+    }
+
+    [Fact]
+    public void SustainedCerebralHypoxiaSuppressesBrainControlOfHeartAndBreathing()
+    {
+        var physiology = CreateSingleOrganPhysiology(OrganType.Heart, TissueRegistry.Muscle);
+        physiology.RootBodyPart.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+
+        physiology.TickPhysiology(60f);
+
+        Assert.True(physiology.BrainHypoxiaSeconds >= 50f);
+        Assert.Equal(1f, physiology.BrainstemFunction);
+        Assert.Equal(0f, physiology.AutonomicDrive);
+        Assert.Equal(0f, physiology.BreathingRatePerMinute);
+        Assert.Equal(0f, physiology.ConsciousnessLevel);
+    }
+
     private static TacticalActorPhysiology CreateSingleOrganPhysiology(
         OrganType organ,
         TissueProperties tissue)
