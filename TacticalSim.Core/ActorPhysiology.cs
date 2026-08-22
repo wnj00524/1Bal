@@ -213,14 +213,18 @@ namespace TacticalSim.Core.Physiology
     public class TacticalActorPhysiology :
         IActorPhysiology,
         IAnatomicalInjuryTarget,
-        IMusculoskeletalFunctionalTarget
+        IMusculoskeletalFunctionalTarget,
+        INeurologicalFunctionalTarget
     {
         private readonly IMusculoskeletalFunctionalResolver _musculoskeletalFunctionalResolver;
+        private readonly INeurologicalFunctionalResolver _neurologicalFunctionalResolver;
 
         public IAnatomicalStructureCatalog Anatomy { get; private set; } = new AnatomicalStructureCatalog([]);
         public ILesionRepository LesionRepository { get; } = new LesionRepository();
         public MusculoskeletalFunctionalState MusculoskeletalFunctionalState { get; private set; } =
             MusculoskeletalFunctionalState.Healthy;
+        public NeurologicalFunctionalState NeurologicalFunctionalState { get; private set; } =
+            NeurologicalFunctionalState.Healthy;
         public BodyPart RootBodyPart { get; private set; } = null!;
         public float TotalBloodVolume { get; private set; } = 5000f; // 5L baseline
         private float _baselineBloodVolume = 5000f;
@@ -261,7 +265,8 @@ namespace TacticalSim.Core.Physiology
         
         public float MobilityLevel { get; private set; } = 1.0f;
         public float WeaponHandlingLevel { get; private set; } = 1.0f;
-        public bool CanStand => MusculoskeletalFunctionalState.CanStand;
+        public bool CanStand => MusculoskeletalFunctionalState.CanStand
+            && NeurologicalFunctionalState.LowerLimbCapacity > 0f;
 
         private float _analgesicLevel = 0f;
         private float _cardiacFunction = 1f;
@@ -270,15 +275,24 @@ namespace TacticalSim.Core.Physiology
         private float _legacyVoxelWeaponHandlingLevel = 1f;
 
         public TacticalActorPhysiology()
-            : this(new MusculoskeletalFunctionalResolver())
+            : this(new MusculoskeletalFunctionalResolver(), new NeurologicalFunctionalResolver())
         {
         }
 
         public TacticalActorPhysiology(
             IMusculoskeletalFunctionalResolver musculoskeletalFunctionalResolver)
+            : this(musculoskeletalFunctionalResolver, new NeurologicalFunctionalResolver())
+        {
+        }
+
+        public TacticalActorPhysiology(
+            IMusculoskeletalFunctionalResolver musculoskeletalFunctionalResolver,
+            INeurologicalFunctionalResolver neurologicalFunctionalResolver)
         {
             _musculoskeletalFunctionalResolver = musculoskeletalFunctionalResolver
                 ?? throw new ArgumentNullException(nameof(musculoskeletalFunctionalResolver));
+            _neurologicalFunctionalResolver = neurologicalFunctionalResolver
+                ?? throw new ArgumentNullException(nameof(neurologicalFunctionalResolver));
         }
 
         public void SetRoot(BodyPart root)
@@ -449,6 +463,7 @@ namespace TacticalSim.Core.Physiology
             }
 
             RefreshMusculoskeletalFunctionalState();
+            RefreshNeurologicalFunctionalState();
         }
 
         /// <summary>
@@ -478,6 +493,20 @@ namespace TacticalSim.Core.Physiology
                 fractureState.CanStand && standingCapacity > 0f);
             MobilityLevel = movementCapacity;
             WeaponHandlingLevel = upperLimbCapacity;
+        }
+
+        /// <summary>Re-resolves level-, side-, and limb-specific nerve consequences.</summary>
+        public void RefreshNeurologicalFunctionalState()
+        {
+            NeurologicalFunctionalState = _neurologicalFunctionalResolver.Resolve(
+                LesionRepository.Lesions,
+                Anatomy);
+            MobilityLevel = MathF.Min(
+                MusculoskeletalFunctionalState.MovementCapacity,
+                NeurologicalFunctionalState.LowerLimbCapacity);
+            WeaponHandlingLevel = MathF.Min(
+                MusculoskeletalFunctionalState.UpperLimbCapacity,
+                NeurologicalFunctionalState.UpperLimbCapacity);
         }
 
         private void CalculateMotorDamage(BodyPart part, ref float lbTotal, ref float lbDest, ref float lmTotal, ref float lmDest, ref float abTotal, ref float abDest, ref float amTotal, ref float amDest)

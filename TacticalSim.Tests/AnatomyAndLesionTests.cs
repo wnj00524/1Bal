@@ -24,7 +24,9 @@ public sealed class AnatomyAndLesionTests
         Assert.Equal(PressureRegime.Arterial, aorta.PressureRegime);
         Assert.True(aorta.Calibre.Meters > 0);
         Assert.Contains(anatomy.Structures, x => x.Id == "bone.femur-left" && x.FunctionalRole == FunctionalRole.WeightBearing);
-        Assert.Contains(anatomy.Structures, x => x.Id == "nerve.spinal-cord" && x.FunctionalRole == FunctionalRole.SpinalCord);
+        Assert.Contains(anatomy.Structures, x => x.Id == "nerve.spinal-cord-cervical" && x.FunctionalRole == FunctionalRole.SpinalCord);
+        Assert.Contains(anatomy.Structures, x => x.Id == "nerve.spinal-cord-thoracic" && x.FunctionalRole == FunctionalRole.SpinalCord);
+        Assert.Contains(anatomy.Structures, x => x.Id == "nerve.spinal-cord-lumbar" && x.FunctionalRole == FunctionalRole.SpinalCord);
         Assert.Contains(anatomy.Structures, x => x.Type == AnatomicalStructureType.Pleura && x.Laterality == "right");
     }
 
