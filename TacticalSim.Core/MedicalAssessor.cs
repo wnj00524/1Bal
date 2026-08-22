@@ -56,7 +56,9 @@ namespace TacticalSim.Core
             
             ProcessBodyPart(dummy.RootBodyPart);
 
-            totalBleedRateSec = GetTotalActiveBleedRate(dummy.RootBodyPart);
+            // Report actual systemic outflow at the casualty's current pressure,
+            // rather than the wounds' normal-pressure maximum.
+            totalBleedRateSec = dummy.SystemicBleedRateMlPerSecond;
 
             report.TotalBleedRateMlPerMin = totalBleedRateSec * 60f;
             report.LungCapacityLostPercentage = totalLungVolume > 0 ? (destroyedLungVolume / totalLungVolume) * 100f : 0;
@@ -84,7 +86,12 @@ namespace TacticalSim.Core
                 sb.AppendLine($"Blood Volume: {(dummy.TotalBloodVolume/1000f):F2} L");
                 sb.AppendLine($"Blood Pressure (MAP): {dummy.MeanArterialPressureMmhg:F0} mmHg");
                 sb.AppendLine($"Heart Rate: {dummy.HeartRateBpm:F0} BPM");
-                sb.AppendLine($"Consciousness: {(dummy.ConsciousnessLevel*100f):F0}%");
+                if (dummy.IsDead)
+                    sb.AppendLine("Consciousness: [DEAD]");
+                else if (dummy.ConsciousnessLevel <= 0f)
+                    sb.AppendLine("Consciousness: [UNCONSCIOUS]");
+                else
+                    sb.AppendLine($"Consciousness: {(dummy.ConsciousnessLevel*100f):F0}%");
                 report.AssessmentText = sb.ToString();
                 return report;
             }
@@ -165,7 +172,11 @@ namespace TacticalSim.Core
             if (dummy.WeaponHandlingLevel < 0.5f)
                 sb.AppendLine(">>> MOTOR ALARM: SEVERE ARM TRAUMA (Weapon Handling Impaired) <<<");
             
-            if (dummy.ConsciousnessLevel <= 0f)
+            if (dummy.IsDead)
+            {
+                sb.AppendLine("Consciousness: [DEAD]");
+            }
+            else if (dummy.ConsciousnessLevel <= 0f)
             {
                 sb.AppendLine("Consciousness: [UNCONSCIOUS]");
             }
@@ -176,14 +187,6 @@ namespace TacticalSim.Core
 
             report.AssessmentText = sb.ToString();
             return report;
-        }
-
-        private static float GetTotalActiveBleedRate(BodyPart part)
-        {
-            float rate = part.GetActiveBleedRate();
-            foreach (var child in part.Children)
-                rate += GetTotalActiveBleedRate(child);
-            return rate;
         }
     }
 }
