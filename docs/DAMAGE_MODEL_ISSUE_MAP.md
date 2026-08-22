@@ -19,13 +19,13 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-105 | [Add spinal cord and major peripheral nerve structures](https://github.com/wnj00524/1Bal/issues/124) | M6: Anatomical structures and persistent lesions | Done |
 | DM-106 | [Convert voxels into an implementation detail of spatial lookup](https://github.com/wnj00524/1Bal/issues/125) | M6: Anatomical structures and persistent lesions | Done |
 | DM-107 | [Add lesion serialization and debug inspection](https://github.com/wnj00524/1Bal/issues/126) | M6: Anatomical structures and persistent lesions | Done |
-| DM-201 | [Implement bleeding sources from vessel and tissue lesions](https://github.com/wnj00524/1Bal/issues/127) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-202 | [Add blood destinations and compartment conservation](https://github.com/wnj00524/1Bal/issues/128) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-203 | [Add simplified hemostasis, compression, and rebleeding](https://github.com/wnj00524/1Bal/issues/129) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-204 | [Replace hemorrhage classes with a reduced cardiovascular model](https://github.com/wnj00524/1Bal/issues/130) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-205 | [Separate oxygen saturation from oxygen delivery](https://github.com/wnj00524/1Bal/issues/131) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-206 | [Define explicit incapacitation, unconsciousness, and death states](https://github.com/wnj00524/1Bal/issues/132) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
-| DM-207 | [Add physiology-to-capability resolver](https://github.com/wnj00524/1Bal/issues/133) | M7: Hemorrhage, circulation, and tactical capability | Backlog |
+| DM-201 | [Implement bleeding sources from vessel and tissue lesions](https://github.com/wnj00524/1Bal/issues/127) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-202 | [Add blood destinations and compartment conservation](https://github.com/wnj00524/1Bal/issues/128) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-203 | [Add simplified hemostasis, compression, and rebleeding](https://github.com/wnj00524/1Bal/issues/129) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-204 | [Replace hemorrhage classes with a reduced cardiovascular model](https://github.com/wnj00524/1Bal/issues/130) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-205 | [Separate oxygen saturation from oxygen delivery](https://github.com/wnj00524/1Bal/issues/131) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-206 | [Define explicit incapacitation, unconsciousness, and death states](https://github.com/wnj00524/1Bal/issues/132) | M7: Hemorrhage, circulation, and tactical capability | Done |
+| DM-207 | [Add physiology-to-capability resolver](https://github.com/wnj00524/1Bal/issues/133) | M7: Hemorrhage, circulation, and tactical capability | Done |
 | DM-301 | [Add bilateral pleural compartments](https://github.com/wnj00524/1Bal/issues/134) | M8: Thoracic injury model | Backlog |
 | DM-302 | [Implement simple, open, and tension pneumothorax](https://github.com/wnj00524/1Bal/issues/135) | M8: Thoracic injury model | Backlog |
 | DM-303 | [Implement hemothorax and pericardial tamponade](https://github.com/wnj00524/1Bal/issues/136) | M8: Thoracic injury model | Backlog |
