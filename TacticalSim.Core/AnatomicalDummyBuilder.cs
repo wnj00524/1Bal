@@ -1,5 +1,6 @@
 using System.Numerics;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Damage.Anatomy;
 
 namespace TacticalSim.Core
 {
@@ -11,6 +12,7 @@ namespace TacticalSim.Core
             
             var root = new BodyPart { Type = BodyPartType.Thorax };
             physiology.SetRoot(root);
+            physiology.SetAnatomy(StandardAnatomy.CreateCatalog());
             var abdomen = new BodyPart { Type = BodyPartType.Abdomen, Parent = root };
             
             var neck = new BodyPart { Type = BodyPartType.Neck, Parent = root };

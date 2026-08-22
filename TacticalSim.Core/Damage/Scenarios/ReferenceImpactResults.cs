@@ -46,7 +46,7 @@ public sealed record ReferenceProjectileStateSnapshot(
         SimulationTime.FromSeconds(state.Time));
 }
 
-/// <summary>Explicit M5 placeholder for the persistent lesion layer introduced in M6.</summary>
+/// <summary>Serializable persistent-lesion output emitted by the M6 injury layer.</summary>
 public sealed class ReferenceLesionOutput
 {
     private readonly ReadOnlyCollection<string> _items;
