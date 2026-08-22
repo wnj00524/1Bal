@@ -27,7 +27,26 @@ namespace TacticalSim.Core.Simulation
         public float GlobalTime => _globalTime;
 
         /// <inheritdoc />
-        public bool HasActiveActions => _activeActions.Count > 0 || _actorQueues.Values.Any(q => q.Count > 0);
+        public bool HasActiveActions
+        {
+            get
+            {
+                if (_activeActions.Count > 0)
+                {
+                    return true;
+                }
+
+                foreach (var queue in _actorQueues.Values)
+                {
+                    if (queue.Count > 0)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
 
         /// <inheritdoc />
         public int ActiveActorCount => _activeActions.Count;
