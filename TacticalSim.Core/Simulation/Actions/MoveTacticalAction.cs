@@ -44,10 +44,15 @@ namespace TacticalSim.Core.Simulation.Actions
         {
         }
 
+        /// <summary>
+        /// Creates movement from a healthy-actor TU cost, scaling traversal time
+        /// by the actor's current mobility capacity.
+        /// </summary>
         public MoveTacticalAction(IEntity actor, Vector3 startPosition, Vector3 targetPosition, float tuCost)
             : base(actor.Id, tuCost)
         {
             float mobility = actor.Physiology.MobilityLevel;
+            EnsureActorCanMove(startPosition, targetPosition, mobility);
             InitializeWithCost(startPosition, targetPosition, tuCost, mobility);
         }
 
@@ -61,10 +66,15 @@ namespace TacticalSim.Core.Simulation.Actions
             InitializeWithCost(startPosition, targetPosition, tuCost, mobility: 1f);
         }
 
+        /// <summary>
+        /// Creates movement from a healthy-actor base speed, applying the actor's
+        /// current mobility capacity before optionally computing TU cost.
+        /// </summary>
         public MoveTacticalAction(IEntity actor, Vector3 startPosition, Vector3 targetPosition, float baseMovementSpeed, bool computeCostFromSpeed)
             : base(actor.Id, 1f)
         {
             float mobility = actor.Physiology.MobilityLevel;
+            EnsureActorCanMove(startPosition, targetPosition, mobility);
             InitializeWithSpeed(startPosition, targetPosition, baseMovementSpeed, computeCostFromSpeed, mobility);
         }
 
@@ -82,7 +92,20 @@ namespace TacticalSim.Core.Simulation.Actions
             StartPosition = startPosition;
             TargetPosition = targetPosition;
             CurrentPosition = startPosition;
-            MovementSpeed = tuCost > 0f ? Distance / tuCost * mobility : 0f;
+            TUCost = mobility > 0f ? tuCost / mobility : tuCost;
+            MovementSpeed = TUCost > 0f ? Distance / TUCost : 0f;
+        }
+
+        private static void EnsureActorCanMove(
+            Vector3 startPosition,
+            Vector3 targetPosition,
+            float mobility)
+        {
+            if (mobility <= 0f && startPosition != targetPosition)
+            {
+                throw new InvalidOperationException(
+                    "The actor cannot start a movement action with zero mobility.");
+            }
         }
 
         private void InitializeWithSpeed(

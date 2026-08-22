@@ -5,6 +5,7 @@ using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Anatomy;
 using TacticalSim.Core.Damage.Ballistics;
 using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Units;
@@ -25,6 +26,77 @@ public sealed class AnatomyAndLesionTests
         Assert.Contains(anatomy.Structures, x => x.Id == "bone.femur-left" && x.FunctionalRole == FunctionalRole.WeightBearing);
         Assert.Contains(anatomy.Structures, x => x.Id == "nerve.spinal-cord" && x.FunctionalRole == FunctionalRole.SpinalCord);
         Assert.Contains(anatomy.Structures, x => x.Type == AnatomicalStructureType.Pleura && x.Laterality == "right");
+    }
+
+    [Fact]
+    public void StandardCatalog_ContainsEveryPrioritizedDm104BoneSegment()
+    {
+        IAnatomicalStructureCatalog anatomy = StandardAnatomy.CreateCatalog();
+        string[] pairedLongBones = ["femur", "tibia", "humerus", "radius-ulna"];
+        var requiredIds = new List<string>
+        {
+            "bone.pelvis",
+            "bone.sternum",
+            "bone.skull",
+            "bone.spine"
+        };
+        requiredIds.AddRange(pairedLongBones.SelectMany(name => new[]
+        {
+            $"bone.{name}-left",
+            $"bone.{name}-right"
+        }));
+        requiredIds.AddRange(Enumerable.Range(1, 12).SelectMany(rib => new[]
+        {
+            $"bone.rib-{rib:D2}-left",
+            $"bone.rib-{rib:D2}-right"
+        }));
+
+        Assert.Equal(36, requiredIds.Count);
+        Assert.Equal(36, anatomy.Structures.Count(structure => structure.Type == AnatomicalStructureType.Bone));
+        Assert.All(requiredIds, id => Assert.Equal(AnatomicalStructureType.Bone, anatomy.GetRequired(id).Type));
+        Assert.All(
+            new[]
+            {
+                "bone.pelvis", "bone.spine", "bone.femur-left", "bone.femur-right",
+                "bone.tibia-left", "bone.tibia-right"
+            },
+            id => Assert.Equal(FunctionalRole.WeightBearing, anatomy.GetRequired(id).FunctionalRole));
+        Assert.All(
+            new[]
+            {
+                "bone.humerus-left", "bone.humerus-right",
+                "bone.radius-ulna-left", "bone.radius-ulna-right"
+            },
+            id => Assert.Equal(FunctionalRole.UpperLimbMotor, anatomy.GetRequired(id).FunctionalRole));
+    }
+
+    [Theory]
+    [InlineData(0f, FractureStability.Stable)]
+    [InlineData(0.30f, FractureStability.Stable)]
+    [InlineData(0.3001f, FractureStability.Displaced)]
+    [InlineData(0.65f, FractureStability.Displaced)]
+    [InlineData(0.6501f, FractureStability.Unstable)]
+    [InlineData(1f, FractureStability.Unstable)]
+    public void FractureClassifier_UsesDocumentedStrictSeverityBoundaries(
+        float severity,
+        FractureStability expected)
+    {
+        Assert.Equal(expected, FractureStabilityClassifier.Classify(severity));
+    }
+
+    [Theory]
+    [InlineData(-0.01f)]
+    [InlineData(1.01f)]
+    public void FractureClassifier_RejectsOutOfRangeSeverity(float severity)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => FractureStabilityClassifier.Classify(severity));
+    }
+
+    [Fact]
+    public void FractureClassifier_RejectsNonFiniteSeverity()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => FractureStabilityClassifier.Classify(float.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FractureStabilityClassifier.Classify(float.PositiveInfinity));
     }
 
     [Fact]
@@ -52,6 +124,31 @@ public sealed class AnatomyAndLesionTests
         var vascular = Assert.IsType<VesselLesion>(lesion);
         Assert.Equal(expected, vascular.Kind);
         Assert.Equal(complete, vascular.CompleteTransection);
+    }
+
+    [Fact]
+    public void Generator_CreatesLocatedWeightBearingFractureWithResolvedConsequence()
+    {
+        var bone = new AnatomicalStructure(
+            "bone.test",
+            "test weight-bearing bone",
+            AnatomicalStructureType.Bone,
+            BodyPartType.LeftLeg,
+            new(0f, -0.1f, 0f),
+            new(0f, 0.1f, 0f),
+            Distance.FromMeters(0.01f),
+            functionalRole: FunctionalRole.WeightBearing);
+
+        FractureLesion fracture = Assert.IsType<FractureLesion>(Assert.Single(
+            new LesionGenerator().Generate(
+                CreateTrack("impact-fracture", 100f),
+                new AnatomicalStructureCatalog([bone]))));
+
+        Assert.Equal("bone.test", fracture.StructureId);
+        Assert.Equal(Vector3.Zero, fracture.Geometry.Center);
+        Assert.Equal(FractureStability.Unstable, fracture.Stability);
+        Assert.Equal(FractureFunctionalConsequence.StructuralFunctionLost, fracture.FunctionalConsequence);
+        Assert.True(fracture.WeightBearing);
     }
 
     [Fact]
@@ -84,6 +181,11 @@ public sealed class AnatomyAndLesionTests
         Lesion restored = JsonSerializer.Deserialize<Lesion>(json, DamageModelJson.CreateOptions())!;
         Assert.Equal(fracture, Assert.IsType<FractureLesion>(restored));
         LesionDebugItem item = Assert.Single(LesionDebugInspector.Inspect(target));
+        Assert.DoesNotContain("functionalConsequence", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(Vector3.Zero, item.BodyLocalCenter);
+        Assert.Equal(FractureFunctionalConsequence.StructuralFunctionLost, item.FunctionalConsequence);
+        Assert.Contains("consequence=StructuralFunctionLost", item.Details);
+        Assert.Contains("body-local", item.Details);
         Assert.Contains("weightBearing=True", item.Details);
         Assert.Equal(LesionTreatmentState.Untreated, target.LesionRepository.Lesions[0].TreatmentState);
     }
@@ -93,6 +195,8 @@ public sealed class AnatomyAndLesionTests
     {
         using ServiceProvider provider = new ServiceCollection().AddTacticalSimCore().BuildServiceProvider();
         Assert.IsType<LesionGenerator>(provider.GetRequiredService<ILesionGenerator>());
+        Assert.IsType<MusculoskeletalFunctionalResolver>(
+            provider.GetRequiredService<IMusculoskeletalFunctionalResolver>());
     }
 
     private static WoundTrack CreateTrack(string id, float energy)

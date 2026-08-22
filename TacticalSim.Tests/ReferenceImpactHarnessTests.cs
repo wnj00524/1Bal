@@ -37,7 +37,7 @@ public sealed class ReferenceImpactHarnessTests
         Assert.Equal(requestMetadata.AlgorithmVersion, result.RandomMetadata.AlgorithmVersion);
         Assert.Equal(requestMetadata.RootSeed, result.RandomMetadata.RootSeed);
         Assert.Equal(requestMetadata.Streams.ToArray(), result.RandomMetadata.Streams.ToArray());
-        Assert.Equal("reference-impact-result-v1", result.OutputSchemaVersion);
+        Assert.Equal("reference-impact-result-v2", result.OutputSchemaVersion);
         Assert.Equal("m5-foundations-v2", result.ModelIdentifier);
         Assert.Equal("reference-impact-v1/synthetic-pass/seed-1234", result.ComparisonKey);
         Assert.Same(result.WoundTrack.EnergyLedger, result.EnergyLedger);
@@ -102,6 +102,7 @@ public sealed class ReferenceImpactHarnessTests
         Assert.Equal(comparison.ComparisonKey, comparison.Candidate.ComparisonKey);
         Assert.Equal(DamageModelVersion.LegacyV1, comparison.Baseline.ModelVersion);
         Assert.Equal(DamageModelVersion.FoundationsV2, comparison.Candidate.ModelVersion);
+        Assert.Equal("reference-impact-comparison-v2", comparison.OutputSchemaVersion);
         Assert.Matches("^[0-9a-f]{64}$", comparison.DeterministicHash);
     }
 
@@ -193,6 +194,7 @@ public sealed class ReferenceImpactHarnessTests
         Assert.Contains(result.ComparisonKey, text);
         Assert.Contains(result.DeterministicHash, text);
         Assert.Contains("available", text);
+        Assert.Contains("can stand", text);
     }
 
     [Fact]

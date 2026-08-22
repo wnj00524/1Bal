@@ -67,7 +67,7 @@ public sealed class ReferenceLesionOutput
 /// <summary>Machine-readable output from one authoritative reference impact.</summary>
 public sealed class ReferenceImpactResult
 {
-    public const string CurrentOutputSchemaVersion = "reference-impact-result-v1";
+    public const string CurrentOutputSchemaVersion = "reference-impact-result-v2";
 
     private readonly ReadOnlyCollection<PhysiologyTimelinePoint> _physiologyTimeline;
     private readonly ReadOnlyCollection<CapabilityTimelinePoint> _capabilityTimeline;
@@ -159,7 +159,7 @@ public sealed record ReferenceImpactComparisonDelta(
 /// <summary>Cross-model output whose two runs always use independent fresh targets.</summary>
 public sealed class ReferenceImpactComparisonResult
 {
-    public const string CurrentOutputSchemaVersion = "reference-impact-comparison-v1";
+    public const string CurrentOutputSchemaVersion = "reference-impact-comparison-v2";
 
     internal ReferenceImpactComparisonResult(
         string comparisonKey,

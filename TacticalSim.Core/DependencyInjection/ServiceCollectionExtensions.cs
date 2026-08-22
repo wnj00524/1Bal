@@ -8,6 +8,7 @@ using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Ballistics;
 using TacticalSim.Core.Damage.Scenarios;
 using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Randomness;
 using TacticalSim.Core.Simulation;
@@ -51,6 +52,7 @@ namespace TacticalSim.Core.DependencyInjection
 
             services.TryAddSingleton(options ?? new DamageModelOptions());
             services.TryAddSingleton<ILesionGenerator, LesionGenerator>();
+            services.TryAddSingleton<IMusculoskeletalFunctionalResolver, MusculoskeletalFunctionalResolver>();
             services.TryAddSingleton<IProjectileInteractionService, ProjectileInteractionService>();
             services.TryAddSingleton<IReferenceImpactScenarioCatalog>(
                 _ => new ReferenceImpactScenarioCatalog());

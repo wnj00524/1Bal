@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Ballistics;
+using TacticalSim.Core.Damage.Anatomy;
+using TacticalSim.Core.Damage.Lesions;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Randomness;
@@ -162,6 +164,47 @@ public class ProjectileInteractionServiceTests
     }
 
     [Fact]
+    public void FoundationsBoneImpact_GeneratesFractureThatConstrainsFunctionWithoutVoxelDestruction()
+    {
+        var boneVoxel = new PhysiologicalVoxel(
+            new Vector3(-0.1f, -0.2f, 0f),
+            0.1f,
+            TissueRegistry.Bone,
+            OrganType.Bone);
+        var leg = new BodyPart { Type = BodyPartType.LeftLeg };
+        leg.Voxels.Add(boneVoxel);
+        var target = new TacticalActorPhysiology();
+        target.SetRoot(leg);
+        target.SetAnatomy(StandardAnatomy.CreateCatalog());
+        var profile = new BallisticProfile
+        {
+            Mass = 0.01f,
+            CrossSectionalArea = 0.0002f,
+            DragModel = new StandardDragCurve(0f)
+        };
+
+        ProjectileInteractionResult result = Assert.IsType<ProjectileInteractionResult>(CreateService().Resolve(
+            Request(
+                target,
+                new Vector3(-0.1f, -0.2f, -0.1f),
+                Vector3.UnitZ * 200f,
+                profile,
+                DamageModelVersion.FoundationsV2)));
+
+        FractureLesion fracture = Assert.Single(
+            target.LesionRepository.Lesions.OfType<FractureLesion>(),
+            lesion => lesion.StructureId == "bone.femur-left");
+        Assert.Equal(FractureStability.Unstable, fracture.Stability);
+        Assert.False(boneVoxel.IsDestroyed);
+        Assert.Equal(1f, result.DebugTrace.CapabilityBefore.Mobility);
+        Assert.True(result.DebugTrace.CapabilityBefore.CanStand);
+        Assert.Equal(0f, result.DebugTrace.CapabilityAfter.Mobility);
+        Assert.False(result.DebugTrace.CapabilityAfter.CanStand);
+        Assert.Equal(0f, target.MobilityLevel);
+        Assert.False(target.CanStand);
+    }
+
+    [Fact]
     public void MultiStructureTraversalOrdersSegmentsAndNeverDuplicatesIncomingEnergy()
     {
         TacticalActorPhysiology target = BuildTarget(
@@ -284,6 +327,7 @@ public class ProjectileInteractionServiceTests
         Assert.False(result.EnergyLedger.IsConserved);
         Assert.NotNull(result.EnergyLedger.ConservationWarning);
         Assert.Contains(result.DebugTrace.NumericalWarnings, warning => warning.Contains("non-authoritative"));
+        Assert.Empty(target.LesionRepository.Lesions);
     }
 
     [Fact]
