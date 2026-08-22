@@ -1,7 +1,9 @@
 using System.Numerics;
 using TacticalSim.Core;
+using TacticalSim.Core.Damage;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Units;
 using Xunit;
 
 namespace TacticalSim.Tests;
@@ -14,7 +16,11 @@ public class TraumaTreatmentAndCaliberTests
         IActorPhysiology physiology = AnatomicalDummyBuilder.BuildDummy();
         List<PhysiologicalVoxel> voxels = Flatten(physiology.RootBodyPart);
 
-        physiology.ProcessImpact(Vector3.UnitZ, 5_000f, new Vector3(-0.12f, 0.35f, 0f));
+        physiology.ProcessLegacyImpact(
+            Vector3.UnitZ,
+            Energy.FromJoules(5_000f),
+            new Vector3(-0.12f, 0.35f, 0f),
+            DamageModelVersion.LegacyV1);
 
         Assert.Contains(voxels, voxel => voxel.IsDestroyed);
         Assert.DoesNotContain(voxels, voxel => voxel.Organ == OrganType.Heart && voxel.IsDestroyed);

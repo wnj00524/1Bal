@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Randomness;
 
 namespace TacticalSim.Core.Simulation.Actions
 {
@@ -10,6 +11,7 @@ namespace TacticalSim.Core.Simulation.Actions
         private readonly IEntity _shooter;
         private readonly Vector3 _targetDirection;
         private readonly IEnvironmentModel _environment;
+        private readonly IDeterministicRandomStreamProvider _randomStreams;
         
         // For testing/scaffolding, we can just expose the final projectile state
         public ProjectileState? FinalState { get; private set; }
@@ -17,13 +19,15 @@ namespace TacticalSim.Core.Simulation.Actions
         public ShootTacticalAction(
             IEntity shooter,
             Vector3 targetDirection,
-            IEnvironmentModel environment) 
+            IEnvironmentModel environment,
+            IDeterministicRandomStreamProvider randomStreams)
             : base(shooter?.Id ?? throw new ArgumentNullException(nameof(shooter)), 
                    (shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f) * (1.0f + (shooter.Physiology.PainLevel * 1.5f)) * (1.0f + (1.0f - shooter.Physiology.WeaponHandlingLevel) * 2.0f))
         {
             _shooter = shooter;
             _targetDirection = targetDirection.LengthSquared() > 0f ? Vector3.Normalize(targetDirection) : Vector3.UnitZ;
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
+            _randomStreams = randomStreams ?? throw new ArgumentNullException(nameof(randomStreams));
         }
 
         public override void Execute(float dt)
@@ -76,9 +80,9 @@ namespace TacticalSim.Core.Simulation.Actions
                 // Max pain/shock/arm damage causes up to ~20 degrees of deviation
                 float maxDeviationRadians = 20f * (MathF.PI / 180f) * MathF.Min(1.0f, deviationFactor);
                 
-                var random = new Random(_shooter.Id.GetHashCode()); // Deterministic random per actor
-                float r = (0.25f + 0.75f * (float)random.NextDouble()) * maxDeviationRadians;
-                float theta = (float)random.NextDouble() * MathF.PI * 2f;
+                var random = _randomStreams.GetStream($"shooting.deviation.actor/{_shooter.Id:N}");
+                float r = (0.25f + 0.75f * (float)random.NextUnitDouble()) * maxDeviationRadians;
+                float theta = (float)random.NextUnitDouble() * MathF.PI * 2f;
                 float randomPitch = r * MathF.Sin(theta);
                 float randomYaw = r * MathF.Cos(theta);
                 

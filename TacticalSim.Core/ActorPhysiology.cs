@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using TacticalSim.Core.Damage;
 using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Physiology
@@ -119,19 +120,30 @@ namespace TacticalSim.Core.Physiology
             return true;
         }
 
-        public void ApplyTrauma(Vector3 impactPoint, float kineticEnergy)
+        /// <summary>
+        /// Applies the pre-M5 point-trauma behavior for explicit model comparison.
+        /// The full input energy can be deposited into more than one nearby voxel,
+        /// so authoritative callers must use IProjectileInteractionService instead.
+        /// </summary>
+        internal void ApplyLegacyTrauma(
+            Vector3 impactPoint,
+            Energy kineticEnergy,
+            DamageModelVersion modelVersion)
         {
+            if (modelVersion != DamageModelVersion.LegacyV1)
+                throw new ArgumentException("Point trauma is available only under the legacy-v1 feature flag.", nameof(modelVersion));
+
             // Simplified trauma routing to voxels
             foreach (var voxel in Voxels)
             {
                 if (!voxel.IsDestroyed && Vector3.Distance(voxel.Center, impactPoint) < voxel.Size)
                 {
-                    voxel.ApplyKineticEnergy(kineticEnergy, impactPoint);
+                    voxel.ApplyKineticEnergy(kineticEnergy.Joules, impactPoint);
                 }
             }
             foreach (var child in Children)
             {
-                child.ApplyTrauma(impactPoint, kineticEnergy);
+                child.ApplyLegacyTrauma(impactPoint, kineticEnergy, modelVersion);
             }
         }
     }
@@ -183,7 +195,15 @@ namespace TacticalSim.Core.Physiology
         bool ApplyTourniquet(BodyPartType extremity);
         bool PackExternalWound(BodyPartType bodyPart);
         void TickPhysiology(float dt);
-        void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint);
+        /// <summary>
+        /// Runs the deprecated point-trauma path for an explicit legacy comparison.
+        /// New impacts must be resolved by IProjectileInteractionService.
+        /// </summary>
+        void ProcessLegacyImpact(
+            Vector3 trajectory,
+            Energy kineticEnergy,
+            Vector3 hitPoint,
+            DamageModelVersion modelVersion);
     }
 
     public class TacticalActorPhysiology : IActorPhysiology
@@ -734,9 +754,18 @@ namespace TacticalSim.Core.Physiology
             return pain;
         }
 
-        public void ProcessImpact(Vector3 trajectory, float kineticEnergy, Vector3 hitPoint)
+        public void ProcessLegacyImpact(
+            Vector3 trajectory,
+            Energy kineticEnergy,
+            Vector3 hitPoint,
+            DamageModelVersion modelVersion)
         {
-            RootBodyPart.ApplyTrauma(hitPoint, kineticEnergy);
+            if (trajectory.LengthSquared() <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(trajectory), "A legacy impact trajectory must be non-zero.");
+            if (kineticEnergy.Joules <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(kineticEnergy), "Legacy impact energy must be positive.");
+
+            RootBodyPart.ApplyLegacyTrauma(hitPoint, kineticEnergy, modelVersion);
         }
     }
 }

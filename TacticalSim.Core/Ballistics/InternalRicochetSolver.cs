@@ -53,7 +53,7 @@ public static class InternalRicochetSolver
         // Work required to shear a projectile-width channel through the bone. Density
         // scales the nominal shear work so cortical bone resists more than porous bone.
         float densityScale = MathF.Max(0f, bone.Density) / ReferenceBoneDensity;
-        float shatterThreshold = MathF.Max(0f, bone.ShearStrength) * 1_000_000f
+        float shatterThreshold = MathF.Max(0f, bone.ShearStrengthPressure.Pascals)
             * profile.CrossSectionalArea * boneThickness * densityScale;
         float normalImpactEnergy = kineticEnergy * incidence * incidence;
 

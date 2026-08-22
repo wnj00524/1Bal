@@ -1,129 +1,167 @@
-using System;
-using System.IO;
-using System.Collections.Generic;
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
-using TacticalSim.Core;
-using TacticalSim.Core.Entities;
-using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Damage;
+using TacticalSim.Core.Damage.Scenarios;
 using TacticalSim.Core.DependencyInjection;
-using TacticalSim.Core.Simulation;
-using TacticalSim.Core.Ballistics;
-using System.Numerics;
+using TacticalSim.Core.Randomness;
 
-class Program
+internal static class Program
 {
-    static void Main()
+    private static int Main(string[] args)
     {
-        var services = new ServiceCollection();
-        services.AddTacticalSimCore();
-        var sp = services.BuildServiceProvider();
-        var env = sp.GetRequiredService<IEnvironmentModel>();
-
-        var profiles = new List<AmmunitionProfile>
+        try
         {
-            new AmmunitionProfile { Name = "5.56x45mm NATO (Arm Shot)", MuzzleVelocity = 900f, Ballistics = new BallisticProfile { Mass = 0.004f, CrossSectionalArea = 0.000024f, DragModel = new StandardDragCurve(0.3f) } },
-            new AmmunitionProfile { Name = ".308 Winchester (Leg Shot)", MuzzleVelocity = 800f, Ballistics = new BallisticProfile { Mass = 0.0097f, CrossSectionalArea = 0.000048f, DragModel = new StandardDragCurve(0.4f) } }
-        };
+            CliOptions options = CliOptions.Parse(args);
+            if (options.ShowHelp)
+            {
+                Console.WriteLine(CliOptions.Usage);
+                return 0;
+            }
 
-        foreach (var ammo in profiles)
+            var services = new ServiceCollection();
+            services.AddSingleton<IRootSeedProvider>(new FixedRootSeedProvider(options.Seed));
+            services.AddTacticalSimCore();
+            using ServiceProvider provider = services.BuildServiceProvider();
+            IReferenceImpactScenarioCatalog catalog = provider.GetRequiredService<IReferenceImpactScenarioCatalog>();
+
+            if (options.ListScenarios)
+            {
+                IReadOnlyList<ReferenceImpactScenarioInput> scenarios = catalog.List();
+                Console.WriteLine(options.Format == OutputFormat.Json
+                    ? ReferenceImpactFormatter.ScenarioListToJson(scenarios)
+                    : ReferenceImpactFormatter.ScenarioListToText(scenarios));
+                return 0;
+            }
+
+            IReferenceImpactRunner runner = provider.GetRequiredService<IReferenceImpactRunner>();
+            if (options.Compare)
+            {
+                ReferenceImpactComparisonResult comparison = runner.Compare(
+                    new ReferenceImpactComparisonRequest(
+                        options.ScenarioId,
+                        options.BaselineModel,
+                        options.Model,
+                        options.Seed));
+                Console.WriteLine(options.Format == OutputFormat.Json
+                    ? ReferenceImpactFormatter.ToJson(comparison)
+                    : ReferenceImpactFormatter.ToText(comparison));
+            }
+            else
+            {
+                ReferenceImpactResult result = runner.Run(
+                    new ReferenceImpactRunRequest(
+                        options.ScenarioId,
+                        options.Model,
+                        options.Seed));
+                Console.WriteLine(options.Format == OutputFormat.Json
+                    ? ReferenceImpactFormatter.ToJson(result)
+                    : ReferenceImpactFormatter.ToText(result));
+            }
+
+            return 0;
+        }
+        catch (Exception exception) when (exception is ArgumentException
+                                          or KeyNotFoundException
+                                          or InvalidOperationException)
         {
-            Console.WriteLine($"\n================== {ammo.Name} ==================");
-            var dummyPhys = AnatomicalDummyBuilder.BuildDummy();
-            var allVoxels = GetAllVoxels(dummyPhys.RootBodyPart);
-
-            var voxelGrid = new PhysiologicalVoxel[100, 220, 100];
-            foreach (var v in allVoxels)
-            {
-                int vx = (int)MathF.Round(v.Center.X * 100f) + 50;
-                int vy = (int)MathF.Round(v.Center.Y * 100f) + 100;
-                int vz = (int)MathF.Round(v.Center.Z * 100f) + 50;
-                if (vx >= 0 && vx < 100 && vy >= 0 && vy < 220 && vz >= 0 && vz < 100) voxelGrid[vx, vy, vz] = v;
-            }
-
-            Vector3 impactStatePos = ammo.Name.Contains("Arm") ? new Vector3(0.3f, 0.25f, -1.0f) : new Vector3(0.1f, -0.4f, -1.0f);
-            Vector3 impactDir = new Vector3(0, 0, 1);
-            
-            var impactState = new ProjectileState { Position = impactStatePos, Velocity = impactDir * ammo.MuzzleVelocity, Time = 0f };
-            var cavEvents = new List<(float Time, TacticalSim.Core.Physiology.CavitationEvent Cav)>();
-            
-            while (impactState.Position.Z < 0.2f && impactState.Velocity.LengthSquared() > 0.01f)
-            {
-                var localPos = impactState.Position;
-                float simTimeStep = 0.00001f;
-                impactState = TacticalSim.Core.Ballistics.BallisticSolver.StepRK4(impactState, ammo.Ballistics, env, simTimeStep);
-                
-                int bx = (int)MathF.Round(localPos.X * 100f) + 50;
-                int by = (int)MathF.Round(localPos.Y * 100f) + 100;
-                int bz = (int)MathF.Round(localPos.Z * 100f) + 50;
-                
-                if (bx >= 0 && bx < 100 && by >= 0 && by < 220 && bz >= 0 && bz < 100)
-                {
-                    var voxel = voxelGrid[bx, by, bz];
-                    if (voxel != null && voxel.Contains(localPos))
-                    {
-                        var localState = impactState;
-                        localState.Position = localPos;
-                        float distanceThisStep = localState.Velocity.Length() * simTimeStep;
-                        var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
-                        impactState.Velocity = localState.Velocity;
-
-                        if (cav.HasValue)
-                        {
-                            if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f) cavEvents.Add((impactState.Time, cav.Value));
-                            else {
-                                var last = cavEvents[cavEvents.Count - 1];
-                                var modifiedCav = last.Cav;
-                                modifiedCav.Energy += cav.Value.Energy;
-                                modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
-                                cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
-                            }
-                        }
-                    }
-                }
-            }
-
-            foreach (var cavEvent in cavEvents)
-            {
-                var cav = cavEvent.Cav;
-                int radCells = (int)MathF.Ceiling(cav.Radius * 100f);
-                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 50;
-                int cy = (int)MathF.Round(cav.Origin.Y * 100f) + 100;
-                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 50;
-                
-                float cavVolume = (4f/3f) * MathF.PI * cav.Radius * cav.Radius * cav.Radius;
-                float peakEnergyDensity = cavVolume > 0 ? 4f * (cav.Energy / cavVolume) : 0f;
-                float voxelVolume = 0.01f * 0.01f * 0.01f;
-
-                for (int x = cx - radCells; x <= cx + radCells; x++)
-                    for (int y = cy - radCells; y <= cy + radCells; y++)
-                        for (int z = cz - radCells; z <= cz + radCells; z++)
-                            if (x >= 0 && x < 100 && y >= 0 && y < 220 && z >= 0 && z < 100)
-                            {
-                                var neighbor = voxelGrid[x, y, z];
-                                if (neighbor != null)
-                                {
-                                    float dist = (neighbor.Center - cav.Origin).Length();
-                                    if (dist > 0 && dist <= cav.Radius)
-                                    {
-                                        float energyDensityAtDist = peakEnergyDensity * (1f - (dist / cav.Radius));
-                                        float energyToVoxel = energyDensityAtDist * voxelVolume;
-                                        neighbor.ApplyKineticEnergy(energyToVoxel, cav.Origin, 0f);
-                                    }
-                                }
-                            }
-            }
-            
-            dummyPhys.TickPhysiology(0.1f);
-            var report = MedicalAssessor.AssessTrauma(dummyPhys);
-            Console.WriteLine(report.AssessmentText);
+            Console.Error.WriteLine($"Error: {exception.Message}");
+            Console.Error.WriteLine(CliOptions.Usage);
+            return 2;
         }
     }
 
-    private static List<PhysiologicalVoxel> GetAllVoxels(BodyPart root)
+    private enum OutputFormat
     {
-        var list = new List<PhysiologicalVoxel>();
-        list.AddRange(root.Voxels);
-        foreach (var child in root.Children) list.AddRange(GetAllVoxels(child));
-        return list;
+        Text,
+        Json
+    }
+
+    private sealed record CliOptions(
+        string ScenarioId,
+        DamageModelVersion Model,
+        DamageModelVersion BaselineModel,
+        ulong Seed,
+        OutputFormat Format,
+        bool ListScenarios,
+        bool Compare,
+        bool ShowHelp)
+    {
+        internal const string Usage =
+            "Usage: TacticalSim.ConsoleApp [--list] [--scenario <id>] "
+            + "[--model <legacy-v1|m5-foundations-v2>] [--seed <uint64>] "
+            + "[--format <text|json>] [--compare [baseline[,candidate]]] [--help]";
+
+        internal static CliOptions Parse(string[] args)
+        {
+            ArgumentNullException.ThrowIfNull(args);
+            string scenarioId = "rifle-arm";
+            DamageModelVersion model = DamageModelVersion.FoundationsV2;
+            DamageModelVersion baseline = DamageModelVersion.LegacyV1;
+            ulong seed = 0UL;
+            OutputFormat format = OutputFormat.Text;
+            bool list = false;
+            bool compare = false;
+            bool help = false;
+
+            for (int index = 0; index < args.Length; index++)
+            {
+                string argument = args[index];
+                switch (argument)
+                {
+                    case "--scenario":
+                        scenarioId = ReadValue(args, ref index, argument);
+                        break;
+                    case "--model":
+                        model = DamageModelVersionExtensions.ParseIdentifier(
+                            ReadValue(args, ref index, argument));
+                        break;
+                    case "--seed":
+                        string seedValue = ReadValue(args, ref index, argument);
+                        if (!ulong.TryParse(seedValue, NumberStyles.None, CultureInfo.InvariantCulture, out seed))
+                            throw new ArgumentException($"Invalid unsigned 64-bit seed '{seedValue}'.", argument);
+                        break;
+                    case "--format":
+                        string formatValue = ReadValue(args, ref index, argument);
+                        format = formatValue.ToLowerInvariant() switch
+                        {
+                            "text" => OutputFormat.Text,
+                            "json" => OutputFormat.Json,
+                            _ => throw new ArgumentException($"Unknown output format '{formatValue}'.", argument)
+                        };
+                        break;
+                    case "--list":
+                        list = true;
+                        break;
+                    case "--compare":
+                        compare = true;
+                        if (index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal))
+                        {
+                            string comparisonValue = args[++index];
+                            string[] models = comparisonValue.Split(',', StringSplitOptions.TrimEntries);
+                            if (models.Length is < 1 or > 2 || models.Any(string.IsNullOrWhiteSpace))
+                                throw new ArgumentException($"Invalid model comparison '{comparisonValue}'.", argument);
+                            baseline = DamageModelVersionExtensions.ParseIdentifier(models[0]);
+                            if (models.Length == 2)
+                                model = DamageModelVersionExtensions.ParseIdentifier(models[1]);
+                        }
+                        break;
+                    case "--help" or "-h":
+                        help = true;
+                        break;
+                    default:
+                        throw new ArgumentException($"Unknown option '{argument}'.", nameof(args));
+                }
+            }
+
+            return new CliOptions(scenarioId, model, baseline, seed, format, list, compare, help);
+        }
+
+        private static string ReadValue(string[] args, ref int index, string option)
+        {
+            if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+                throw new ArgumentException($"Option '{option}' requires a value.", option);
+
+            return args[++index];
+        }
     }
 }

@@ -62,6 +62,7 @@ public class InternalRicochetSolverTests
         BoneImpactResult resistant = InternalRicochetSolver.Resolve(
             new Vector3(0f, -100f, 0f), Profile, Vector3.UnitY, denserBone, 0.02f);
 
+        Assert.Equal(50f, baseline.ShatterThreshold, 3);
         Assert.Equal(baseline.ShatterThreshold * 4f, resistant.ShatterThreshold, 3);
     }
 

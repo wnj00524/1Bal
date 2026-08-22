@@ -6,11 +6,12 @@ using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Damage.Ballistics;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core;
 using TacticalSim.Core.Physiology;
+using TacticalSim.Core.Units;
 using TacticalSim.Core.World;
-using System.Numerics;
 using System.Linq;
 
 namespace TacticalSim.GodotClient
@@ -18,8 +19,13 @@ namespace TacticalSim.GodotClient
     public partial class SimulationManager : Node
     {
         private const float WalkingSpeedMetersPerSecond = 1.4f;
-        private const float ChestWoundDestroyedLungFraction = 0.20f;
+        private const float BodyInteractionBroadphaseRadiusSquaredMeters = 4f;
+        private const float BodyInteractionMaximumTraversalMeters = 4f;
+        private const string InitialChestWoundImpactId = "godot:chest-wound-response:initial-impact";
+        private static readonly Guid ShooterEntityId = new("10000000-0000-0000-0000-000000000001");
+        private static readonly Guid DummyEntityId = new("10000000-0000-0000-0000-000000000002");
         private IServiceProvider _serviceProvider = null!;
+        private IProjectileInteractionService _projectileInteractionService = null!;
         
         public TacticalEntity Shooter { get; private set; } = null!;
         public TacticalEntity Dummy { get; private set; } = null!;
@@ -39,6 +45,7 @@ namespace TacticalSim.GodotClient
         private bool _isProjectileSelected;
         private MedicalAction? _pendingMedicalAction;
         private Node3D _penetrationVisualization = null!;
+        private int _projectileInteractionSequence;
 
         public string? LoadedScenarioName { get; private set; }
         public float ElapsedScenarioTime { get; private set; }
@@ -56,6 +63,10 @@ namespace TacticalSim.GodotClient
         public System.Numerics.Vector3? PenetrationEntryPoint { get; private set; }
         public System.Numerics.Vector3? PenetrationExitPoint { get; private set; }
         public System.Numerics.Vector3? MaterialHitPoint { get; private set; }
+        public ProjectileInteractionResult? LastProjectileInteractionResult { get; private set; }
+        public ImpactDebugTrace? LastImpactDebugTrace { get; private set; }
+        public WoundTrack? LastWoundTrack { get; private set; }
+        public EnergyLedger? LastEnergyLedger { get; private set; }
         public ProjectileTelemetry? SelectedProjectileTelemetry =>
             _isProjectileSelected && _projectileState.HasValue
                 ? ProjectileTelemetry.From(_projectileState.Value, ActiveAmmo.Ballistics)
@@ -78,6 +89,8 @@ namespace TacticalSim.GodotClient
             var services = new ServiceCollection();
             services.AddTacticalSimCore();
             _serviceProvider = services.BuildServiceProvider();
+            _projectileInteractionService =
+                _serviceProvider.GetRequiredService<IProjectileInteractionService>();
         }
 
         public AmmunitionProfile ActiveAmmo { get; set; } = new AmmunitionProfile
@@ -110,6 +123,8 @@ namespace TacticalSim.GodotClient
             LastProjectileTermination = ProjectileTerminationReason.None;
             _projectileState = null;
             _isProjectileSelected = false;
+            _projectileInteractionSequence = 0;
+            SetLastProjectileInteraction(null);
             ClearPenetrationVisualization();
             ClearAgentFocus();
             _pendingMedicalAction = null;
@@ -162,6 +177,8 @@ namespace TacticalSim.GodotClient
             LastProjectileTermination = ProjectileTerminationReason.None;
             _projectileState = null;
             _isProjectileSelected = false;
+            _projectileInteractionSequence = 0;
+            SetLastProjectileInteraction(null);
             ClearPenetrationVisualization();
             ClearAgentFocus();
             _pendingMedicalAction = null;
@@ -319,8 +336,10 @@ namespace TacticalSim.GodotClient
             if (!IsScenarioLoaded || !ReferenceEquals(_focusedAgent, Shooter))
                 return actions;
 
-            bool hasOpenChestWound = GetAllVoxels(Dummy.Physiology.RootBodyPart)
-                .Exists(voxel => voxel.Organ == OrganType.Lung && voxel.IsDestroyed);
+            MedicalReport traumaReport = MedicalAssessor.AssessTrauma(Dummy.Physiology);
+            bool hasOpenChestWound =
+                traumaReport.DestroyedVolumeCc.TryGetValue(OrganType.Lung, out float destroyedLungVolumeCc)
+                && destroyedLungVolumeCc > 0f;
             if (hasOpenChestWound && !Dummy.Physiology.HasChestSeal)
                 actions.Add(MedicalAction.ApplyChestSeal);
             if (Dummy.Physiology.TensionPneumothoraxLevel > 0f)
@@ -428,22 +447,17 @@ namespace TacticalSim.GodotClient
             var shooterPhysiology = new TacticalActorPhysiology();
             shooterPhysiology.SetRoot(new BodyPart { Type = BodyPartType.Thorax });
             Shooter = new TacticalEntity(
+                ShooterEntityId,
                 new System.Numerics.Vector3(0, 1.5f, -TargetDistance),
                 shooterPhysiology);
             Dummy = new TacticalEntity(
+                DummyEntityId,
                 new System.Numerics.Vector3(0, 1f, 0),
                 AnatomicalDummyBuilder.BuildDummy());
 
             if (LoadedScenarioName == "Chest Wound Response")
             {
-                List<PhysiologicalVoxel> lungVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart)
-                    .FindAll(voxel => voxel.Organ == OrganType.Lung);
-                int woundedVoxels = Math.Max(1,
-                    (int)MathF.Ceiling(lungVoxels.Count * ChestWoundDestroyedLungFraction));
-                foreach (PhysiologicalVoxel lungVoxel in lungVoxels.Take(woundedVoxels))
-                {
-                    lungVoxel.ApplyKineticEnergy(1_000f, lungVoxel.Center, lungVoxel.Size * lungVoxel.Size * lungVoxel.Size);
-                }
+                ResolveInitialChestWound();
                 Dummy.Physiology.TickPhysiology(1f);
             }
 
@@ -455,9 +469,61 @@ namespace TacticalSim.GodotClient
                 Shooter.Position.Z);
         }
 
+        private void ResolveInitialChestWound()
+        {
+            // Provisional scenario fixture matching the existing 9x19 mm loadout.
+            // The authoritative service still owns all traversal and tissue damage.
+            var woundAmmo = new AmmunitionProfile
+            {
+                Name = "9x19mm scenario wound fixture",
+                MuzzleVelocity = 380f,
+                Ballistics = new BallisticProfile
+                {
+                    Mass = 0.008f,
+                    CrossSectionalArea = 0.0000636f,
+                    DragModel = new StandardDragCurve(0.15f)
+                }
+            };
+            var bodyLocalProjectileState = new ProjectileState
+            {
+                // Fixed scenario input aimed through the center of the right lung.
+                Position = new System.Numerics.Vector3(0.08f, 0.28f, -0.5f),
+                Velocity = System.Numerics.Vector3.UnitZ * woundAmmo.MuzzleVelocity,
+                Time = 0f
+            };
+            ProjectileInteractionResult? result = _projectileInteractionService.Resolve(
+                new ProjectileInteractionRequest(
+                    InitialChestWoundImpactId,
+                    woundAmmo.Name,
+                    Dummy.Physiology,
+                    bodyLocalProjectileState,
+                    woundAmmo.Ballistics,
+                    Distance.FromMeters(BodyInteractionMaximumTraversalMeters),
+                    modelVersion: null,
+                    Shooter.Id,
+                    Dummy.Id));
+            SetLastProjectileInteraction(result);
+
+            MedicalReport report = MedicalAssessor.AssessTrauma(Dummy.Physiology);
+            bool destroyedLung = report.DestroyedVolumeCc.TryGetValue(
+                OrganType.Lung,
+                out float destroyedLungVolumeCc) && destroyedLungVolumeCc > 0f;
+            if (result is null
+                || !result.WoundTrack.Segments.Any(
+                    segment => segment.StructureType == OrganType.Lung.ToString())
+                || !destroyedLung)
+            {
+                throw new InvalidOperationException(
+                    "The deterministic Chest Wound Response setup did not produce an actionable lung wound.");
+            }
+        }
+
         private void ScrubToTime(float flightTime)
         {
             var ammo = ActiveAmmo;
+            LastProjectileTermination = ProjectileTerminationReason.None;
+            SetLastProjectileInteraction(null);
+
             // A loaded scenario owns the actors' persistent physiological state.
             // Rebuilding them for each projectile used to erase earlier wounds,
             // blood loss, and treatment, making the medical report describe only
@@ -502,23 +568,8 @@ namespace TacticalSim.GodotClient
                 Time = 0f
             };
 
-            var allVoxels = GetAllVoxels(Dummy.Physiology.RootBodyPart);
-            
-            // Build spatial index for O(1) voxel lookup
-            // Extent bounds mapped to grid coordinates: X[-50..50]->[0..100], Y[-100..120]->[0..220], Z[-50..50]->[0..100]
-            var voxelGrid = new PhysiologicalVoxel[100, 220, 100]; 
-            foreach (var v in allVoxels)
-            {
-                int vx = (int)MathF.Round(v.Center.X * 100f) + 50;
-                int vy = (int)MathF.Round(v.Center.Y * 100f) + 100;
-                int vz = (int)MathF.Round(v.Center.Z * 100f) + 50;
-                if (vx >= 0 && vx < 100 && vy >= 0 && vy < 220 && vz >= 0 && vz < 100)
-                    voxelGrid[vx, vy, vz] = v;
-            }
-
-            var cavEvents = new List<(float Time, CavitationEvent Cav)>();
-            System.Numerics.Vector3? firstMaterialContact = null;
-            System.Numerics.Vector3? lastMaterialContact = null;
+            bool bodyInteractionAttempted = false;
+            System.Numerics.Vector3? wallMaterialContact = null;
             
             // RK4 physics loop (simulating continuous flight until t = flightTime).
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
@@ -526,12 +577,9 @@ namespace TacticalSim.GodotClient
             
             while (impactState.Time < flightTime)
             {
-                // Fast distance check to optimize time step and voxel collision checks
-                var localPos = impactState.Position - Dummy.Position;
-                bool isNearTarget = localPos.LengthSquared() < 4.0f; // Within 2 meters of dummy
-                
-                // 10 microseconds for extremely precise physics near target, 1 millisecond in the air
-                float simTimeStep = isNearTarget ? 0.00001f : 0.001f; 
+                // Body traversal is resolved as one core event. The client retains
+                // only the external-flight integration and scene-wall collision.
+                float simTimeStep = 0.001f;
 
                 // Prevent overshooting the target flightTime scrubber
                 if (impactState.Time + simTimeStep > flightTime)
@@ -547,8 +595,7 @@ namespace TacticalSim.GodotClient
                 // collision point rather than using a fixed world-space stopping plane.
                 if (TryGetBuildingWallImpact(stepStartPosition, impactState.Position, out var wallContact))
                 {
-                    firstMaterialContact = wallContact;
-                    lastMaterialContact = wallContact;
+                    wallMaterialContact = wallContact;
                     impactState.Position = wallContact;
                     impactState.Velocity = System.Numerics.Vector3.Zero;
                     break;
@@ -559,115 +606,55 @@ namespace TacticalSim.GodotClient
                 if (LastProjectileTermination != ProjectileTerminationReason.None)
                     break;
 
-                // Update local position after step
-                localPos = impactState.Position - Dummy.Position;
-
-                // O(1) spatial grid lookup instead of looping 40,000 voxels
-                if (isNearTarget)
+                System.Numerics.Vector3 localPosition = impactState.Position - Dummy.Position;
+                bool isNearTarget =
+                    localPosition.LengthSquared() < BodyInteractionBroadphaseRadiusSquaredMeters;
+                if (isNearTarget && !bodyInteractionAttempted)
                 {
-                    int bx = (int)MathF.Round(localPos.X * 100f) + 50;
-                    int by = (int)MathF.Round(localPos.Y * 100f) + 100;
-                    int bz = (int)MathF.Round(localPos.Z * 100f) + 50;
-                    
-                    if (bx >= 0 && bx < 100 && by >= 0 && by < 220 && bz >= 0 && bz < 100)
-                    {
-                        var voxel = voxelGrid[bx, by, bz];
-                        if (voxel != null && voxel.Contains(localPos))
-                        {
-                            firstMaterialContact ??= impactState.Position;
-                            lastMaterialContact = impactState.Position;
-                            var localState = impactState;
-                            localState.Position = localPos;
-                            
-                            float distanceThisStep = localState.Velocity.Length() * simTimeStep;
-                            var cav = voxel.ProcessPenetrationStep(ref localState, ammo.Ballistics, distanceThisStep);
-                            
-                            impactState.Velocity = localState.Velocity;
+                    bodyInteractionAttempted = true;
+                    var bodyLocalProjectileState = impactState;
+                    bodyLocalProjectileState.Position = localPosition;
+                    string impactId = FormattableString.Invariant(
+                        $"godot:{LoadedScenarioName}:impact-{_projectileInteractionSequence++:D4}");
+                    ProjectileInteractionResult? result = _projectileInteractionService.Resolve(
+                        new ProjectileInteractionRequest(
+                            impactId,
+                            ActiveAmmo.Name,
+                            Dummy.Physiology,
+                            bodyLocalProjectileState,
+                            ammo.Ballistics,
+                            Distance.FromMeters(BodyInteractionMaximumTraversalMeters),
+                            modelVersion: null,
+                            Shooter.Id,
+                            Dummy.Id));
+                    SetLastProjectileInteraction(result);
 
-                            if (cav.HasValue)
-                            {
-                                if (cavEvents.Count == 0 || (localPos - cavEvents[cavEvents.Count - 1].Cav.Origin).Length() > 0.01f)
-                                {
-                                    cavEvents.Add((impactState.Time, cav.Value));
-                                }
-                                else
-                                {
-                                    var last = cavEvents[cavEvents.Count - 1];
-                                    var modifiedCav = last.Cav;
-                                    modifiedCav.Energy += cav.Value.Energy;
-                                    modifiedCav.Radius = MathF.Max(modifiedCav.Radius, cav.Value.Radius);
-                                    cavEvents[cavEvents.Count - 1] = (last.Time, modifiedCav);
-                                }
-                            }
-                        }
+                    if (result is not null)
+                    {
+                        impactState = result.FinalProjectileState;
+                        impactState.Position += Dummy.Position;
+
+                        LastProjectileTermination = ProjectileFlightTermination.Evaluate(
+                            impactState, ammo.Ballistics, worldBounds);
+                        if (LastProjectileTermination != ProjectileTerminationReason.None)
+                            break;
                     }
                 }
-                
-            }
-
-            int destroyedCount = 0;
-            foreach (var v in allVoxels) if (v.IsDestroyed) destroyedCount++;
-            System.IO.File.WriteAllText("MedicalReport.txt", $"Knife Debug: Hit {destroyedCount} voxels. Final Pos: {impactState.Position}");
-            
-            // Apply accumulated cavitation damage to surrounding tissue using spatial grid.
-            foreach (var cavEvent in cavEvents)
-            {
-                var cav = cavEvent.Cav;
-                
-                int radCells = (int)MathF.Ceiling(cav.Radius * 100f);
-                int cx = (int)MathF.Round(cav.Origin.X * 100f) + 50;
-                int cy = (int)MathF.Round(cav.Origin.Y * 100f) + 100;
-                int cz = (int)MathF.Round(cav.Origin.Z * 100f) + 50;
-
-                float cavVolume = (4f/3f) * MathF.PI * cav.Radius * cav.Radius * cav.Radius;
-                float peakEnergyDensity = cavVolume > 0 ? 4f * (cav.Energy / cavVolume) : 0f;
-                float voxelVolume = 0.01f * 0.01f * 0.01f;
-
-                for (int x = cx - radCells; x <= cx + radCells; x++)
-                {
-                    for (int y = cy - radCells; y <= cy + radCells; y++)
-                    {
-                        for (int z = cz - radCells; z <= cz + radCells; z++)
-                        {
-                            if (x >= 0 && x < 100 && y >= 0 && y < 220 && z >= 0 && z < 100)
-                            {
-                                var neighbor = voxelGrid[x, y, z];
-                                if (neighbor != null)
-                                {
-                                    float dist = (neighbor.Center - cav.Origin).Length();
-                                    if (dist > 0 && dist <= cav.Radius)
-                                    {
-                                        float energyDensityAtDist = peakEnergyDensity * (1f - (dist / cav.Radius));
-                                        float energyToVoxel = energyDensityAtDist * voxelVolume;
-                                        neighbor.ApplyKineticEnergy(energyToVoxel, cav.Origin, 0f);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // A material stop is reported at the material contact, not at the last
-            // integration point. This keeps the rendered projectile attached to the
-            // object that stopped it and keeps its telemetry at the terminal point.
-            if (firstMaterialContact.HasValue
-                && lastMaterialContact.HasValue
-                && !HasTravelledBeyondMaterial(
-                    impactState.Position,
-                    lastMaterialContact.Value,
-                    impactDir))
-            {
-                impactState.Position = firstMaterialContact.Value;
-                impactState.Velocity = System.Numerics.Vector3.Zero;
             }
 
             _projectileState = impactState;
-            UpdatePenetrationVisualization(
-                firstMaterialContact,
-                lastMaterialContact,
-                impactState.Position,
-                impactDir);
+            if (wallMaterialContact.HasValue)
+            {
+                UpdateWallImpactVisualization(wallMaterialContact.Value);
+            }
+            else if (LastWoundTrack is not null)
+            {
+                UpdateBodyPenetrationVisualization(LastWoundTrack);
+            }
+            else
+            {
+                ClearPenetrationVisualization();
+            }
             _bulletMesh.GlobalPosition = ToGodot(impactState.Position);
             
             // Look in the direction of velocity
@@ -676,9 +663,6 @@ namespace TacticalSim.GodotClient
                 var targetPt = impactState.Position + impactState.Velocity;
                 _bulletMesh.LookAt(new Godot.Vector3(targetPt.X, targetPt.Y, targetPt.Z), Godot.Vector3.Up);
             }
-
-            // We dispense with the heavy visual voxel animation, just show the bullet moving
-            // _voxelRenderer.RefreshVoxels(Dummy.Physiology, cavEvents, flightTime, Dummy.Position);
         }
 
         private void CreatePenetrationVisualization()
@@ -700,6 +684,14 @@ namespace TacticalSim.GodotClient
                 foreach (Node child in _penetrationVisualization.GetChildren())
                     child.QueueFree();
             }
+        }
+
+        private void SetLastProjectileInteraction(ProjectileInteractionResult? result)
+        {
+            LastProjectileInteractionResult = result;
+            LastImpactDebugTrace = result?.DebugTrace;
+            LastWoundTrack = result?.WoundTrack;
+            LastEnergyLedger = result?.EnergyLedger;
         }
 
         private bool TryGetBuildingWallImpact(
@@ -747,40 +739,48 @@ namespace TacticalSim.GodotClient
             return false;
         }
 
-        private void UpdatePenetrationVisualization(
-            System.Numerics.Vector3? firstContact,
-            System.Numerics.Vector3? lastContact,
-            System.Numerics.Vector3 projectilePosition,
-            System.Numerics.Vector3 direction)
+        private void UpdateWallImpactVisualization(System.Numerics.Vector3 contactPoint)
         {
             ClearPenetrationVisualization();
-            if (!firstContact.HasValue || !lastContact.HasValue)
-                return;
+            HasMaterialHit = true;
+            MaterialHitPoint = contactPoint;
+            AddPenetrationMarker(contactPoint, "HIT", new Color(1f, 0.55f, 0.05f));
+        }
 
+        private void UpdateBodyPenetrationVisualization(WoundTrack woundTrack)
+        {
+            ClearPenetrationVisualization();
             HasMaterialHit = true;
 
-            if (!HasTravelledBeyondMaterial(projectilePosition, lastContact.Value, direction))
+            System.Numerics.Vector3 entryPoint = Dummy.Position + woundTrack.EntryPoint;
+            PenetrationEntryPoint = entryPoint;
+            AddPenetrationMarker(entryPoint, "ENTRY", new Color(1f, 0.2f, 0.08f));
+
+            foreach (WoundTrackSegment segment in woundTrack.Segments)
             {
-                MaterialHitPoint = firstContact;
-                AddPenetrationMarker(firstContact.Value, "HIT", new Color(1f, 0.55f, 0.05f));
+                AddPenetrationChannel(
+                    Dummy.Position + segment.EntryPoint,
+                    Dummy.Position + segment.EndPoint);
+            }
+
+            if (woundTrack.Disposition == ProjectileDisposition.Exited)
+            {
+                HasCompletePenetration = true;
+                PenetrationExitPoint = Dummy.Position + woundTrack.ExitPoint!.Value;
+                AddPenetrationMarker(
+                    PenetrationExitPoint.Value,
+                    "EXIT",
+                    new Color(0.1f, 0.9f, 1f));
                 return;
             }
 
-            HasCompletePenetration = true;
-            PenetrationEntryPoint = firstContact;
-            PenetrationExitPoint = lastContact;
-
-            AddPenetrationMarker(firstContact.Value, "ENTRY", new Color(1f, 0.2f, 0.08f));
-            AddPenetrationMarker(lastContact.Value, "EXIT", new Color(0.1f, 0.9f, 1f));
-            AddPenetrationChannel(firstContact.Value, lastContact.Value);
-        }
-
-        private static bool HasTravelledBeyondMaterial(
-            System.Numerics.Vector3 projectilePosition,
-            System.Numerics.Vector3 lastContact,
-            System.Numerics.Vector3 direction)
-        {
-            return System.Numerics.Vector3.Dot(projectilePosition - lastContact, direction) > 0.01f;
+            System.Numerics.Vector3 retainedPoint =
+                Dummy.Position + woundTrack.RetainedPoint!.Value;
+            MaterialHitPoint = retainedPoint;
+            AddPenetrationMarker(
+                retainedPoint,
+                "RETAINED",
+                new Color(1f, 0.55f, 0.05f));
         }
 
         private void AddPenetrationMarker(System.Numerics.Vector3 position, string text, Color color)
@@ -841,17 +841,6 @@ namespace TacticalSim.GodotClient
 
         private static Godot.Vector3 ToGodot(System.Numerics.Vector3 value) =>
             new(value.X, value.Y, value.Z);
-
-        private List<PhysiologicalVoxel> GetAllVoxels(TacticalSim.Core.Physiology.BodyPart root)
-        {
-            var list = new List<PhysiologicalVoxel>();
-            list.AddRange(root.Voxels);
-            foreach (var child in root.Children)
-            {
-                list.AddRange(GetAllVoxels(child));
-            }
-            return list;
-        }
     }
 }
 // Force Godot rebuild

@@ -4,11 +4,13 @@ using System.Linq;
 using System.Numerics;
 using TacticalSim.Core;
 using TacticalSim.Core.Ballistics;
+using TacticalSim.Core.Damage;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
 using TacticalSim.Core.World;
+using TacticalSim.Core.Units;
 using Xunit;
 
 namespace TacticalSim.Tests
@@ -202,7 +204,11 @@ namespace TacticalSim.Tests
             var heartHitPoint = new Vector3(0.04f, 0.28f, 0.04f);
             float kineticEnergy = 3500f; // High kinetic energy rifle round
 
-            dummy.ProcessImpact(Vector3.UnitZ, kineticEnergy, heartHitPoint);
+            dummy.ProcessLegacyImpact(
+                Vector3.UnitZ,
+                Energy.FromJoules(kineticEnergy),
+                heartHitPoint,
+                DamageModelVersion.LegacyV1);
 
             // Verify active bleed rate on root body part increased significantly
             Assert.True(dummy.RootBodyPart.GetActiveBleedRate() > 5.0f, "Heart trauma must produce heavy arterial bleeding.");
@@ -225,7 +231,11 @@ namespace TacticalSim.Tests
             // Apply 50 consecutive devastating kinetic strikes
             for (int i = 0; i < 50; i++)
             {
-                dummy.ProcessImpact(Vector3.UnitZ, 5000f, hitPoint);
+                dummy.ProcessLegacyImpact(
+                    Vector3.UnitZ,
+                    Energy.FromJoules(5_000f),
+                    hitPoint,
+                    DamageModelVersion.LegacyV1);
             }
 
             var world = new TacticalWorld(WorldBounds.CreateDefault());
