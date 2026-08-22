@@ -19,42 +19,43 @@ namespace TacticalSim.Core
         {
             var report = new MedicalReport();
             
-            var allVoxels = new List<PhysiologicalVoxel>();
-            void Collect(BodyPart p) {
-                allVoxels.AddRange(p.Voxels);
-                foreach (var c in p.Children) Collect(c);
-            }
-            Collect(dummy.RootBodyPart);
-
-            var voxels = allVoxels;
-
             float totalLungVolume = 0;
             float destroyedLungVolume = 0;
             float totalBleedRateSec = 0;
 
-            foreach (var voxel in voxels)
+            void ProcessBodyPart(BodyPart p)
             {
-                float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
-                
-                if (voxel.Organ == OrganType.Lung)
+                foreach (var voxel in p.Voxels)
                 {
-                    totalLungVolume += volCc;
-                }
-
-                if (voxel.IsDestroyed)
-                {
-                    if (!report.DestroyedVolumeCc.ContainsKey(voxel.Organ))
-                        report.DestroyedVolumeCc[voxel.Organ] = 0;
+                    float volCc = voxel.Size * voxel.Size * voxel.Size * 1_000_000f; // m^3 to cm^3
                     
-                    report.DestroyedVolumeCc[voxel.Organ] += volCc;
-
                     if (voxel.Organ == OrganType.Lung)
                     {
-                        destroyedLungVolume += volCc;
+                        totalLungVolume += volCc;
                     }
+
+                    if (voxel.IsDestroyed)
+                    {
+                        if (!report.DestroyedVolumeCc.ContainsKey(voxel.Organ))
+                            report.DestroyedVolumeCc[voxel.Organ] = 0;
+
+                        report.DestroyedVolumeCc[voxel.Organ] += volCc;
+
+                        if (voxel.Organ == OrganType.Lung)
+                        {
+                            destroyedLungVolume += volCc;
+                        }
+                    }
+                }
+
+                foreach (var child in p.Children)
+                {
+                    ProcessBodyPart(child);
                 }
             }
             
+            ProcessBodyPart(dummy.RootBodyPart);
+
             totalBleedRateSec = GetTotalActiveBleedRate(dummy.RootBodyPart);
 
             report.TotalBleedRateMlPerMin = totalBleedRateSec * 60f;
