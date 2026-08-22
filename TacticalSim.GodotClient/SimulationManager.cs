@@ -458,25 +458,14 @@ namespace TacticalSim.GodotClient
         private void ScrubToTime(float flightTime)
         {
             var ammo = ActiveAmmo;
-
-            bool shooterWasFocused = ReferenceEquals(_focusedAgent, Shooter);
-            bool dummyWasFocused = ReferenceEquals(_focusedAgent, Dummy);
-            System.Numerics.Vector3 shooterPosition = Shooter.Position;
-            System.Numerics.Vector3 dummyPosition = Dummy.Position;
-
-            // 1. Instantiate a fresh Dummy with full health
-            var actorPhysiology = new TacticalActorPhysiology();
-            actorPhysiology.SetRoot(new TacticalSim.Core.Physiology.BodyPart { Type = TacticalSim.Core.Physiology.BodyPartType.Thorax });
-            Shooter = new TacticalEntity(shooterPosition, actorPhysiology);
+            // A loaded scenario owns the actors' persistent physiological state.
+            // Rebuilding them for each projectile used to erase earlier wounds,
+            // blood loss, and treatment, making the medical report describe only
+            // the most recent hit. LoadScenario/PrepareScenario is the explicit
+            // reset boundary; every shot within that scenario damages the same
+            // actor so its systemic effects remain cumulative.
             
-            var dummyPhysiology = AnatomicalDummyBuilder.BuildDummy();
-            Dummy = new TacticalEntity(dummyPosition, dummyPhysiology);
-            if (shooterWasFocused)
-                _focusedAgent = Shooter;
-            else if (dummyWasFocused)
-                _focusedAgent = Dummy;
-            
-            // Move the visual shooter circle dynamically
+            // Move the visual shooter circle dynamically.
             var shooterCircle = GetNodeOrNull<Godot.Node3D>("../ShooterCircle");
             if (shooterCircle != null)
             {
@@ -486,7 +475,7 @@ namespace TacticalSim.GodotClient
                     Shooter.Position.Z);
             }
             
-            // 2. Setup initial bullet state right before impact
+            // Setup initial bullet state right before impact.
             float aimXOffset = 0f;
             float aimYOffset = 0.25f; // Chest
             
@@ -531,7 +520,7 @@ namespace TacticalSim.GodotClient
             System.Numerics.Vector3? firstMaterialContact = null;
             System.Numerics.Vector3? lastMaterialContact = null;
             
-            // 3. RK4 Physics Loop (simulating continuous flight until t = flightTime)
+            // RK4 physics loop (simulating continuous flight until t = flightTime).
             var env = _serviceProvider.GetRequiredService<IEnvironmentModel>();
             WorldBounds worldBounds = WorldBounds.CreateDefault();
             
@@ -620,7 +609,7 @@ namespace TacticalSim.GodotClient
             foreach (var v in allVoxels) if (v.IsDestroyed) destroyedCount++;
             System.IO.File.WriteAllText("MedicalReport.txt", $"Knife Debug: Hit {destroyedCount} voxels. Final Pos: {impactState.Position}");
             
-            // 4. Apply accumulated cavitation damage to surrounding tissue using spatial grid
+            // Apply accumulated cavitation damage to surrounding tissue using spatial grid.
             foreach (var cavEvent in cavEvents)
             {
                 var cav = cavEvent.Cav;
