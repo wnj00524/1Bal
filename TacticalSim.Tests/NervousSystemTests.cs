@@ -70,7 +70,7 @@ namespace TacticalSim.Tests
             {
                 Name = "Test Rifle",
                 BaseTUCostToFire = 10f,
-                LoadedAmmunition = new AmmunitionProfile { MuzzleVelocity = 100f, Ballistics = new BallisticProfile { Mass = 0.01f, CrossSectionalArea = 0.01f, DragModel = new StandardDragCurve(1f) } }
+                LoadedAmmunition = new AmmunitionProfile { MuzzleVelocity = 100f, Ballistics = new BallisticProfile { Mass = 0.01f, CrossSectionalArea = 0.000025f, DragModel = new StandardDragCurve(1f) } }
             };
 
             var healthyAction = new ShootTacticalAction(dummy, Vector3.UnitZ, new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.8f, 0)));
@@ -97,7 +97,7 @@ namespace TacticalSim.Tests
             {
                 Name = "Test Rifle",
                 BaseTUCostToFire = 10f,
-                LoadedAmmunition = new AmmunitionProfile { MuzzleVelocity = 100f, Ballistics = new BallisticProfile { Mass = 0.01f, CrossSectionalArea = 0.01f, DragModel = new StandardDragCurve(1f) } }
+                LoadedAmmunition = new AmmunitionProfile { MuzzleVelocity = 100f, Ballistics = new BallisticProfile { Mass = 0.01f, CrossSectionalArea = 0.000025f, DragModel = new StandardDragCurve(1f) } }
             };
 
             var healthyAction = new ShootTacticalAction(dummy, Vector3.UnitZ, new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.8f, 0)));
