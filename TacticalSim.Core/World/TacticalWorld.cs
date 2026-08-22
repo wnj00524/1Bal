@@ -10,6 +10,7 @@ public sealed class TacticalWorld : ITacticalWorld
 {
     private readonly Dictionary<Guid, IEntity> _entities = new();
     private readonly List<CoverPolygon> _coverSurfaces = new();
+    private IEntity[]? _cachedEntities;
 
     public TacticalWorld(WorldBounds bounds) => Bounds = bounds;
 
@@ -25,6 +26,7 @@ public sealed class TacticalWorld : ITacticalWorld
 
         entity.Position = Bounds.Clamp(entity.Position);
         _entities[entity.Id] = entity;
+        _cachedEntities = null;
         EntityAdded?.Invoke(this, new EntityEventArgs(entity, 0f));
     }
 
@@ -33,6 +35,7 @@ public sealed class TacticalWorld : ITacticalWorld
         if (!_entities.Remove(entityId, out IEntity? entity))
             return false;
 
+        _cachedEntities = null;
         EntityRemoved?.Invoke(this, new EntityEventArgs(entity, 0f));
         return true;
     }
@@ -40,7 +43,7 @@ public sealed class TacticalWorld : ITacticalWorld
     public IEntity? GetEntity(Guid entityId) => _entities.GetValueOrDefault(entityId);
 
     public IReadOnlyCollection<IEntity> GetEntities() =>
-        _entities.Values.OrderBy(entity => entity.Id).ToArray();
+        _cachedEntities ??= _entities.Values.OrderBy(entity => entity.Id).ToArray();
 
     public void SetEntityPosition(Guid entityId, Vector3 newPosition)
     {
