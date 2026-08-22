@@ -66,6 +66,35 @@ public class HemorrhageConservationTests
         Assert.Equal(46.5f, physiology.MeanArterialPressureMmhg, 2);
     }
 
+    [Fact]
+    public void ReportedSystemicBleedRateFallsWithBloodPressure()
+    {
+        var physiology = CreatePhysiology(arterialBleedRate: 2_000f);
+        float initialRate = physiology.SystemicBleedRateMlPerSecond;
+
+        physiology.TickPhysiology(1f);
+
+        Assert.Equal(2_000f, initialRate, 2);
+        Assert.True(physiology.SystemicBleedRateMlPerSecond < initialRate);
+        MedicalReport report = MedicalAssessor.AssessTrauma(physiology);
+        Assert.Equal(physiology.SystemicBleedRateMlPerSecond * 60f,
+            report.TotalBleedRateMlPerMin, 2);
+    }
+
+    [Fact]
+    public void ZeroHeartRateAndOxygenLatchesDeathInMedicalReport()
+    {
+        var physiology = CreatePhysiology(arterialBleedRate: 5_000f);
+
+        physiology.TickPhysiology(25f);
+
+        Assert.Equal(0f, physiology.HeartRateBpm);
+        Assert.Equal(0f, physiology.BloodOxygenation);
+        Assert.True(physiology.IsDead);
+        Assert.Contains("Consciousness: [DEAD]",
+            MedicalAssessor.AssessTrauma(physiology).AssessmentText);
+    }
+
     private static TacticalActorPhysiology CreatePhysiology(float arterialBleedRate = 0f)
     {
         var physiology = new TacticalActorPhysiology();

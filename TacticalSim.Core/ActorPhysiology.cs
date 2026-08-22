@@ -142,6 +142,7 @@ namespace TacticalSim.Core.Physiology
         float ConsciousnessLevel { get; } // 0.0 to 1.0
         float HeartRateBpm { get; }
         float MeanArterialPressureMmhg { get; }
+        float SystemicBleedRateMlPerSecond { get; }
         float BreathingRatePerMinute { get; }
         float AutonomicDrive { get; }
         float BrainstemFunction { get; }
@@ -161,6 +162,7 @@ namespace TacticalSim.Core.Physiology
         float CirculationEffectiveness { get; } // systemic perfusion, 1.0 down to 0.0
         float CerebralOxygenation { get; } // oxygen delivery to the brain, 1.0 down to 0.0
         float BrainHypoxiaSeconds { get; }
+        bool IsDead { get; }
         
         // Nervous System
         float PainLevel { get; }
@@ -189,6 +191,15 @@ namespace TacticalSim.Core.Physiology
         
         public float HeartRateBpm { get; private set; } = 80f;
         public float MeanArterialPressureMmhg { get; private set; } = 93f; // 120/80
+        public float SystemicBleedRateMlPerSecond
+        {
+            get
+            {
+                float pressureFlowFactor = MathF.Sqrt(Math.Clamp(
+                    MeanArterialPressureMmhg / 93f, 0f, 1f));
+                return CalculateBleedRate(RootBodyPart, out _) * pressureFlowFactor;
+            }
+        }
         public float BreathingRatePerMinute { get; private set; } = 12f;
         public float AutonomicDrive { get; private set; } = 1f;
         public float BrainstemFunction { get; private set; } = 1f;
@@ -205,6 +216,7 @@ namespace TacticalSim.Core.Physiology
         public float CirculationEffectiveness { get; private set; } = 1f;
         public float CerebralOxygenation { get; private set; } = 1f;
         public float BrainHypoxiaSeconds { get; private set; }
+        public bool IsDead { get; private set; }
 
         public float PainLevel { get; private set; } = 0f;
         public float ShockLevel { get; private set; } = 0f;
@@ -297,6 +309,12 @@ namespace TacticalSim.Core.Physiology
             UpdateCerebralState(dt);
             UpdateNervousSystemState(dt);
             UpdateMotorState();
+
+            // Unconsciousness can be temporary, but complete circulatory and
+            // oxygen failure is terminal. Latch death so later state updates can
+            // never present a terminal casualty as merely unconscious.
+            if (HeartRateBpm <= 0f && BloodOxygenation <= 0f)
+                IsDead = true;
         }
 
         private static float CalculateLungVolumeMl(BodyPart part)
@@ -664,6 +682,13 @@ namespace TacticalSim.Core.Physiology
 
             if (AutonomicDrive <= 0f)
                 ConsciousnessLevel = 0f;
+
+            if (IsDead)
+            {
+                HeartRateBpm = 0f;
+                MeanArterialPressureMmhg = 0f;
+                ConsciousnessLevel = 0f;
+            }
 
             CirculationEffectiveness = Math.Clamp(MeanArterialPressureMmhg / 93f, 0f, 1f);
         }
