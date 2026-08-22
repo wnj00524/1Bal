@@ -130,13 +130,20 @@ public sealed class CoverPolygon
     private static Vector3 CalculateAreaVector(IReadOnlyList<Vector3> vertices)
     {
         Vector3 area = Vector3.Zero;
-        for (int i = 0; i < vertices.Count; i++)
+        int count = vertices.Count;
+        if (count < 3)
         {
-            Vector3 current = vertices[i];
-            Vector3 next = vertices[(i + 1) % vertices.Count];
+            return area;
+        }
+
+        Vector3 current = vertices[count - 1];
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 next = vertices[i];
             area.X += (current.Y - next.Y) * (current.Z + next.Z);
             area.Y += (current.Z - next.Z) * (current.X + next.X);
             area.Z += (current.X - next.X) * (current.Y + next.Y);
+            current = next;
         }
 
         return area;
