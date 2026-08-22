@@ -19,7 +19,7 @@ public class NeurologicalControlTests
         physiology.TickPhysiology(0f);
 
         Assert.Equal(0.5f, physiology.AutonomicDrive);
-        Assert.Equal(40f, physiology.HeartRateBpm);
+        Assert.Equal(90f, physiology.HeartRateBpm);
         Assert.Equal(6f, physiology.BreathingRatePerMinute);
     }
 
@@ -32,14 +32,14 @@ public class NeurologicalControlTests
         physiology.TickPhysiology(1f);
 
         Assert.Equal(0f, physiology.AutonomicDrive);
-        Assert.Equal(0f, physiology.HeartRateBpm);
+        Assert.Equal(100f, physiology.HeartRateBpm);
         Assert.Equal(0f, physiology.BreathingRatePerMinute);
         Assert.Equal(0f, physiology.MeanArterialPressureMmhg);
         Assert.Equal(0f, physiology.ConsciousnessLevel);
     }
 
     [Fact]
-    public void SeveredAutonomicNervePathwayStopsHeartAndBreathing()
+    public void SeveredAutonomicNervePathwayLeavesOnlyIntrinsicPacemakerRhythm()
     {
         var physiology = CreateSingleOrganPhysiology(
             OrganType.AutonomicNerve,
@@ -51,10 +51,31 @@ public class NeurologicalControlTests
         Assert.Equal(1f, physiology.BrainstemFunction);
         Assert.Equal(0f, physiology.AutonomicNerveFunction);
         Assert.Equal(0f, physiology.AutonomicDrive);
-        Assert.Equal(0f, physiology.HeartRateBpm);
+        Assert.Equal(100f, physiology.HeartRateBpm);
         Assert.Equal(0f, physiology.MeanArterialPressureMmhg);
         Assert.Equal(0f, physiology.BreathingRatePerMinute);
         Assert.Equal(0f, physiology.VentilationEffectiveness);
+    }
+
+    [Fact]
+    public void AutonomicNerveDamageBluntsHemorrhagicTachycardia()
+    {
+        var physiology = new TacticalActorPhysiology();
+        var thorax = new BodyPart
+        {
+            Type = BodyPartType.Thorax,
+            ArterialBleedRate = 1_600f
+        };
+        thorax.Voxels.Add(CreateVoxel(Vector3.Zero, OrganType.AutonomicNerve, TissueRegistry.Nerve));
+        thorax.Voxels.Add(CreateVoxel(Vector3.UnitX, OrganType.AutonomicNerve, TissueRegistry.Nerve));
+        physiology.SetRoot(thorax);
+
+        thorax.Voxels[0].ApplyKineticEnergy(1_000f, Vector3.Zero, 0.001f);
+        physiology.TickPhysiology(1f);
+
+        Assert.Equal(0.5f, physiology.AutonomicDrive);
+        Assert.Equal(HemorrhageClass.Class3, physiology.CurrentHemorrhageClass);
+        Assert.Equal(112f, physiology.HeartRateBpm, 1);
     }
 
     [Fact]
@@ -66,7 +87,7 @@ public class NeurologicalControlTests
         physiology.TickPhysiology(1f);
 
         Assert.Equal(1f, physiology.AutonomicNerveFunction);
-        Assert.Equal(80f, physiology.HeartRateBpm);
+        Assert.Equal(80f, physiology.HeartRateBpm, 2);
         Assert.Equal(12f, physiology.BreathingRatePerMinute);
     }
 
