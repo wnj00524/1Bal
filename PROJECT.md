@@ -3,6 +3,21 @@
 ## Architecture
 TacticalSim is a high-fidelity decoupled tactical simulation engine targeting .NET 10.0 with `System.Numerics.Vector3` mathematics and `Microsoft.Extensions.DependencyInjection` service composition.
 
+## Damage Model Roadmap Alignment
+
+The next development stage is governed by [docs/TacticalSim_Damage_Model_Roadmap.md](docs/TacticalSim_Damage_Model_Roadmap.md). GitHub milestones M5–M12 and the 48 issue backlog are tracked in `1BalProj`; see [docs/DAMAGE_MODEL_ISSUE_MAP.md](docs/DAMAGE_MODEL_ISSUE_MAP.md) for the canonical issue links.
+
+The target architecture has one authoritative pipeline in `TacticalSim.Core`:
+
+```text
+projectile -> wound track -> structure intersections -> persistent lesions
+           -> hemorrhage/physiology -> capability state -> tactical actions/UI
+```
+
+The work is intentionally staged. M5 establishes typed quantities, energy conservation, deterministic randomness, canonical wound tracks, and a single core interaction service. M6–M7 establish lesions, bleeding compartments, circulation, oxygen delivery, and capability state before M8 thoracic detail, M9 timed treatment, and M10 tactical integration. M11 adds bounded seeded variation; M12 adds validation, calibration, benchmarks, replay/save versioning, and developer documentation.
+
+The model is designed for mechanistically plausible tactical consequences, not clinical prediction or first-aid training. Debug telemetry may expose ground truth, while ordinary gameplay consumes stable capability and status contracts.
+
 ### Core Architecture Components:
 1. **`TacticalSim.Core.Simulation`**:
    - `ITurnResolver` / `TurnResolver`: Simultaneous timeline manager managing monotonic global clock ($T_g$), concurrent multi-actor action scheduling, per-actor FIFO queues, sub-tick fractionated TU carryover interleaving, fault isolation, and simulation lifecycle events.

@@ -7,6 +7,8 @@
 **Primary design goal:** Explore tactical decisions and consequences in high-threat environments  
 **Not a product goal:** Clinical first-aid instruction, medical certification, or exact prediction of real casualty outcomes
 
+**GitHub tracking:** The M5–M12 milestones and the 48 roadmap issues are created in the private `1BalProj` project. See [DAMAGE_MODEL_ISSUE_MAP.md](DAMAGE_MODEL_ISSUE_MAP.md) for the canonical issue links and current tracking identifiers.
+
 ---
 
 ## 1. Purpose of this document

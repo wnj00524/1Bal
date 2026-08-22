@@ -1,5 +1,7 @@
 # Future Architecture & Implementation Plan
 
+> **Roadmap status:** The damage-model portions of this earlier planning note are superseded by [TacticalSim_Damage_Model_Roadmap.md](TacticalSim_Damage_Model_Roadmap.md) and its [GitHub issue map](DAMAGE_MODEL_ISSUE_MAP.md). Keep the implementation order, contracts, and acceptance criteria in the roadmap authoritative. The sections below remain useful historical context for the original feature intent, but they must not create a second competing damage pipeline.
+
 Based on our design alignment, here is the architectural plan to implement the requested features while maintaining strict performance constraints for a 10-actor simulation. This plan can be handed off to subagents (e.g., via `/teamwork-preview`) to begin implementation.
 
 ---

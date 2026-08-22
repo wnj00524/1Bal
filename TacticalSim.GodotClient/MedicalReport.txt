@@ -1,18 +1,22 @@
 --- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---
 
 ORGAN DAMAGE (Volume Destroyed):
-- Bone: 793.0 cc
-- Brain: 1965.0 cc
-- Muscle: 3.0 cc
+- Lung: 732.0 cc
 
-SYSTEMIC BLEED RATE: 6611 ml/min
-ESTIMATED TIME TO UNCONSCIOUSNESS: < 1 minute (14 seconds)
+>>> RESPIRATORY ALARM: 20.0% LUNG CAPACITY LOST (TENSION PNEUMOTHORAX RISK) <<<
+>>> PROGNOSIS: STABILIZED BY FIRST AID <<<
+
+SYSTEMIC BLEED RATE: 220 ml/min
+ESTIMATED TIME TO UNCONSCIOUSNESS: 1.5 minutes
 
 --- LIVE VITALS ---
-Blood Volume: 5.00 L / 5.00 L
+Blood Volume: 4.76 L / 5.00 L
 Blood Pressure (MAP): 93 mmHg
-Heart Rate: 80 BPM
+Heart Rate: 86 BPM
 Hemorrhage Class: Class1
 SpO2 (Oxygenation): 100%
-Pain Level: 0%
+Pain Level: 100%
+Shock Level: 60%
+>>> NEUROLOGICAL ALARM: SEVERE AGONY (Accuracy Degraded) <<<
+>>> NEUROLOGICAL ALARM: SEVERE SHOCK DETECTED <<<
 Consciousness: 100%
