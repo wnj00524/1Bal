@@ -137,9 +137,19 @@ public static class StandardAnatomy
         AddPairedBones(s, "humerus", BodyPartType.LeftArm, new(.3f,.48f,0), new(.3f,.25f,0), .013f, FunctionalRole.UpperLimbMotor);
         AddPairedBones(s, "radius-ulna", BodyPartType.LeftArm, new(.3f,.25f,0), new(.3f,.02f,0), .012f, FunctionalRole.UpperLimbMotor);
         Solid("bone.spine", "Cervical and thoracolumbar spine", AnatomicalStructureType.Bone, BodyPartType.Thorax, new(0,.04f,-.10f), new(0,.65f,-.08f), .022f, FunctionalRole.WeightBearing);
-        Solid("nerve.spinal-cord", "Spinal cord", AnatomicalStructureType.Nerve, BodyPartType.Thorax, new(0,.04f,-.10f), new(0,.65f,-.08f), .007f, FunctionalRole.SpinalCord);
+        // Neurological levels are separate structures so a persisted lesion retains
+        // its functional level without reverse-engineering a destroyed voxel set.
+        Solid("nerve.spinal-cord-cervical", "Cervical spinal cord", AnatomicalStructureType.Nerve, BodyPartType.Neck, new(0,.50f,-.085f), new(0,.65f,-.08f), .007f, FunctionalRole.SpinalCord);
+        Solid("nerve.spinal-cord-thoracic", "Thoracic spinal cord", AnatomicalStructureType.Nerve, BodyPartType.Thorax, new(0,.20f,-.095f), new(0,.50f,-.085f), .007f, FunctionalRole.SpinalCord);
+        Solid("nerve.spinal-cord-lumbar", "Lumbar spinal cord", AnatomicalStructureType.Nerve, BodyPartType.Abdomen, new(0,.04f,-.10f), new(0,.20f,-.095f), .007f, FunctionalRole.SpinalCord);
         AddPairedNerves(s, "brachial-plexus", BodyPartType.LeftArm, new(.12f,.43f,-.02f), new(.3f,.25f,-.02f), FunctionalRole.UpperLimbMotor);
+        AddPairedNerves(s, "median", BodyPartType.LeftArm, new(.3f,.25f,-.015f), new(.3f,.02f,-.015f), FunctionalRole.UpperLimbMotor);
+        AddPairedNerves(s, "radial", BodyPartType.LeftArm, new(.3f,.25f,-.035f), new(.3f,.02f,-.035f), FunctionalRole.UpperLimbMotor);
+        AddPairedNerves(s, "ulnar", BodyPartType.LeftArm, new(.3f,.25f,-.055f), new(.3f,.02f,-.055f), FunctionalRole.UpperLimbMotor);
         AddPairedNerves(s, "sciatic", BodyPartType.LeftLeg, new(.1f,.02f,-.05f), new(.1f,-.70f,-.05f), FunctionalRole.LowerLimbMotor);
+        AddPairedNerves(s, "femoral", BodyPartType.LeftLeg, new(.1f,.02f,-.015f), new(.1f,-.38f,-.015f), FunctionalRole.LowerLimbMotor);
+        AddPairedNerves(s, "tibial", BodyPartType.LeftLeg, new(.1f,-.38f,-.035f), new(.1f,-.78f,-.035f), FunctionalRole.LowerLimbMotor);
+        AddPairedNerves(s, "common-peroneal", BodyPartType.LeftLeg, new(.1f,-.38f,-.065f), new(.1f,-.70f,-.065f), FunctionalRole.LowerLimbMotor);
         Solid("airway.trachea", "Trachea", AnatomicalStructureType.Airway, BodyPartType.Neck, new(0,.48f,-.015f), new(0,.65f,-.015f), .012f, FunctionalRole.Airway);
         Solid("boundary.pleura-left", "Left pleura", AnatomicalStructureType.Pleura, BodyPartType.Thorax, new(-.10f,.22f,0), new(-.10f,.45f,0), .075f, FunctionalRole.Respiratory, "left");
         Solid("boundary.pleura-right", "Right pleura", AnatomicalStructureType.Pleura, BodyPartType.Thorax, new(.10f,.22f,0), new(.10f,.45f,0), .075f, FunctionalRole.Respiratory, "right");

@@ -403,6 +403,8 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
             target.LesionRepository.AddRange(generatedLesions);
             if (target is IMusculoskeletalFunctionalTarget functionalTarget)
                 functionalTarget.RefreshMusculoskeletalFunctionalState();
+            if (target is INeurologicalFunctionalTarget neurologicalTarget)
+                neurologicalTarget.RefreshNeurologicalFunctionalState();
         }
         PhysiologyDebugSnapshot physiologyAfter = PhysiologyDebugSnapshot.Capture(request.TargetPhysiology);
         CapabilityDebugSnapshot capabilityAfter = CapabilityDebugSnapshot.Capture(request.TargetPhysiology);
