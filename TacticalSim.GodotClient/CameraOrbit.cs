@@ -1,151 +1,214 @@
+using System;
 using Godot;
+using TacticalSim.Core.World;
+using NumericsVector3 = System.Numerics.Vector3;
 
 namespace TacticalSim.GodotClient;
 
+/// <summary>
+/// Orthographic tactical camera. Input changes only the focal point, yaw, and
+/// orthographic size; the elevation angle is invariant, so perspective
+/// distortion can never be introduced by orbiting.
+/// </summary>
 public partial class CameraOrbit : Camera3D
 {
-    [Export]
-    public float MoveSpeed { get; set; } = 5.0f;
+    private const float IsometricElevation = 0.6154797086703874f; // asin(1 / sqrt(3))
+    private const double ParallelEpsilon = 1e-10;
 
-    [Export]
-    public float PanSensitivity { get; set; } = 0.01f;
+    [Export] public float MoveSpeed { get; set; } = 8.0f;
+    [Export] public float PanSensitivity { get; set; } = 0.0025f;
+    [Export] public float RotationSpeed { get; set; } = 0.005f;
+    [Export] public float ZoomSpeed { get; set; } = 0.12f;
+    [Export] public float MinZoom { get; set; } = 2.0f;
+    [Export] public float MaxZoom { get; set; } = 80.0f;
+    [Export] public float OrbitDistance { get; set; } = 100.0f;
+    [Export] public float GridCellSize { get; set; } = 1.0f;
+    [Export] public Vector3 BoundsMinimum { get; set; } = new(-50.0f, 0.0f, -50.0f);
+    [Export] public Vector3 BoundsMaximum { get; set; } = new(50.0f, 30.0f, 50.0f);
 
-    [Export]
-    public float RotationSpeed { get; set; } = 0.005f;
-
-    [Export]
-    public float ZoomSpeed { get; set; } = 0.5f;
-
-    [Export]
-    public float MinZoom { get; set; } = 0.5f;
-
-    [Export]
-    public float MaxZoom { get; set; } = 10.0f;
-
-    private Vector3 _targetPosition = new(0.0f, 1.25f, 0.0f);
-    private float _distance = 3.0f;
-    private float _yaw;
-    private float _pitch = Mathf.Pi / 2.1f;
+    private WorldBounds _worldBounds;
+    private Vector3 _focus;
+    private float _yaw = Mathf.Pi / 4.0f;
     private bool _isPanning;
+
+    public WorldBounds ActiveBounds => _worldBounds;
+    public Vector3 FocalPoint => _focus;
 
     public override void _Ready()
     {
-        UpdateCameraPosition();
+        Projection = ProjectionType.Orthogonal;
+        Size = Mathf.Clamp(Size, MinZoom, MaxZoom);
+        ConfigureBounds(CreateBounds(BoundsMinimum, BoundsMaximum));
+    }
+
+    public void ConfigureBounds(in WorldBounds bounds)
+    {
+        _worldBounds = bounds;
+        _focus = ToGodot(bounds.Centre);
+        _focus.Y = bounds.Min.Y;
+
+        // Tight clipping improves depth precision while retaining every point in
+        // the tactical AABB for every allowed yaw.
+        float diagonal = ToGodot(bounds.Size).Length();
+        OrbitDistance = Mathf.Max(OrbitDistance, diagonal + 1.0f);
+        Near = 0.05f;
+        Far = (OrbitDistance + diagonal) * 2.0f;
+        UpdateCameraTransform();
     }
 
     public override void _Process(double delta)
     {
-        Vector3 forward = -GlobalTransform.Basis.Z;
-        Vector3 right = GlobalTransform.Basis.X;
-
+        Vector3 forward = -GlobalBasis.Z;
+        Vector3 right = GlobalBasis.X;
         forward.Y = 0.0f;
         right.Y = 0.0f;
-
-        if (!forward.IsZeroApprox()) forward = forward.Normalized();
-        if (!right.IsZeroApprox()) right = right.Normalized();
+        forward = forward.Normalized();
+        right = right.Normalized();
 
         Vector3 movement = Vector3.Zero;
         if (Input.IsPhysicalKeyPressed(Key.W)) movement += forward;
         if (Input.IsPhysicalKeyPressed(Key.S)) movement -= forward;
         if (Input.IsPhysicalKeyPressed(Key.A)) movement -= right;
         if (Input.IsPhysicalKeyPressed(Key.D)) movement += right;
-        if (Input.IsPhysicalKeyPressed(Key.E)) movement += Vector3.Up;
-        if (Input.IsPhysicalKeyPressed(Key.Q)) movement += Vector3.Down;
 
         if (!movement.IsZeroApprox())
         {
-            _targetPosition += movement.Normalized() * MoveSpeed * (float)delta;
-            UpdateCameraPosition();
+            MoveFocus(movement.Normalized() * MoveSpeed * (float)delta);
         }
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventMouseButton mouseButton)
+        if (@event is InputEventMouseButton button)
         {
-            switch (mouseButton.ButtonIndex)
-            {
-                case MouseButton.Middle:
-                    _isPanning = mouseButton.Pressed;
-                    break;
-                case MouseButton.WheelUp when mouseButton.Pressed:
-                    ZoomIn();
-                    break;
-                case MouseButton.WheelDown when mouseButton.Pressed:
-                    ZoomOut();
-                    break;
-            }
-
+            if (button.ButtonIndex == MouseButton.Middle)
+                _isPanning = button.Pressed;
+            else if (button.Pressed && button.ButtonIndex == MouseButton.WheelUp)
+                ApplyZoom(-1.0f);
+            else if (button.Pressed && button.ButtonIndex == MouseButton.WheelDown)
+                ApplyZoom(1.0f);
             return;
         }
 
-        if (@event is InputEventKey { Pressed: true, Echo: false } keyEvent)
+        if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
-            switch (keyEvent.Keycode)
-            {
-                case Key.Bracketleft:
-                    ZoomOut();
-                    break;
-                case Key.Bracketright:
-                    ZoomIn();
-                    break;
-            }
-
+            if (key.Keycode == Key.Bracketleft) ApplyZoom(1.0f);
+            else if (key.Keycode == Key.Bracketright) ApplyZoom(-1.0f);
             return;
         }
 
-        if (@event is not InputEventMouseMotion mouseMotion)
-        {
+        if (@event is not InputEventMouseMotion motion)
             return;
-        }
 
         if (_isPanning)
         {
-            _targetPosition +=
-                (-GlobalTransform.Basis.X * mouseMotion.Relative.X
-                 + GlobalTransform.Basis.Y * mouseMotion.Relative.Y)
-                * PanSensitivity;
+            // Size converts pixels to a viewport-independent world-space scale.
+            float scale = Size * PanSensitivity;
+            Vector3 delta = (-GlobalBasis.X * motion.Relative.X + GlobalBasis.Y * motion.Relative.Y) * scale;
+            delta.Y = 0.0f;
+            MoveFocus(delta);
         }
 
-        if (mouseMotion.AltPressed)
+        if (motion.AltPressed)
         {
-            _yaw -= mouseMotion.Relative.X * RotationSpeed;
-            _pitch = Mathf.Clamp(
-                _pitch - mouseMotion.Relative.Y * RotationSpeed,
-                -Mathf.Pi / 2.1f,
-                Mathf.Pi / 2.1f);
-        }
-
-        if (_isPanning || mouseMotion.AltPressed)
-        {
-            UpdateCameraPosition();
+            _yaw = Mathf.PosMod(_yaw - motion.Relative.X * RotationSpeed, Mathf.Tau);
+            UpdateCameraTransform();
         }
     }
 
-    private void ZoomIn()
+    /// <summary>
+    /// Pure screen-to-grid query against a horizontal topological plane. Neither
+    /// the camera nor the supplied immutable bounds are modified.
+    /// </summary>
+    public bool TryScreenToGrid(Vector2 screenPosition, out Vector3 worldPosition,
+        out Vector3I gridIndex) =>
+        TryScreenToGrid(screenPosition, _worldBounds.Min.Y, GridCellSize,
+            out worldPosition, out gridIndex);
+
+    public bool TryScreenToGrid(Vector2 screenPosition, float planeY, float cellSize,
+        out Vector3 worldPosition, out Vector3I gridIndex)
     {
-        SetZoom(_distance - ZoomSpeed);
+        Vector3 rayOrigin = ProjectRayOrigin(screenPosition);
+        Vector3 rayDirection = ProjectRayNormal(screenPosition);
+        return TryRayToGrid(rayOrigin, rayDirection, planeY, cellSize, _worldBounds,
+            out worldPosition, out gridIndex);
     }
 
-    private void ZoomOut()
+    public static bool TryRayToGrid(Vector3 rayOrigin, Vector3 rayDirection, float planeY,
+        float cellSize, in WorldBounds bounds, out Vector3 worldPosition, out Vector3I gridIndex)
     {
-        SetZoom(_distance + ZoomSpeed);
+        worldPosition = default;
+        gridIndex = default;
+        if (!(cellSize > 0.0f) || !float.IsFinite(cellSize) ||
+            !IsFinite(rayOrigin) || !IsFinite(rayDirection) || !float.IsFinite(planeY))
+            return false;
+
+        double denominator = rayDirection.Y;
+        if (Math.Abs(denominator) <= ParallelEpsilon)
+            return false;
+
+        double t = ((double)planeY - rayOrigin.Y) / denominator;
+        if (t < 0.0 || !double.IsFinite(t))
+            return false;
+
+        double x = rayOrigin.X + rayDirection.X * t;
+        double z = rayOrigin.Z + rayDirection.Z * t;
+        double tolerance = Math.Max(cellSize * 1e-6, 1e-7);
+        if (x < bounds.Min.X - tolerance || x > bounds.Max.X + tolerance ||
+            z < bounds.Min.Z - tolerance || z > bounds.Max.Z + tolerance ||
+            planeY < bounds.Min.Y - tolerance || planeY > bounds.Max.Y + tolerance)
+            return false;
+
+        x = Math.Clamp(x, bounds.Min.X, bounds.Max.X);
+        z = Math.Clamp(z, bounds.Min.Z, bounds.Max.Z);
+        int countX = Math.Max(1, (int)Math.Ceiling(bounds.Size.X / cellSize));
+        int countZ = Math.Max(1, (int)Math.Ceiling(bounds.Size.Z / cellSize));
+        int ix = Math.Clamp(StableFloor((x - bounds.Min.X) / cellSize), 0, countX - 1);
+        int iz = Math.Clamp(StableFloor((z - bounds.Min.Z) / cellSize), 0, countZ - 1);
+
+        worldPosition = new Vector3((float)x, planeY, (float)z);
+        gridIndex = new Vector3I(ix, 0, iz);
+        return true;
     }
 
-    private void SetZoom(float distance)
+    private static int StableFloor(double coordinate)
     {
-        _distance = Mathf.Clamp(distance, MinZoom, MaxZoom);
-        UpdateCameraPosition();
+        double nearest = Math.Round(coordinate);
+        if (Math.Abs(coordinate - nearest) <= 1e-7 * Math.Max(1.0, Math.Abs(coordinate)))
+            coordinate = nearest;
+        return checked((int)Math.Floor(coordinate));
     }
 
-    private void UpdateCameraPosition()
+    private void MoveFocus(Vector3 delta)
     {
+        NumericsVector3 moved = _worldBounds.Clamp(ToNumerics(_focus + delta));
+        _focus = ToGodot(moved);
+        _focus.Y = _worldBounds.Min.Y;
+        UpdateCameraTransform();
+    }
+
+    private void ApplyZoom(float direction)
+    {
+        Size = Mathf.Clamp(Size * Mathf.Exp(direction * ZoomSpeed), MinZoom, MaxZoom);
+    }
+
+    private void UpdateCameraTransform()
+    {
+        float horizontal = OrbitDistance * Mathf.Cos(IsometricElevation);
         Vector3 offset = new(
-            _distance * Mathf.Cos(_pitch) * Mathf.Sin(_yaw),
-            _distance * Mathf.Sin(_pitch),
-            _distance * Mathf.Cos(_pitch) * Mathf.Cos(_yaw));
-
-        GlobalPosition = _targetPosition + offset;
-        LookAt(_targetPosition, Vector3.Up);
+            horizontal * Mathf.Sin(_yaw),
+            OrbitDistance * Mathf.Sin(IsometricElevation),
+            horizontal * Mathf.Cos(_yaw));
+        GlobalPosition = _focus + offset;
+        LookAt(_focus, Vector3.Up);
     }
+
+    private static WorldBounds CreateBounds(Vector3 min, Vector3 max) =>
+        new(ToNumerics(min), ToNumerics(max));
+
+    private static bool IsFinite(Vector3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+
+    private static NumericsVector3 ToNumerics(Vector3 value) => new(value.X, value.Y, value.Z);
+    private static Vector3 ToGodot(NumericsVector3 value) => new(value.X, value.Y, value.Z);
 }
