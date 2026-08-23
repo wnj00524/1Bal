@@ -1,6 +1,8 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using TacticalSim.Core.Simulation;
 using TacticalSim.Core.Simulation.Actions;
@@ -18,6 +20,18 @@ namespace TacticalSim.GodotClient
 {
     public partial class SimulationManager : Node
     {
+        [Signal] public delegate void SimulationInitializedEventHandler();
+        [Signal] public delegate void EntityAddedEventHandler(string entityId, string entityType, Godot.Vector3 position, float timestamp);
+        [Signal] public delegate void EntityRemovedEventHandler(string entityId, string entityType, float timestamp);
+        [Signal] public delegate void ActionScheduledEventHandler(string actionType, float globalTime);
+        [Signal] public delegate void ActionStartedEventHandler(string actionType, float globalTime);
+        [Signal] public delegate void ActionProgressedEventHandler(string actionType, float deltaTime, float currentProgress, float totalCost, float globalTime);
+        [Signal] public delegate void ActionCompletedEventHandler(string actionType, float globalTime);
+        [Signal] public delegate void ActionCancelledEventHandler(string actionType, float globalTime);
+        [Signal] public delegate void ActionFailedEventHandler(string actionType, string errorMessage, float globalTime);
+        [Signal] public delegate void SimulationTimeAdvancedEventHandler(float deltaTime, float previousGlobalTime, float currentGlobalTime);
+
+        private const int MaximumBridgeEventsPerFrame = 512;
         private const float WalkingSpeedMetersPerSecond = 1.4f;
         private const float BodyInteractionBroadphaseRadiusSquaredMeters = 4f;
         private const float BodyInteractionMaximumTraversalMeters = 4f;
@@ -26,7 +40,12 @@ namespace TacticalSim.GodotClient
         private static readonly Guid DummyEntityId = new("10000000-0000-0000-0000-000000000002");
         private IServiceProvider _serviceProvider = null!;
         private IProjectileInteractionService _projectileInteractionService = null!;
-        
+        private ITacticalWorld _world = null!;
+        private ITurnResolver _turnResolver = null!;
+        private readonly ConcurrentQueue<BridgeEvent> _bridgeEvents = new();
+        private bool _bridgeIsSubscribed;
+        private int _acceptBridgeEvents;
+
         public TacticalEntity Shooter { get; private set; } = null!;
         public TacticalEntity Dummy { get; private set; } = null!;
 
@@ -82,6 +101,29 @@ namespace TacticalSim.GodotClient
             InitializeDependencyInjection();
             CreatePenetrationVisualization();
             SetScenarioVisibility(false);
+            EmitSignal(SignalName.SimulationInitialized);
+        }
+
+        public override void _Process(double delta)
+        {
+            // _Process is always invoked on Godot's main thread. Core event handlers
+            // only enqueue value snapshots, so no Godot object is touched by a
+            // simulation worker and event production never waits for rendering.
+            for (int count = 0;
+                 count < MaximumBridgeEventsPerFrame && _bridgeEvents.TryDequeue(out BridgeEvent bridgeEvent);
+                 count++)
+            {
+                EmitBridgeEvent(bridgeEvent);
+            }
+        }
+
+        public override void _ExitTree()
+        {
+            UnsubscribeFromCoreEvents();
+            while (_bridgeEvents.TryDequeue(out _)) { }
+
+            if (_serviceProvider is IDisposable disposable)
+                disposable.Dispose();
         }
 
         private void InitializeDependencyInjection()
@@ -91,6 +133,133 @@ namespace TacticalSim.GodotClient
             _serviceProvider = services.BuildServiceProvider();
             _projectileInteractionService =
                 _serviceProvider.GetRequiredService<IProjectileInteractionService>();
+            _world = _serviceProvider.GetRequiredService<ITacticalWorld>();
+            _turnResolver = _serviceProvider.GetRequiredService<ITurnResolver>();
+            SubscribeToCoreEvents();
+        }
+
+        private void SubscribeToCoreEvents()
+        {
+            if (_bridgeIsSubscribed)
+                return;
+
+            _world.EntityAdded += OnEntityAdded;
+            _world.EntityRemoved += OnEntityRemoved;
+            _turnResolver.ActionScheduled += OnActionScheduled;
+            _turnResolver.ActionStarted += OnActionStarted;
+            _turnResolver.ActionProgressed += OnActionProgressed;
+            _turnResolver.ActionCompleted += OnActionCompleted;
+            _turnResolver.ActionCancelled += OnActionCancelled;
+            _turnResolver.ActionFailed += OnActionFailed;
+            _turnResolver.TimeAdvanced += OnTimeAdvanced;
+            _bridgeIsSubscribed = true;
+            Volatile.Write(ref _acceptBridgeEvents, 1);
+        }
+
+        private void UnsubscribeFromCoreEvents()
+        {
+            if (!_bridgeIsSubscribed)
+                return;
+
+            // Close the producer gate before detaching handlers. An event already
+            // in flight can finish safely, but it cannot enqueue work for a node
+            // that is leaving the scene tree.
+            Volatile.Write(ref _acceptBridgeEvents, 0);
+            _world.EntityAdded -= OnEntityAdded;
+            _world.EntityRemoved -= OnEntityRemoved;
+            _turnResolver.ActionScheduled -= OnActionScheduled;
+            _turnResolver.ActionStarted -= OnActionStarted;
+            _turnResolver.ActionProgressed -= OnActionProgressed;
+            _turnResolver.ActionCompleted -= OnActionCompleted;
+            _turnResolver.ActionCancelled -= OnActionCancelled;
+            _turnResolver.ActionFailed -= OnActionFailed;
+            _turnResolver.TimeAdvanced -= OnTimeAdvanced;
+            _bridgeIsSubscribed = false;
+        }
+
+        private void OnEntityAdded(object? sender, EntityEventArgs args)
+        {
+            System.Numerics.Vector3 position = args.Entity.Position;
+            Enqueue(BridgeEvent.Entity(BridgeEventKind.EntityAdded, args.Entity.Id,
+                args.Entity.GetType().Name, position, args.Timestamp));
+        }
+
+        private void OnEntityRemoved(object? sender, EntityEventArgs args) =>
+            Enqueue(BridgeEvent.Entity(BridgeEventKind.EntityRemoved, args.Entity.Id,
+                args.Entity.GetType().Name, args.Entity.Position, args.Timestamp));
+
+        private void OnActionScheduled(object? sender, ActionEventArgs args) => EnqueueAction(BridgeEventKind.ActionScheduled, args);
+        private void OnActionStarted(object? sender, ActionEventArgs args) => EnqueueAction(BridgeEventKind.ActionStarted, args);
+        private void OnActionCompleted(object? sender, ActionEventArgs args) => EnqueueAction(BridgeEventKind.ActionCompleted, args);
+        private void OnActionCancelled(object? sender, ActionEventArgs args) => EnqueueAction(BridgeEventKind.ActionCancelled, args);
+
+        private void EnqueueAction(BridgeEventKind kind, ActionEventArgs args) =>
+            Enqueue(BridgeEvent.Action(kind, args.Action.GetType().Name, args.GlobalTime));
+
+        private void OnActionProgressed(object? sender, ActionProgressEventArgs args) =>
+            Enqueue(BridgeEvent.Progress(args.Action.GetType().Name, args.DeltaTime,
+                args.CurrentProgress, args.TotalCost, args.GlobalTime));
+
+        private void OnActionFailed(object? sender, ActionFailedEventArgs args) =>
+            Enqueue(BridgeEvent.Failure(args.Action.GetType().Name, args.ErrorMessage, args.GlobalTime));
+
+        private void OnTimeAdvanced(object? sender, TimeAdvancedEventArgs args) =>
+            Enqueue(BridgeEvent.Time(args.DeltaTime, args.PreviousGlobalTime, args.CurrentGlobalTime));
+
+        private void Enqueue(BridgeEvent bridgeEvent)
+        {
+            if (Volatile.Read(ref _acceptBridgeEvents) != 0)
+                _bridgeEvents.Enqueue(bridgeEvent);
+        }
+
+        private void EmitBridgeEvent(BridgeEvent value)
+        {
+            switch (value.Kind)
+            {
+                case BridgeEventKind.EntityAdded:
+                    EmitSignal(SignalName.EntityAdded, value.EntityId.ToString("D"), value.TypeName,
+                        new Godot.Vector3(value.X, value.Y, value.Z), value.Time1);
+                    break;
+                case BridgeEventKind.EntityRemoved:
+                    EmitSignal(SignalName.EntityRemoved, value.EntityId.ToString("D"), value.TypeName, value.Time1);
+                    break;
+                case BridgeEventKind.ActionScheduled: EmitSignal(SignalName.ActionScheduled, value.TypeName, value.Time1); break;
+                case BridgeEventKind.ActionStarted: EmitSignal(SignalName.ActionStarted, value.TypeName, value.Time1); break;
+                case BridgeEventKind.ActionCompleted: EmitSignal(SignalName.ActionCompleted, value.TypeName, value.Time1); break;
+                case BridgeEventKind.ActionCancelled: EmitSignal(SignalName.ActionCancelled, value.TypeName, value.Time1); break;
+                case BridgeEventKind.ActionProgressed:
+                    EmitSignal(SignalName.ActionProgressed, value.TypeName, value.Time1, value.Time2, value.Time3, value.Time4);
+                    break;
+                case BridgeEventKind.ActionFailed:
+                    EmitSignal(SignalName.ActionFailed, value.TypeName, value.Message, value.Time1);
+                    break;
+                case BridgeEventKind.TimeAdvanced:
+                    EmitSignal(SignalName.SimulationTimeAdvanced, value.Time1, value.Time2, value.Time3);
+                    break;
+            }
+        }
+
+        private enum BridgeEventKind
+        {
+            EntityAdded, EntityRemoved, ActionScheduled, ActionStarted, ActionProgressed,
+            ActionCompleted, ActionCancelled, ActionFailed, TimeAdvanced
+        }
+
+        private readonly record struct BridgeEvent(
+            BridgeEventKind Kind, Guid EntityId, string TypeName, string Message,
+            float X, float Y, float Z, float Time1, float Time2, float Time3, float Time4)
+        {
+            public static BridgeEvent Entity(BridgeEventKind kind, Guid id, string type,
+                System.Numerics.Vector3 position, float timestamp) =>
+                new(kind, id, type, string.Empty, position.X, position.Y, position.Z, timestamp, 0f, 0f, 0f);
+            public static BridgeEvent Action(BridgeEventKind kind, string type, float time) =>
+                new(kind, Guid.Empty, type, string.Empty, 0f, 0f, 0f, time, 0f, 0f, 0f);
+            public static BridgeEvent Progress(string type, float delta, float current, float total, float global) =>
+                new(BridgeEventKind.ActionProgressed, Guid.Empty, type, string.Empty, 0f, 0f, 0f, delta, current, total, global);
+            public static BridgeEvent Failure(string type, string message, float time) =>
+                new(BridgeEventKind.ActionFailed, Guid.Empty, type, message, 0f, 0f, 0f, time, 0f, 0f, 0f);
+            public static BridgeEvent Time(float delta, float previous, float current) =>
+                new(BridgeEventKind.TimeAdvanced, Guid.Empty, string.Empty, string.Empty, 0f, 0f, 0f, delta, previous, current, 0f);
         }
 
         public AmmunitionProfile ActiveAmmo { get; set; } = new AmmunitionProfile
@@ -114,6 +283,7 @@ namespace TacticalSim.GodotClient
             if (sceneName != "Training Dummy Outside" && sceneName != "Chest Wound Response")
                 throw new ArgumentException($"Unknown scenario: {sceneName}", nameof(sceneName));
 
+            RemoveScenarioEntitiesFromWorld();
             ActiveAmmo = weapon ?? throw new ArgumentNullException(nameof(weapon));
             ActiveTarget = target;
             LoadedScenarioName = sceneName;
@@ -170,6 +340,7 @@ namespace TacticalSim.GodotClient
 
         public void UnloadScenario()
         {
+            RemoveScenarioEntitiesFromWorld();
             LoadedScenarioName = null;
             ElapsedScenarioTime = 0f;
             HasBulletBeenFired = false;
@@ -455,6 +626,9 @@ namespace TacticalSim.GodotClient
                 new System.Numerics.Vector3(0, 1f, 0),
                 AnatomicalDummyBuilder.BuildDummy());
 
+            _world.AddEntity(Shooter);
+            _world.AddEntity(Dummy);
+
             if (LoadedScenarioName == "Chest Wound Response")
             {
                 ResolveInitialChestWound();
@@ -467,6 +641,12 @@ namespace TacticalSim.GodotClient
                 Shooter.Position.X,
                 Shooter.Position.Y,
                 Shooter.Position.Z);
+        }
+
+        private void RemoveScenarioEntitiesFromWorld()
+        {
+            _world.RemoveEntity(ShooterEntityId);
+            _world.RemoveEntity(DummyEntityId);
         }
 
         private void ResolveInitialChestWound()
