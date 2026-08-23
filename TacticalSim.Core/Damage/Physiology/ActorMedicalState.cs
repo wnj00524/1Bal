@@ -28,6 +28,7 @@ public sealed record ThoracicSnapshot(float LeftGasMl, float RightGasMl, float L
 public sealed class ActorMedicalState : IAnatomicalInjuryTarget
 {
     private readonly IDeterministicRandomStreamProvider _random;
+    private readonly HashSet<string> _processedImpactIds = new(StringComparer.Ordinal);
     private readonly HashSet<string> _synchronizedLesions = new(StringComparer.Ordinal);
     private readonly MusculoskeletalFunctionalResolver _musculoskeletalResolver = new();
     private readonly NeurologicalFunctionalResolver _neurologicalResolver = new();
@@ -68,11 +69,12 @@ public sealed class ActorMedicalState : IAnatomicalInjuryTarget
     public bool ApplyImpact(string impactId, IEnumerable<Lesion> lesions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(impactId); ArgumentNullException.ThrowIfNull(lesions);
-        if (LesionRepository.ContainsImpact(impactId)) return false;
+        if (_processedImpactIds.Contains(impactId)) return false;
         Lesion[] materialized = lesions.ToArray();
         if (materialized.Any(x => x.OriginImpactId != impactId)) throw new ArgumentException("Every lesion must belong to the supplied impact.", nameof(lesions));
         DateTimeOffset timestamp = DateTimeOffset.UnixEpoch.AddSeconds(SimulationTimeSeconds);
         LesionRepository.AddRange(materialized.Select(x => x with { CreatedAt = timestamp }));
+        _processedImpactIds.Add(impactId);
         SynchronizeLesions(); RefreshFunctionalState(); return true;
     }
 

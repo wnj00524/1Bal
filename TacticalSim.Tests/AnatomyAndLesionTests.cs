@@ -185,6 +185,31 @@ public sealed class AnatomyAndLesionTests
     }
 
     [Fact]
+    public void LegacyTarget_ApplyImpactIsAtomicIdempotentAndUsesActorClock()
+    {
+        var target = (TacticalActorPhysiology)TacticalSim.Core.AnatomicalDummyBuilder.BuildDummy();
+        target.TickPhysiology(12.5f);
+        Lesion lesion = new LesionGenerator().Generate(
+            CreateTrack("timed-impact", 80f), target.Anatomy)[0];
+
+        Assert.True(target.ApplyImpact("timed-impact", [lesion]));
+        Assert.False(target.ApplyImpact("timed-impact", [lesion]));
+
+        Lesion stored = Assert.Single(target.LesionRepository.Lesions);
+        Assert.Equal(DateTimeOffset.UnixEpoch.AddSeconds(12.5), stored.CreatedAt);
+    }
+
+    [Fact]
+    public void LegacyTarget_RemembersImpactsThatGenerateNoLesions()
+    {
+        var target = (TacticalActorPhysiology)TacticalSim.Core.AnatomicalDummyBuilder.BuildDummy();
+
+        Assert.True(target.ApplyImpact("near-miss", []));
+        Assert.False(target.ApplyImpact("near-miss", []));
+        Assert.Empty(target.LesionRepository.Lesions);
+    }
+
+    [Fact]
     public void Lesion_PolymorphicJsonRoundTripAndReadOnlyInspectorPreserveClinicalDetail()
     {
         var target = (TacticalActorPhysiology)TacticalSim.Core.AnatomicalDummyBuilder.BuildDummy();
