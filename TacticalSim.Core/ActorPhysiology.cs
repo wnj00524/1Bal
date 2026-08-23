@@ -5,6 +5,7 @@ using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Anatomy;
 using TacticalSim.Core.Damage.Lesions;
 using TacticalSim.Core.Damage.Physiology;
+using TacticalSim.Core.Damage.Variation;
 using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Physiology
@@ -218,6 +219,10 @@ namespace TacticalSim.Core.Physiology
     {
         private readonly IMusculoskeletalFunctionalResolver _musculoskeletalFunctionalResolver;
         private readonly INeurologicalFunctionalResolver _neurologicalFunctionalResolver;
+        private readonly float _baselineHeartRateBpm = 80f;
+        private readonly float _baselineMeanArterialPressureMmhg = 93f;
+        private readonly float _stressResponseMultiplier = 1f;
+        public CasualtyProfile Profile { get; }
 
         public IAnatomicalStructureCatalog Anatomy { get; private set; } = new AnatomicalStructureCatalog([]);
         public ILesionRepository LesionRepository { get; } = new LesionRepository();
@@ -237,7 +242,7 @@ namespace TacticalSim.Core.Physiology
             get
             {
                 float pressureFlowFactor = MathF.Sqrt(Math.Clamp(
-                    MeanArterialPressureMmhg / 93f, 0f, 1f));
+                    MeanArterialPressureMmhg / _baselineMeanArterialPressureMmhg, 0f, 1f));
                 return CalculateBleedRate(RootBodyPart, out _) * pressureFlowFactor;
             }
         }
@@ -275,24 +280,41 @@ namespace TacticalSim.Core.Physiology
         private float _legacyVoxelWeaponHandlingLevel = 1f;
 
         public TacticalActorPhysiology()
-            : this(new MusculoskeletalFunctionalResolver(), new NeurologicalFunctionalResolver())
+            : this(new MusculoskeletalFunctionalResolver(), new NeurologicalFunctionalResolver(), CasualtyProfile.Default)
         {
         }
 
         public TacticalActorPhysiology(
             IMusculoskeletalFunctionalResolver musculoskeletalFunctionalResolver)
-            : this(musculoskeletalFunctionalResolver, new NeurologicalFunctionalResolver())
+            : this(musculoskeletalFunctionalResolver, new NeurologicalFunctionalResolver(), CasualtyProfile.Default)
         {
         }
 
         public TacticalActorPhysiology(
             IMusculoskeletalFunctionalResolver musculoskeletalFunctionalResolver,
-            INeurologicalFunctionalResolver neurologicalFunctionalResolver)
+            INeurologicalFunctionalResolver neurologicalFunctionalResolver,
+            CasualtyProfile? profile = null,
+            PhysiologicalVariation? variation = null)
         {
             _musculoskeletalFunctionalResolver = musculoskeletalFunctionalResolver
                 ?? throw new ArgumentNullException(nameof(musculoskeletalFunctionalResolver));
             _neurologicalFunctionalResolver = neurologicalFunctionalResolver
                 ?? throw new ArgumentNullException(nameof(neurologicalFunctionalResolver));
+            Profile = profile ?? CasualtyProfile.Default;
+            Profile.Validate();
+            variation ??= new PhysiologicalVariation(1f, 0f, 0f, 1f);
+            _baselineBloodVolume = Profile.BloodVolumeMilliliters * variation.BloodVolumeMultiplier;
+            TotalBloodVolume = _baselineBloodVolume;
+            _baselineHeartRateBpm = Profile.BaselineHeartRateBpm + variation.HeartRateOffsetBpm;
+            _baselineMeanArterialPressureMmhg = Profile.BaselineMeanArterialPressureMmhg + variation.PressureOffsetMmhg;
+            _stressResponseMultiplier = variation.StressResponseMultiplier * (Profile.StressResponse switch
+            {
+                StressResponseProfile.Blunted => 0.8f,
+                StressResponseProfile.Heightened => 1.2f,
+                _ => 1f
+            });
+            HeartRateBpm = _baselineHeartRateBpm;
+            MeanArterialPressureMmhg = _baselineMeanArterialPressureMmhg;
         }
 
         public void SetRoot(BodyPart root)
@@ -346,7 +368,7 @@ namespace TacticalSim.Core.Physiology
             // it also prevents a hypotensive or arrested casualty bleeding as if
             // their circulation were still at the normal 93 mmHg MAP.
             float pressureFlowFactor = MathF.Sqrt(Math.Clamp(
-                MeanArterialPressureMmhg / 93f, 0f, 1f));
+                MeanArterialPressureMmhg / _baselineMeanArterialPressureMmhg, 0f, 1f));
             float requestedBloodLoss = totalBleedRate * pressureFlowFactor * elapsedSeconds;
             float actualBloodLoss = Math.Clamp(requestedBloodLoss, 0f, TotalBloodVolume);
             TotalBloodVolume = Math.Clamp(
@@ -698,15 +720,15 @@ namespace TacticalSim.Core.Physiology
             if (lostPercent < 0.15f)
             {
                 CurrentHemorrhageClass = HemorrhageClass.Class1;
-                HeartRateBpm = 80f + (lostPercent / 0.15f) * 20f; // Up to 100
-                MeanArterialPressureMmhg = 93f; // Compensated
+                HeartRateBpm = _baselineHeartRateBpm + (lostPercent / 0.15f) * 20f * _stressResponseMultiplier;
+                MeanArterialPressureMmhg = _baselineMeanArterialPressureMmhg;
                 ConsciousnessLevel = 1.0f;
             }
             else if (lostPercent < 0.30f)
             {
                 CurrentHemorrhageClass = HemorrhageClass.Class2;
-                HeartRateBpm = 100f + ((lostPercent - 0.15f) / 0.15f) * 20f; // Up to 120
-                MeanArterialPressureMmhg = 93f - ((lostPercent - 0.15f) / 0.15f) * 13f; // Drops to ~80
+                HeartRateBpm = _baselineHeartRateBpm + 20f * _stressResponseMultiplier + ((lostPercent - 0.15f) / 0.15f) * 20f * _stressResponseMultiplier;
+                MeanArterialPressureMmhg = _baselineMeanArterialPressureMmhg - ((lostPercent - 0.15f) / 0.15f) * 13f;
                 ConsciousnessLevel = 0.9f; // Mild anxiety
             }
             else if (lostPercent < 0.40f)
@@ -805,7 +827,7 @@ namespace TacticalSim.Core.Physiology
                 ConsciousnessLevel = 0f;
             }
 
-            CirculationEffectiveness = Math.Clamp(MeanArterialPressureMmhg / 93f, 0f, 1f);
+            CirculationEffectiveness = Math.Clamp(MeanArterialPressureMmhg / _baselineMeanArterialPressureMmhg, 0f, 1f);
         }
 
         private void UpdateNervousSystemState(float dt)
