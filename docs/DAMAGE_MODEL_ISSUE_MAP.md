@@ -43,11 +43,11 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-504 | [Add tactical rescue exposure and opportunity cost](https://github.com/wnj00524/1Bal/issues/143) | M10: Isometric tactical integration | Done |
 | DM-505 | [Create isometric casualty-status overlays](https://github.com/wnj00524/1Bal/issues/144) | M10: Isometric tactical integration | Done |
 | DM-506 | [Add casualty-aware scenario objectives and scoring](https://github.com/wnj00524/1Bal/issues/145) | M10: Isometric tactical integration | Done |
-| DM-601 | [Add configurable casualty profiles](https://github.com/wnj00524/1Bal/issues/146) | M11: Casualty variation and bounded uncertainty | Backlog |
-| DM-602 | [Add bounded, seeded physiological uncertainty](https://github.com/wnj00524/1Bal/issues/147) | M11: Casualty variation and bounded uncertainty | Backlog |
-| DM-603 | [Add terminal projectile behavior profiles](https://github.com/wnj00524/1Bal/issues/154) | M11: Casualty variation and bounded uncertainty | Backlog |
-| DM-604 | [Add armor and clothing interaction hooks](https://github.com/wnj00524/1Bal/issues/155) | M11: Casualty variation and bounded uncertainty | Backlog |
-| DM-605 | [Build a batch cohort runner](https://github.com/wnj00524/1Bal/issues/156) | M11: Casualty variation and bounded uncertainty | Backlog |
+| DM-601 | [Add configurable casualty profiles](https://github.com/wnj00524/1Bal/issues/146) | M11: Casualty variation and bounded uncertainty | Done |
+| DM-602 | [Add bounded, seeded physiological uncertainty](https://github.com/wnj00524/1Bal/issues/147) | M11: Casualty variation and bounded uncertainty | Done |
+| DM-603 | [Add terminal projectile behavior profiles](https://github.com/wnj00524/1Bal/issues/154) | M11: Casualty variation and bounded uncertainty | Done |
+| DM-604 | [Add armor and clothing interaction hooks](https://github.com/wnj00524/1Bal/issues/155) | M11: Casualty variation and bounded uncertainty | Done |
+| DM-605 | [Build a batch cohort runner](https://github.com/wnj00524/1Bal/issues/156) | M11: Casualty variation and bounded uncertainty | Done |
 | DM-701 | [Create a parameter provenance registry](https://github.com/wnj00524/1Bal/issues/157) | M12: Validation, balancing, performance, and release hardening | Backlog |
 | DM-702 | [Create a reference injury suite](https://github.com/wnj00524/1Bal/issues/158) | M12: Validation, balancing, performance, and release hardening | Backlog |
 | DM-703 | [Add calibration and sensitivity tooling](https://github.com/wnj00524/1Bal/issues/159) | M12: Validation, balancing, performance, and release hardening | Backlog |
