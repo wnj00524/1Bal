@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
@@ -12,6 +14,15 @@ namespace TacticalSim.Core.Simulation.Actions
         private readonly Vector3 _targetDirection;
         private readonly IEnvironmentModel _environment;
         private readonly IDeterministicRandomStreamProvider _randomStreams;
+
+        /// <summary>The intended entity, when the shot was selected from an entity silhouette.</summary>
+        public Guid? TargetEntityId { get; }
+
+        /// <summary>Deterministic body-local aim point selected by the anatomical projection.</summary>
+        public Vector3? TargetBodyLocalPoint { get; }
+
+        /// <summary>Stable anatomical structure identifiers covered by the selected zone.</summary>
+        public IReadOnlyList<string> TargetStructureIds { get; }
         
         // For testing/scaffolding, we can just expose the final projectile state
         public ProjectileState? FinalState { get; private set; }
@@ -21,6 +32,18 @@ namespace TacticalSim.Core.Simulation.Actions
             Vector3 targetDirection,
             IEnvironmentModel environment,
             IDeterministicRandomStreamProvider randomStreams)
+            : this(shooter, targetDirection, environment, randomStreams, null, null, null)
+        {
+        }
+
+        public ShootTacticalAction(
+            IEntity shooter,
+            Vector3 targetDirection,
+            IEnvironmentModel environment,
+            IDeterministicRandomStreamProvider randomStreams,
+            Guid? targetEntityId,
+            Vector3? targetBodyLocalPoint,
+            IEnumerable<string>? targetStructureIds)
             : base(shooter?.Id ?? throw new ArgumentNullException(nameof(shooter)), 
                    (shooter.EquippedWeapon?.BaseTUCostToFire ?? 15f) * (1.0f + (shooter.Physiology.PainLevel * 1.5f)) * (1.0f + (1.0f - shooter.Physiology.WeaponHandlingLevel) * 2.0f))
         {
@@ -28,6 +51,20 @@ namespace TacticalSim.Core.Simulation.Actions
             _targetDirection = targetDirection.LengthSquared() > 0f ? Vector3.Normalize(targetDirection) : Vector3.UnitZ;
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
             _randomStreams = randomStreams ?? throw new ArgumentNullException(nameof(randomStreams));
+            if (targetEntityId == Guid.Empty)
+                throw new ArgumentException("A target entity identifier cannot be empty.", nameof(targetEntityId));
+            if (targetBodyLocalPoint is Vector3 point &&
+                (!float.IsFinite(point.X) || !float.IsFinite(point.Y) || !float.IsFinite(point.Z)))
+                throw new ArgumentOutOfRangeException(nameof(targetBodyLocalPoint));
+            TargetEntityId = targetEntityId;
+            TargetBodyLocalPoint = targetBodyLocalPoint;
+            TargetStructureIds = Array.AsReadOnly((targetStructureIds ?? Array.Empty<string>())
+                .Select(id => string.IsNullOrWhiteSpace(id)
+                    ? throw new ArgumentException("Structure identifiers cannot be blank.", nameof(targetStructureIds))
+                    : id)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray());
         }
 
         public override void Execute(float dt)
