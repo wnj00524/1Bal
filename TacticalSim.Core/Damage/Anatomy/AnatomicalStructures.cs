@@ -9,6 +9,10 @@ public enum AnatomicalStructureType { Organ, Artery, Vein, Bone, Nerve, Airway, 
 public enum PressureRegime { None, Arterial, Venous, Pulmonary, Parenchymal }
 public enum FunctionalRole { None, WeightBearing, UpperLimbMotor, LowerLimbMotor, SpinalCord, Airway, Cardiac, Respiratory }
 
+/// <summary>Immutable, geometrically ordered intersection with a named anatomical structure.</summary>
+public sealed record StructureIntersection(string StructureId, AnatomicalStructureType StructureType,
+    Vector3 EntryPoint, Vector3 ExitPoint, Distance EntryDistance, Distance ExitDistance, int Order);
+
 /// <summary>A rendering-independent, versioned anatomical object in body-local metres.</summary>
 public sealed record AnatomicalStructure
 {
@@ -47,6 +51,58 @@ public sealed record AnatomicalStructure
     public bool IntersectsSegment(Vector3 from, Vector3 to, float extraRadiusMeters = 0f) =>
         SegmentDistanceSquared(from, to, Start, End) <= MathF.Pow(Radius.Meters + MathF.Max(0, extraRadiusMeters), 2);
 
+    internal bool TryIntersectSegment(Vector3 from, Vector3 to, float extraRadiusMeters, out float entry, out float exit)
+    {
+        Vector3 delta = to - from; float length = delta.Length(); entry = exit = 0f;
+        if (length <= 1e-8f) return false;
+        Vector3 direction = delta / length; float radius = Radius.Meters + MathF.Max(0f, extraRadiusMeters);
+        var boundaries = new List<float>(8);
+        if (PointInsideCapsule(from, Start, End, radius)) boundaries.Add(0f);
+        if (PointInsideCapsule(to, Start, End, radius)) boundaries.Add(length);
+        Vector3 axis = End - Start; float axisLengthSquared = axis.LengthSquared();
+        if (axisLengthSquared > 1e-12f)
+        {
+            Vector3 offset = from - Start;
+            float axisDirection = Vector3.Dot(axis, direction), axisOffset = Vector3.Dot(axis, offset);
+            float a = axisLengthSquared - axisDirection * axisDirection;
+            float b = axisLengthSquared * Vector3.Dot(offset, direction) - axisOffset * axisDirection;
+            float c = axisLengthSquared * (offset.LengthSquared() - radius * radius) - axisOffset * axisOffset;
+            if (MathF.Abs(a) > 1e-12f)
+            {
+                float discriminant = b * b - a * c;
+                if (discriminant >= 0f)
+                {
+                    float sqrt = MathF.Sqrt(discriminant);
+                    foreach (float t in new[] { (-b - sqrt) / a, (-b + sqrt) / a })
+                    {
+                        float projection = axisOffset + t * axisDirection;
+                        if (t >= 0f && t <= length && projection >= 0f && projection <= axisLengthSquared) boundaries.Add(t);
+                    }
+                }
+            }
+        }
+        AddSphereRoots(from, direction, Start, radius, length, boundaries);
+        AddSphereRoots(from, direction, End, radius, length, boundaries);
+        float[] ordered = boundaries.Where(float.IsFinite).Where(t => t >= 0f && t <= length)
+            .DistinctBy(t => MathF.Round(t, 6)).Order().ToArray();
+        if (ordered.Length == 0) return false;
+        entry = ordered[0]; exit = ordered[^1]; return true;
+    }
+
+    private static bool PointInsideCapsule(Vector3 point, Vector3 start, Vector3 end, float radius) =>
+        SegmentDistanceSquared(point, point, start, end) <= radius * radius;
+
+    private static void AddSphereRoots(Vector3 origin, Vector3 direction, Vector3 center, float radius,
+        float segmentLength, List<float> roots)
+    {
+        Vector3 offset = origin - center; float b = Vector3.Dot(offset, direction);
+        float discriminant = b * b - (offset.LengthSquared() - radius * radius);
+        if (discriminant < 0f) return;
+        float sqrt = MathF.Sqrt(discriminant), first = -b - sqrt, second = -b + sqrt;
+        if (first >= 0f && first <= segmentLength) roots.Add(first);
+        if (second >= 0f && second <= segmentLength) roots.Add(second);
+    }
+
     private static bool IsFinite(Vector3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
 
     // Closest distance between two line segments (Real-Time Collision Detection, deterministic clamped form).
@@ -80,6 +136,7 @@ public interface IAnatomicalStructureCatalog
     IReadOnlyList<AnatomicalStructure> Structures { get; }
     AnatomicalStructure GetRequired(string id);
     IReadOnlyList<AnatomicalStructure> QuerySegment(Vector3 start, Vector3 end, float radiusMeters = 0f);
+    IReadOnlyList<StructureIntersection> QueryIntersections(Vector3 start, Vector3 end, float radiusMeters = 0f);
 }
 
 public sealed class AnatomicalStructureCatalog : IAnatomicalStructureCatalog
@@ -88,6 +145,7 @@ public sealed class AnatomicalStructureCatalog : IAnatomicalStructureCatalog
     private readonly IReadOnlyDictionary<string, AnatomicalStructure> _byId;
     public AnatomicalStructureCatalog(IEnumerable<AnatomicalStructure> structures, string definitionVersion = AnatomicalStructure.CurrentDefinitionVersion)
     {
+        ArgumentNullException.ThrowIfNull(structures);
         ArgumentException.ThrowIfNullOrWhiteSpace(definitionVersion);
         DefinitionVersion = definitionVersion;
         AnatomicalStructure[] ordered = structures.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray();
@@ -99,7 +157,24 @@ public sealed class AnatomicalStructureCatalog : IAnatomicalStructureCatalog
     public IReadOnlyList<AnatomicalStructure> Structures => _structures;
     public AnatomicalStructure GetRequired(string id) => _byId.TryGetValue(id, out var value) ? value : throw new KeyNotFoundException($"Unknown anatomical structure '{id}'.");
     public IReadOnlyList<AnatomicalStructure> QuerySegment(Vector3 start, Vector3 end, float radiusMeters = 0f) =>
-        _structures.Where(s => s.IntersectsSegment(start, end, radiusMeters)).ToArray();
+        QueryIntersections(start, end, radiusMeters).Select(x => GetRequired(x.StructureId)).ToArray();
+    public IReadOnlyList<StructureIntersection> QueryIntersections(Vector3 start, Vector3 end, float radiusMeters = 0f)
+    {
+        if (!IsFinite(start) || !IsFinite(end)) throw new ArgumentOutOfRangeException(nameof(start));
+        if (!float.IsFinite(radiusMeters) || radiusMeters < 0f) throw new ArgumentOutOfRangeException(nameof(radiusMeters));
+        Vector3 delta = end - start; float length = delta.Length();
+        if (length <= 1e-8f) return Array.Empty<StructureIntersection>();
+        Vector3 direction = delta / length;
+        var hits = _structures.Select(structure => { bool hit = structure.TryIntersectSegment(start, end, radiusMeters, out float entry, out float exit); return (structure, hit, entry, exit); })
+            .Where(x => x.hit).OrderBy(x => x.entry).ThenBy(x => x.structure.Id, StringComparer.Ordinal).ToArray();
+        return hits.Select((x, order) => new StructureIntersection(x.structure.Id, x.structure.Type,
+            Snap(start + direction * x.entry), Snap(start + direction * x.exit), Distance.FromMeters(x.entry), Distance.FromMeters(x.exit), order)).ToArray();
+    }
+    private static bool IsFinite(Vector3 value) => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+    private static Vector3 Snap(Vector3 value) => new(
+        MathF.Abs(value.X) < 1e-7f ? 0f : value.X,
+        MathF.Abs(value.Y) < 1e-7f ? 0f : value.Y,
+        MathF.Abs(value.Z) < 1e-7f ? 0f : value.Z);
 }
 
 /// <summary>First-pass named structures. Coordinates match <see cref="AnatomicalDummyBuilder"/>.</summary>

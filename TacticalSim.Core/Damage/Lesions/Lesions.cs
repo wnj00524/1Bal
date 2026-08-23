@@ -149,9 +149,18 @@ public sealed class LesionGenerator : ILesionGenerator
         foreach (WoundTrackSegment segment in track.Segments.Where(x=>x.TransferredEnergy.Joules>0))
         {
             float cavityRadius=MathF.Sqrt(MathF.Max(segment.TransferredEnergy.Joules,0))*0.00035f; // provisional gameplay-calibrated M6 mapping
-            AnatomicalStructure[] hits=anatomy.QuerySegment(segment.EntryPoint,segment.EndPoint,cavityRadius).ToArray();
-            foreach (AnatomicalStructure structure in hits)
-                candidates.Add((structure, segment, Math.Clamp(segment.TransferredEnergy.Joules/MathF.Max(20f, structure.Calibre.Meters*3000f),.01f,1f), cavityRadius, traversed));
+            StructureIntersection[] hits=anatomy.QueryIntersections(segment.EntryPoint,segment.EndPoint,cavityRadius).ToArray();
+            foreach (StructureIntersection hit in hits)
+            {
+                AnatomicalStructure structure = anatomy.GetRequired(hit.StructureId);
+                var clippedState = new ProjectileStateChange(segment.Sequence, segment.ProjectileStateChange.Kind, hit.ExitPoint,
+                    segment.ProjectileStateChange.IncomingDirection, segment.ProjectileStateChange.OutgoingDirection,
+                    segment.IncomingEnergy, segment.OutgoingEnergy);
+                var clipped = new WoundTrackSegment(segment.Sequence, structure.Id, segment.BodyRegion, structure.Type.ToString(),
+                    hit.EntryPoint, hit.ExitPoint, Distance.FromMeters(MathF.Max(0f, hit.ExitDistance.Meters-hit.EntryDistance.Meters)),
+                    segment.IncomingEnergy, segment.TransferredEnergy, segment.OutgoingEnergy, clippedState);
+                candidates.Add((structure, clipped, Math.Clamp(segment.TransferredEnergy.Joules/MathF.Max(20f, structure.Calibre.Meters*3000f),.01f,1f), cavityRadius, traversed+hit.EntryDistance.Meters));
+            }
             if (hits.Length==0)
             {
                 var geometry=new LesionGeometry((segment.EntryPoint+segment.EndPoint)/2,SafeDirection(segment),segment.PathLength,Distance.FromMeters(MathF.Max(.0005f,cavityRadius)));
@@ -166,7 +175,9 @@ public sealed class LesionGenerator : ILesionGenerator
             var first = group.OrderBy(x => x.EntryDistance).First();
             var last = group.OrderBy(x => x.EntryDistance).Last();
             Vector3 start = first.Segment.EntryPoint, end = last.Segment.EndPoint;
-            var geometry = new LesionGeometry((start + end) / 2, SafeDirection(first.Segment),
+            Vector3 center = (start + end) / 2;
+            center = new(MathF.Abs(center.X) < 1e-7f ? 0f : center.X, MathF.Abs(center.Y) < 1e-7f ? 0f : center.Y, MathF.Abs(center.Z) < 1e-7f ? 0f : center.Z);
+            var geometry = new LesionGeometry(center, SafeDirection(first.Segment),
                 Distance.FromMeters(group.Sum(x => x.Segment.PathLength.Meters)), Distance.FromMeters(MathF.Max(.0005f, group.Max(x => x.Radius))));
             string id=$"lesion/{track.TrackId}/{ordinal++:D4}/{group.Key}";
             result.Add(Create(id, track.TrackId, first.Structure, group.Max(x => x.Severity), geometry));
