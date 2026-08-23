@@ -48,11 +48,11 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-603 | [Add terminal projectile behavior profiles](https://github.com/wnj00524/1Bal/issues/154) | M11: Casualty variation and bounded uncertainty | Done |
 | DM-604 | [Add armor and clothing interaction hooks](https://github.com/wnj00524/1Bal/issues/155) | M11: Casualty variation and bounded uncertainty | Done |
 | DM-605 | [Build a batch cohort runner](https://github.com/wnj00524/1Bal/issues/156) | M11: Casualty variation and bounded uncertainty | Done |
-| DM-701 | [Create a parameter provenance registry](https://github.com/wnj00524/1Bal/issues/157) | M12: Validation, balancing, performance, and release hardening | Backlog |
-| DM-702 | [Create a reference injury suite](https://github.com/wnj00524/1Bal/issues/158) | M12: Validation, balancing, performance, and release hardening | Backlog |
-| DM-703 | [Add calibration and sensitivity tooling](https://github.com/wnj00524/1Bal/issues/159) | M12: Validation, balancing, performance, and release hardening | Backlog |
-| DM-704 | [Add damage-model performance benchmarks](https://github.com/wnj00524/1Bal/issues/160) | M12: Validation, balancing, performance, and release hardening | Backlog |
-| DM-705 | [Add model-versioned save and replay support](https://github.com/wnj00524/1Bal/issues/161) | M12: Validation, balancing, performance, and release hardening | Backlog |
+| DM-701 | [Create a parameter provenance registry](https://github.com/wnj00524/1Bal/issues/157) | M12: Validation, balancing, performance, and release hardening | Done |
+| DM-702 | [Create a reference injury suite](https://github.com/wnj00524/1Bal/issues/158) | M12: Validation, balancing, performance, and release hardening | Done |
+| DM-703 | [Add calibration and sensitivity tooling](https://github.com/wnj00524/1Bal/issues/159) | M12: Validation, balancing, performance, and release hardening | Done |
+| DM-704 | [Add damage-model performance benchmarks](https://github.com/wnj00524/1Bal/issues/160) | M12: Validation, balancing, performance, and release hardening | Done |
+| DM-705 | [Add model-versioned save and replay support](https://github.com/wnj00524/1Bal/issues/161) | M12: Validation, balancing, performance, and release hardening | Done |
 | DM-706 | [Publish damage-model developer documentation](https://github.com/wnj00524/1Bal/issues/162) | M12: Validation, balancing, performance, and release hardening | Done |
 
 ## Board conventions
