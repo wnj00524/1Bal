@@ -2,6 +2,7 @@ using Godot;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -329,8 +330,8 @@ namespace TacticalSim.GodotClient
                 : _simulationManager.HasMaterialHit
                     ? new Color(1f, 0.65f, 0.15f)
                     : Colors.White;
-            BindPhysiologicalState(_simulationManager.Dummy.Physiology.NeurologicalFunctionalState);
-            EnqueueLog($"MEDICAL ASSESSMENT{Environment.NewLine}{report.AssessmentText}");
+            BindPhysiologicalState(CaptureNeurologicalState());
+            EnqueueLog($"MEDICAL ASSESSMENT{System.Environment.NewLine}{report.AssessmentText}");
             RefreshProjectileTelemetry();
         }
 
@@ -351,15 +352,13 @@ namespace TacticalSim.GodotClient
                 }
             }
 
-            NeurologicalFunctionalState neurological =
-                _simulationManager.Dummy.Physiology.NeurologicalFunctionalState;
+            NeurologicalFunctionalState neurological = CaptureNeurologicalState();
             BindPhysiologicalState(neurological);
-            EnqueueLog(FormattableString.Invariant(
-                $"RESOLUTION action={actionType} time={globalTime:F3}s " +
-                $"neuro=[LU:{neurological.LeftUpperLimbCapacity:F3}," +
-                $"RU:{neurological.RightUpperLimbCapacity:F3}," +
-                $"LL:{neurological.LeftLowerLimbCapacity:F3}," +
-                $"RL:{neurological.RightLowerLimbCapacity:F3}] tracks={woundTrack?.FragmentTracks.Count ?? 0}"));
+            EnqueueLog(string.Format(CultureInfo.InvariantCulture,
+                "RESOLUTION action={0} time={1:F3}s neuro=[LU:{2:F3},RU:{3:F3},LL:{4:F3},RL:{5:F3}] tracks={6}",
+                actionType, globalTime, neurological.LeftUpperLimbCapacity,
+                neurological.RightUpperLimbCapacity, neurological.LeftLowerLimbCapacity,
+                neurological.RightLowerLimbCapacity, woundTrack?.FragmentTracks.Count ?? 0));
         }
 
         private void EnqueueTrack(string id, IEnumerable<System.Numerics.Vector3> source)
@@ -427,6 +426,18 @@ namespace TacticalSim.GodotClient
                 0.55f + (0.45f * capacity));
         }
 
+        private NeurologicalFunctionalState CaptureNeurologicalState()
+        {
+            if (_simulationManager.Dummy.Physiology is INeurologicalFunctionalTarget neurologicalTarget)
+                return neurologicalTarget.NeurologicalFunctionalState;
+
+            // IActorPhysiology exposes the resolver's aggregate motor projections even
+            // when a custom physiology implementation omits the optional target interface.
+            float upper = Math.Clamp(_simulationManager.Dummy.Physiology.WeaponHandlingLevel, 0f, 1f);
+            float lower = Math.Clamp(_simulationManager.Dummy.Physiology.MobilityLevel, 0f, 1f);
+            return new NeurologicalFunctionalState(upper, upper, lower, lower);
+        }
+
         private void EnqueueLog(string payload)
         {
             if (string.IsNullOrWhiteSpace(payload))
@@ -447,8 +458,13 @@ namespace TacticalSim.GodotClient
             string path = Path.Combine(AppContext.BaseDirectory, "MedicalReport.txt");
             try
             {
-                await using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read,
-                    65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var stream = new System.IO.FileStream(
+                    path,
+                    System.IO.FileMode.Append,
+                    System.IO.FileAccess.Write,
+                    System.IO.FileShare.Read,
+                    65536,
+                    System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan);
                 await using var writer = new StreamWriter(stream, new UTF8Encoding(false), 65536)
                 { AutoFlush = false };
 
