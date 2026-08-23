@@ -15,6 +15,20 @@ namespace TacticalSim.Tests;
 public sealed class AnatomyAndLesionTests
 {
     [Fact]
+    public void NamedIntersections_AreOrderedByGeometricEntryWithStableTieBreak()
+    {
+        var catalog = new AnatomicalStructureCatalog([
+            new("far", "far", AnatomicalStructureType.Organ, BodyPartType.Thorax, new(3,0,0), new(3,0,0), Distance.FromMeters(.5f)),
+            new("near-b", "near b", AnatomicalStructureType.Vein, BodyPartType.Thorax, new(1,0,0), new(1,0,0), Distance.FromMeters(.25f)),
+            new("near-a", "near a", AnatomicalStructureType.Artery, BodyPartType.Thorax, new(1,0,0), new(1,0,0), Distance.FromMeters(.25f))]);
+        IReadOnlyList<StructureIntersection> hits = catalog.QueryIntersections(Vector3.Zero, new(4,0,0));
+        Assert.Equal(["near-a", "near-b", "far"], hits.Select(x => x.StructureId));
+        Assert.Equal([0, 1, 2], hits.Select(x => x.Order));
+        Assert.Equal(.75f, hits[0].EntryDistance.Meters, 5);
+        Assert.Equal(1.25f, hits[0].ExitDistance.Meters, 5);
+    }
+
+    [Fact]
     public void StandardCatalog_HasStableVersionedMajorVesselsBonesAndNerves()
     {
         IAnatomicalStructureCatalog anatomy = StandardAnatomy.CreateCatalog();
