@@ -12,6 +12,7 @@ using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.Materials;
 using TacticalSim.Core.Randomness;
 using TacticalSim.Core.Simulation;
+using TacticalSim.Core.Tactical;
 using TacticalSim.Core.World;
 
 namespace TacticalSim.Core.DependencyInjection
@@ -34,6 +35,11 @@ namespace TacticalSim.Core.DependencyInjection
             services.AddDamageModel();
             services.AddMaterialPenetration();
             services.AddSimulationServices();
+            services.TryAddSingleton<CapabilityActionPolicy>();
+            services.TryAddSingleton<CasualtyBehaviorPolicy>();
+            services.TryAddSingleton<TeammateResponsePolicy>();
+            services.TryAddSingleton<CasualtyOverlayFactory>();
+            services.TryAddSingleton<CasualtyScenarioScorer>();
             services.AddSingleton<IDragModel>(sp => new StandardDragCurve(0.3f));
             services.AddSingleton<IEnvironmentModel>(sp => new ICAOStandardAtmosphere(Vector3.Zero, new Vector3(0, -9.80665f, 0)));
 
