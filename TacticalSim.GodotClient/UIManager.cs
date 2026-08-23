@@ -1,5 +1,14 @@
 using Godot;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using TacticalSim.Core.Damage.Ballistics;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Entities;
 
@@ -8,6 +17,10 @@ namespace TacticalSim.GodotClient
     public partial class UIManager : CanvasLayer
     {
         private const float AdvanceSeconds = 5f;
+        private const float TrajectoryPixelsPerMeter = 180f;
+        private const float TrajectoryPointSeconds = 0.08f;
+        private const int MaximumPendingTelemetryRecords = 8192;
+        private const int MaximumPendingTrajectories = 2048;
 
         [Export]
         public NodePath SimulationManagerPath { get; set; } = null!;
@@ -34,6 +47,18 @@ namespace TacticalSim.GodotClient
         private RadialCommandMenu _radialCommands = null!;
         private Vector3 _commandDestination;
         private Vector2 _commandScreenPosition;
+        private readonly ConcurrentQueue<TrajectorySnapshot> _trajectoryQueue = new();
+        private readonly ConcurrentQueue<string> _logQueue = new();
+        private readonly SemaphoreSlim _logSignal = new(0);
+        private CancellationTokenSource? _loggerCancellation;
+        private Task? _loggerTask;
+        private Line2D? _activeTrajectory;
+        private TrajectorySnapshot? _activeSnapshot;
+        private int _activePointIndex;
+        private double _playbackAccumulator;
+        private int _pendingLogRecords;
+        private int _pendingTrajectories;
+        private long _droppedLogRecords;
 
         private readonly string[] _sceneProfiles = { "Training Dummy Outside", "Chest Wound Response" };
 
@@ -95,11 +120,43 @@ namespace TacticalSim.GodotClient
             _medicalMenu = new PopupMenu { Name = "MedicalMenu" };
             AddChild(_medicalMenu);
             _medicalMenu.IdPressed += OnMedicalActionSelected;
+            _simulationManager.ActionCompleted += OnResolutionCompleted;
+
+            _loggerCancellation = new CancellationTokenSource();
+            CancellationToken loggerToken = _loggerCancellation.Token;
+            _loggerTask = Task.Run(() => RunLogWriterAsync(loggerToken));
 
             _scenarioControls.Hide();
             _projectilePanel.Hide();
             _reportText.Text = "Choose a scene and loadout to begin.";
             _penetrationLabel.Text = "Penetration: none";
+        }
+
+        public override void _Process(double delta)
+        {
+            _playbackAccumulator += Math.Max(0d, delta);
+            while (_playbackAccumulator >= TrajectoryPointSeconds)
+            {
+                _playbackAccumulator -= TrajectoryPointSeconds;
+                AdvanceTrajectoryPlayback();
+            }
+        }
+
+        public override void _ExitTree()
+        {
+            if (_simulationManager is not null)
+                _simulationManager.ActionCompleted -= OnResolutionCompleted;
+
+            _loggerCancellation?.Cancel();
+            _logSignal.Release();
+            _ = _loggerTask?.ContinueWith(
+                static (_, state) => ((CancellationTokenSource)state!).Dispose(),
+                _loggerCancellation,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            _loggerTask = null;
+            _loggerCancellation = null;
         }
 
         public override void _UnhandledInput(InputEvent @event)
@@ -172,6 +229,7 @@ namespace TacticalSim.GodotClient
             _commandMenu.Hide();
             _medicalMenu.Hide();
             _simulationManager.UnloadScenario();
+            ClearTrajectoryPlayback();
             _scenarioControls.Hide();
             _setupPanel.Show();
             _reportText.Text = "Choose a scene and loadout to begin.";
@@ -271,9 +329,167 @@ namespace TacticalSim.GodotClient
                 : _simulationManager.HasMaterialHit
                     ? new Color(1f, 0.65f, 0.15f)
                     : Colors.White;
-            System.IO.File.WriteAllText("MedicalReport.txt", report.AssessmentText);
+            BindPhysiologicalState(_simulationManager.Dummy.Physiology.NeurologicalFunctionalState);
+            EnqueueLog($"MEDICAL ASSESSMENT{Environment.NewLine}{report.AssessmentText}");
             RefreshProjectileTelemetry();
         }
+
+        private void OnResolutionCompleted(string actionType, float globalTime)
+        {
+            // The bridge signal is delivered on Godot's main thread. Copy all core
+            // values here; queued playback never retains or mutates simulation state.
+            WoundTrack? woundTrack = _simulationManager.LastWoundTrack;
+            if (woundTrack is not null)
+            {
+                EnqueueTrack("projectile", woundTrack.Segments.SelectMany(static segment =>
+                    new[] { segment.EntryPoint, segment.EndPoint }));
+
+                foreach (FragmentTrack fragment in woundTrack.FragmentTracks.OrderBy(static item => item.Sequence))
+                {
+                    EnqueueTrack(fragment.FragmentId, fragment.Segments.SelectMany(static segment =>
+                        new[] { segment.EntryPoint, segment.EndPoint }));
+                }
+            }
+
+            NeurologicalFunctionalState neurological =
+                _simulationManager.Dummy.Physiology.NeurologicalFunctionalState;
+            BindPhysiologicalState(neurological);
+            EnqueueLog(FormattableString.Invariant(
+                $"RESOLUTION action={actionType} time={globalTime:F3}s " +
+                $"neuro=[LU:{neurological.LeftUpperLimbCapacity:F3}," +
+                $"RU:{neurological.RightUpperLimbCapacity:F3}," +
+                $"LL:{neurological.LeftLowerLimbCapacity:F3}," +
+                $"RL:{neurological.RightLowerLimbCapacity:F3}] tracks={woundTrack?.FragmentTracks.Count ?? 0}"));
+        }
+
+        private void EnqueueTrack(string id, IEnumerable<System.Numerics.Vector3> source)
+        {
+            System.Numerics.Vector3[] points = source
+                .Where(static point => float.IsFinite(point.X) && float.IsFinite(point.Y) && float.IsFinite(point.Z))
+                .ToArray();
+            if (points.Length < 2)
+                return;
+
+            if (Interlocked.Increment(ref _pendingTrajectories) > MaximumPendingTrajectories)
+            {
+                Interlocked.Decrement(ref _pendingTrajectories);
+                EnqueueLog($"TRAJECTORY_DROPPED id={id} reason=queue_capacity");
+                return;
+            }
+
+            var screenPoints = new Vector2[points.Length];
+            for (int index = 0; index < points.Length; index++)
+            {
+                // Body-local X/Y metres are projected into the diagnostic overlay.
+                screenPoints[index] = new Vector2(580f + points[index].X * TrajectoryPixelsPerMeter,
+                    360f - points[index].Y * TrajectoryPixelsPerMeter);
+            }
+
+            _trajectoryQueue.Enqueue(new TrajectorySnapshot(id, screenPoints));
+        }
+
+        private void AdvanceTrajectoryPlayback()
+        {
+            if (_activeSnapshot is null)
+            {
+                if (!_trajectoryQueue.TryDequeue(out TrajectorySnapshot? next))
+                    return;
+                Interlocked.Decrement(ref _pendingTrajectories);
+
+                _activeSnapshot = next;
+                _activePointIndex = 0;
+                _activeTrajectory = new Line2D
+                {
+                    Name = $"Telemetry_{SanitizeNodeName(next.Id)}",
+                    Width = 2.5f,
+                    DefaultColor = new Color(1f, 0.35f, 0.12f, 0.9f),
+                    Antialiased = true
+                };
+                AddChild(_activeTrajectory);
+            }
+
+            if (_activePointIndex < _activeSnapshot.Points.Length)
+            {
+                _activeTrajectory!.AddPoint(_activeSnapshot.Points[_activePointIndex++]);
+                return;
+            }
+
+            _activeTrajectory?.QueueFree();
+            _activeTrajectory = null;
+            _activeSnapshot = null;
+        }
+
+        private void BindPhysiologicalState(NeurologicalFunctionalState state)
+        {
+            float capacity = Math.Clamp(Math.Min(state.UpperLimbCapacity, state.LowerLimbCapacity), 0f, 1f);
+            float impairment = 1f - capacity;
+            _reportText.Modulate = new Color(1f, 1f - (0.65f * impairment), 1f - (0.8f * impairment),
+                0.55f + (0.45f * capacity));
+        }
+
+        private void EnqueueLog(string payload)
+        {
+            if (string.IsNullOrWhiteSpace(payload))
+                return;
+            if (Interlocked.Increment(ref _pendingLogRecords) > MaximumPendingTelemetryRecords)
+            {
+                Interlocked.Decrement(ref _pendingLogRecords);
+                Interlocked.Increment(ref _droppedLogRecords);
+                return;
+            }
+
+            _logQueue.Enqueue($"[{DateTimeOffset.UtcNow:O}] {payload}");
+            _logSignal.Release();
+        }
+
+        private async Task RunLogWriterAsync(CancellationToken cancellationToken)
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "MedicalReport.txt");
+            try
+            {
+                await using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read,
+                    65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using var writer = new StreamWriter(stream, new UTF8Encoding(false), 65536)
+                { AutoFlush = false };
+
+                while (!cancellationToken.IsCancellationRequested || !_logQueue.IsEmpty)
+                {
+                    try { await _logSignal.WaitAsync(TimeSpan.FromMilliseconds(250), cancellationToken); }
+                    catch (OperationCanceledException) { }
+
+                    while (_logQueue.TryDequeue(out string? record))
+                    {
+                        Interlocked.Decrement(ref _pendingLogRecords);
+                        await writer.WriteLineAsync(record);
+                    }
+
+                    long dropped = Interlocked.Exchange(ref _droppedLogRecords, 0);
+                    if (dropped > 0)
+                        await writer.WriteLineAsync($"[{DateTimeOffset.UtcNow:O}] TELEMETRY_DROPPED count={dropped}");
+                    await writer.FlushAsync(cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"Medical telemetry writer stopped: {exception.Message}");
+            }
+        }
+
+        private void ClearTrajectoryPlayback()
+        {
+            while (_trajectoryQueue.TryDequeue(out _))
+                Interlocked.Decrement(ref _pendingTrajectories);
+            _activeTrajectory?.QueueFree();
+            _activeTrajectory = null;
+            _activeSnapshot = null;
+            _activePointIndex = 0;
+            _playbackAccumulator = 0d;
+        }
+
+        private static string SanitizeNodeName(string value) =>
+            string.Concat(value.Select(static character => char.IsLetterOrDigit(character) ? character : '_'));
+
+        private sealed record TrajectorySnapshot(string Id, Vector2[] Points);
 
         private void RefreshProjectileTelemetry()
         {
