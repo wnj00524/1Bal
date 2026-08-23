@@ -37,12 +37,12 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-404 | [Implement treatment equipment inventory](https://github.com/wnj00524/1Bal/issues/117) | M9: Timed interventions and resources | Done |
 | DM-405 | [Add treatment interruption and reassessment](https://github.com/wnj00524/1Bal/issues/118) | M9: Timed interventions and resources | Done |
 | DM-406 | [Add a developer quick-treatment console](https://github.com/wnj00524/1Bal/issues/119) | M9: Timed interventions and resources | Done |
-| DM-501 | [Connect capability state to tactical-action costs](https://github.com/wnj00524/1Bal/issues/140) | M10: Isometric tactical integration | Backlog |
-| DM-502 | [Add casualty drag and carry actions](https://github.com/wnj00524/1Bal/issues/141) | M10: Isometric tactical integration | Backlog |
-| DM-503 | [Add casualty behavior states for AI](https://github.com/wnj00524/1Bal/issues/142) | M10: Isometric tactical integration | Backlog |
-| DM-504 | [Add tactical rescue exposure and opportunity cost](https://github.com/wnj00524/1Bal/issues/143) | M10: Isometric tactical integration | Backlog |
-| DM-505 | [Create isometric casualty-status overlays](https://github.com/wnj00524/1Bal/issues/144) | M10: Isometric tactical integration | Backlog |
-| DM-506 | [Add casualty-aware scenario objectives and scoring](https://github.com/wnj00524/1Bal/issues/145) | M10: Isometric tactical integration | Backlog |
+| DM-501 | [Connect capability state to tactical-action costs](https://github.com/wnj00524/1Bal/issues/140) | M10: Isometric tactical integration | Done |
+| DM-502 | [Add casualty drag and carry actions](https://github.com/wnj00524/1Bal/issues/141) | M10: Isometric tactical integration | Done |
+| DM-503 | [Add casualty behavior states for AI](https://github.com/wnj00524/1Bal/issues/142) | M10: Isometric tactical integration | Done |
+| DM-504 | [Add tactical rescue exposure and opportunity cost](https://github.com/wnj00524/1Bal/issues/143) | M10: Isometric tactical integration | Done |
+| DM-505 | [Create isometric casualty-status overlays](https://github.com/wnj00524/1Bal/issues/144) | M10: Isometric tactical integration | Done |
+| DM-506 | [Add casualty-aware scenario objectives and scoring](https://github.com/wnj00524/1Bal/issues/145) | M10: Isometric tactical integration | Done |
 | DM-601 | [Add configurable casualty profiles](https://github.com/wnj00524/1Bal/issues/146) | M11: Casualty variation and bounded uncertainty | Backlog |
 | DM-602 | [Add bounded, seeded physiological uncertainty](https://github.com/wnj00524/1Bal/issues/147) | M11: Casualty variation and bounded uncertainty | Backlog |
 | DM-603 | [Add terminal projectile behavior profiles](https://github.com/wnj00524/1Bal/issues/154) | M11: Casualty variation and bounded uncertainty | Backlog |
