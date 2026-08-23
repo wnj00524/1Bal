@@ -400,11 +400,8 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         if (woundTrack.ModelVersion != DamageModelVersion.LegacyV1 && request.TargetPhysiology is IAnatomicalInjuryTarget target)
         {
             generatedLesions = _lesionGenerator.Generate(woundTrack, target.Anatomy);
-            target.LesionRepository.AddRange(generatedLesions);
-            if (target is IMusculoskeletalFunctionalTarget functionalTarget)
-                functionalTarget.RefreshMusculoskeletalFunctionalState();
-            if (target is INeurologicalFunctionalTarget neurologicalTarget)
-                neurologicalTarget.RefreshNeurologicalFunctionalState();
+            if (!target.ApplyImpact(request.ImpactId, generatedLesions))
+                generatedLesions = Array.Empty<Lesion>();
         }
         PhysiologyDebugSnapshot physiologyAfter = PhysiologyDebugSnapshot.Capture(request.TargetPhysiology);
         CapabilityDebugSnapshot capabilityAfter = CapabilityDebugSnapshot.Capture(request.TargetPhysiology);

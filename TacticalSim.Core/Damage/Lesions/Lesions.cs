@@ -134,6 +134,12 @@ public interface IAnatomicalInjuryTarget
 {
     IAnatomicalStructureCatalog Anatomy { get; }
     ILesionRepository LesionRepository { get; }
+    /// <summary>
+    /// Atomically applies all lesions produced by one impact. Implementations own
+    /// duplicate-impact handling and creation timestamps because both depend on
+    /// authoritative actor state rather than projectile geometry.
+    /// </summary>
+    bool ApplyImpact(string impactId, IEnumerable<Lesion> lesions);
 }
 
 public interface ILesionGenerator { IReadOnlyList<Lesion> Generate(WoundTrack track, IAnatomicalStructureCatalog anatomy); }

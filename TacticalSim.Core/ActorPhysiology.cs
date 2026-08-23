@@ -226,10 +226,30 @@ namespace TacticalSim.Core.Physiology
 
         public IAnatomicalStructureCatalog Anatomy { get; private set; } = new AnatomicalStructureCatalog([]);
         public ILesionRepository LesionRepository { get; } = new LesionRepository();
+        private readonly HashSet<string> _processedImpactIds = new(StringComparer.Ordinal);
+        private float _simulationTimeSeconds;
         public MusculoskeletalFunctionalState MusculoskeletalFunctionalState { get; private set; } =
             MusculoskeletalFunctionalState.Healthy;
         public NeurologicalFunctionalState NeurologicalFunctionalState { get; private set; } =
             NeurologicalFunctionalState.Healthy;
+
+        public bool ApplyImpact(string impactId, IEnumerable<Lesion> lesions)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(impactId);
+            ArgumentNullException.ThrowIfNull(lesions);
+            if (_processedImpactIds.Contains(impactId)) return false;
+
+            Lesion[] materialized = lesions.ToArray();
+            if (materialized.Any(lesion => lesion.OriginImpactId != impactId))
+                throw new ArgumentException("Every lesion must belong to the supplied impact.", nameof(lesions));
+
+            DateTimeOffset timestamp = DateTimeOffset.UnixEpoch.AddSeconds(_simulationTimeSeconds);
+            LesionRepository.AddRange(materialized.Select(lesion => lesion with { CreatedAt = timestamp }));
+            _processedImpactIds.Add(impactId);
+            RefreshMusculoskeletalFunctionalState();
+            RefreshNeurologicalFunctionalState();
+            return true;
+        }
         public BodyPart RootBodyPart { get; private set; } = null!;
         public float TotalBloodVolume { get; private set; } = 5000f; // 5L baseline
         private float _baselineBloodVolume = 5000f;
@@ -362,6 +382,7 @@ namespace TacticalSim.Core.Physiology
         public void TickPhysiology(float dt)
         {
             float elapsedSeconds = MathF.Max(0f, dt);
+            _simulationTimeSeconds += elapsedSeconds;
             float totalBleedRate = CalculateBleedRate(RootBodyPart, out float airwayBleedRate);
             // Flow through an open vessel falls with perfusion pressure.  The
             // square-root relationship is the standard orifice-flow approximation;
