@@ -31,12 +31,12 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-303 | [Implement hemothorax and pericardial tamponade](https://github.com/wnj00524/1Bal/issues/136) | M8: Thoracic injury model | Done |
 | DM-304 | [Implement thoracic treatment interactions](https://github.com/wnj00524/1Bal/issues/137) | M8: Thoracic injury model | Done |
 | DM-305 | [Add thoracic reference scenarios](https://github.com/wnj00524/1Bal/issues/138) | M8: Thoracic injury model | Done |
-| DM-401 | [Define treatment-action contracts](https://github.com/wnj00524/1Bal/issues/114) | M9: Timed interventions and resources | Backlog |
-| DM-402 | [Implement tourniquet application quality](https://github.com/wnj00524/1Bal/issues/115) | M9: Timed interventions and resources | Backlog |
-| DM-403 | [Implement direct pressure and wound packing](https://github.com/wnj00524/1Bal/issues/116) | M9: Timed interventions and resources | Backlog |
-| DM-404 | [Implement treatment equipment inventory](https://github.com/wnj00524/1Bal/issues/117) | M9: Timed interventions and resources | Backlog |
-| DM-405 | [Add treatment interruption and reassessment](https://github.com/wnj00524/1Bal/issues/118) | M9: Timed interventions and resources | Backlog |
-| DM-406 | [Add a developer quick-treatment console](https://github.com/wnj00524/1Bal/issues/119) | M9: Timed interventions and resources | Backlog |
+| DM-401 | [Define treatment-action contracts](https://github.com/wnj00524/1Bal/issues/114) | M9: Timed interventions and resources | Done |
+| DM-402 | [Implement tourniquet application quality](https://github.com/wnj00524/1Bal/issues/115) | M9: Timed interventions and resources | Done |
+| DM-403 | [Implement direct pressure and wound packing](https://github.com/wnj00524/1Bal/issues/116) | M9: Timed interventions and resources | Done |
+| DM-404 | [Implement treatment equipment inventory](https://github.com/wnj00524/1Bal/issues/117) | M9: Timed interventions and resources | Done |
+| DM-405 | [Add treatment interruption and reassessment](https://github.com/wnj00524/1Bal/issues/118) | M9: Timed interventions and resources | Done |
+| DM-406 | [Add a developer quick-treatment console](https://github.com/wnj00524/1Bal/issues/119) | M9: Timed interventions and resources | Done |
 | DM-501 | [Connect capability state to tactical-action costs](https://github.com/wnj00524/1Bal/issues/140) | M10: Isometric tactical integration | Backlog |
 | DM-502 | [Add casualty drag and carry actions](https://github.com/wnj00524/1Bal/issues/141) | M10: Isometric tactical integration | Backlog |
 | DM-503 | [Add casualty behavior states for AI](https://github.com/wnj00524/1Bal/issues/142) | M10: Isometric tactical integration | Backlog |
