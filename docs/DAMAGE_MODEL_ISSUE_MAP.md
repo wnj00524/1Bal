@@ -26,11 +26,11 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-205 | [Separate oxygen saturation from oxygen delivery](https://github.com/wnj00524/1Bal/issues/131) | M7: Hemorrhage, circulation, and tactical capability | Done |
 | DM-206 | [Define explicit incapacitation, unconsciousness, and death states](https://github.com/wnj00524/1Bal/issues/132) | M7: Hemorrhage, circulation, and tactical capability | Done |
 | DM-207 | [Add physiology-to-capability resolver](https://github.com/wnj00524/1Bal/issues/133) | M7: Hemorrhage, circulation, and tactical capability | Done |
-| DM-301 | [Add bilateral pleural compartments](https://github.com/wnj00524/1Bal/issues/134) | M8: Thoracic injury model | Backlog |
-| DM-302 | [Implement simple, open, and tension pneumothorax](https://github.com/wnj00524/1Bal/issues/135) | M8: Thoracic injury model | Backlog |
-| DM-303 | [Implement hemothorax and pericardial tamponade](https://github.com/wnj00524/1Bal/issues/136) | M8: Thoracic injury model | Backlog |
-| DM-304 | [Implement thoracic treatment interactions](https://github.com/wnj00524/1Bal/issues/137) | M8: Thoracic injury model | Backlog |
-| DM-305 | [Add thoracic reference scenarios](https://github.com/wnj00524/1Bal/issues/138) | M8: Thoracic injury model | Backlog |
+| DM-301 | [Add bilateral pleural compartments](https://github.com/wnj00524/1Bal/issues/134) | M8: Thoracic injury model | Done |
+| DM-302 | [Implement simple, open, and tension pneumothorax](https://github.com/wnj00524/1Bal/issues/135) | M8: Thoracic injury model | Done |
+| DM-303 | [Implement hemothorax and pericardial tamponade](https://github.com/wnj00524/1Bal/issues/136) | M8: Thoracic injury model | Done |
+| DM-304 | [Implement thoracic treatment interactions](https://github.com/wnj00524/1Bal/issues/137) | M8: Thoracic injury model | Done |
+| DM-305 | [Add thoracic reference scenarios](https://github.com/wnj00524/1Bal/issues/138) | M8: Thoracic injury model | Done |
 | DM-401 | [Define treatment-action contracts](https://github.com/wnj00524/1Bal/issues/114) | M9: Timed interventions and resources | Backlog |
 | DM-402 | [Implement tourniquet application quality](https://github.com/wnj00524/1Bal/issues/115) | M9: Timed interventions and resources | Backlog |
 | DM-403 | [Implement direct pressure and wound packing](https://github.com/wnj00524/1Bal/issues/116) | M9: Timed interventions and resources | Backlog |
