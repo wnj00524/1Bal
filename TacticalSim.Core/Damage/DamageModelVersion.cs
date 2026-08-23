@@ -17,7 +17,10 @@ public enum DamageModelVersion
     /// <summary>
     /// M5 authoritative ordered-traversal model with energy accounting.
     /// </summary>
-    FoundationsV2 = 2
+    FoundationsV2 = 2,
+
+    /// <summary>The integrated lesion-authoritative M5-M12 actor model.</summary>
+    IntegratedV3 = 3
 }
 
 /// <summary>
@@ -47,6 +50,7 @@ public static class DamageModelVersionExtensions
     {
         DamageModelVersion.LegacyV1 => "legacy-v1",
         DamageModelVersion.FoundationsV2 => "m5-foundations-v2",
+        DamageModelVersion.IntegratedV3 => "m5-m12-integrated-v3",
         _ => throw new ArgumentOutOfRangeException(nameof(version))
     };
 
@@ -59,6 +63,8 @@ public static class DamageModelVersionExtensions
             "legacy" or "legacy-v1" => DamageModelVersion.LegacyV1,
             "m5" or "foundations" or "foundations-v2" or "m5-foundations-v2" =>
                 DamageModelVersion.FoundationsV2,
+            "integrated" or "integrated-v3" or "m5-m12-integrated-v3" =>
+                DamageModelVersion.IntegratedV3,
             _ => throw new ArgumentException($"Unknown damage-model version '{value}'.", nameof(value))
         };
     }

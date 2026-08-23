@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json.Serialization;
 using TacticalSim.Core.Damage.Anatomy;
 using TacticalSim.Core.Damage.Ballistics;
+using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Units;
 
 namespace TacticalSim.Core.Damage.Lesions;
@@ -110,6 +111,7 @@ public interface ILesionRepository
     IReadOnlyList<Lesion> Lesions { get; }
     void AddRange(IEnumerable<Lesion> lesions);
     bool TrySetTreatmentState(string lesionId, LesionTreatmentState state);
+    bool ContainsImpact(string originImpactId);
 }
 
 public sealed class LesionRepository : ILesionRepository
@@ -124,6 +126,8 @@ public sealed class LesionRepository : ILesionRepository
     }
     public bool TrySetTreatmentState(string lesionId, LesionTreatmentState state)
     { int index=_lesions.FindIndex(x=>x.Id==lesionId); if(index<0)return false; _lesions[index]=_lesions[index] with { TreatmentState=state }; return true; }
+    public bool ContainsImpact(string originImpactId)
+    { ArgumentException.ThrowIfNullOrWhiteSpace(originImpactId); return _lesions.Any(x => x.OriginImpactId == originImpactId); }
 }
 
 public interface IAnatomicalInjuryTarget
@@ -140,25 +144,34 @@ public sealed class LesionGenerator : ILesionGenerator
     public IReadOnlyList<Lesion> Generate(WoundTrack track, IAnatomicalStructureCatalog anatomy)
     {
         ArgumentNullException.ThrowIfNull(track); ArgumentNullException.ThrowIfNull(anatomy);
-        var result = new List<Lesion>(); int ordinal=0;
+        var candidates = new List<(AnatomicalStructure Structure, WoundTrackSegment Segment, float Severity, float Radius, float EntryDistance)>();
+        float traversed = 0f;
         foreach (WoundTrackSegment segment in track.Segments.Where(x=>x.TransferredEnergy.Joules>0))
         {
             float cavityRadius=MathF.Sqrt(MathF.Max(segment.TransferredEnergy.Joules,0))*0.00035f; // provisional gameplay-calibrated M6 mapping
             AnatomicalStructure[] hits=anatomy.QuerySegment(segment.EntryPoint,segment.EndPoint,cavityRadius).ToArray();
             foreach (AnatomicalStructure structure in hits)
-            {
-                float severity=Math.Clamp(segment.TransferredEnergy.Joules/MathF.Max(20f, structure.Calibre.Meters*3000f),.01f,1f);
-                var geometry=new LesionGeometry((segment.EntryPoint+segment.EndPoint)/2,Vector3.Normalize(segment.EndPoint-segment.EntryPoint),segment.PathLength,Distance.FromMeters(MathF.Max(.0005f,cavityRadius)));
-                string id=$"lesion/{track.TrackId}/{ordinal++:D4}/{structure.Id}";
-                result.Add(Create(id,track.TrackId,structure,severity,geometry));
-            }
+                candidates.Add((structure, segment, Math.Clamp(segment.TransferredEnergy.Joules/MathF.Max(20f, structure.Calibre.Meters*3000f),.01f,1f), cavityRadius, traversed));
             if (hits.Length==0)
             {
                 var geometry=new LesionGeometry((segment.EntryPoint+segment.EndPoint)/2,SafeDirection(segment),segment.PathLength,Distance.FromMeters(MathF.Max(.0005f,cavityRadius)));
-                result.Add(new TissueLesion($"lesion/{track.TrackId}/{ordinal++:D4}/soft-tissue",segment.StructureId,track.TrackId,LesionKind.OpenSoftTissueWound,Math.Clamp(segment.TransferredEnergy.Joules/100f,.01f,1f),geometry,LesionTreatmentState.Untreated,DateTimeOffset.UnixEpoch));
+                candidates.Add((new AnatomicalStructure(segment.StructureId, segment.StructureId, AnatomicalStructureType.Skin, BodyPartType.Thorax, segment.EntryPoint, segment.EndPoint, Distance.FromMeters(MathF.Max(.0005f,cavityRadius))), segment, Math.Clamp(segment.TransferredEnergy.Joules/100f,.01f,1f), cavityRadius, traversed));
             }
+            traversed += segment.PathLength.Meters;
         }
-        return result;
+        var result = new List<Lesion>(); int ordinal=0;
+        foreach (var group in candidates.GroupBy(x => x.Structure.Id, StringComparer.Ordinal)
+                     .OrderBy(x => x.Min(y => y.EntryDistance)).ThenBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var first = group.OrderBy(x => x.EntryDistance).First();
+            var last = group.OrderBy(x => x.EntryDistance).Last();
+            Vector3 start = first.Segment.EntryPoint, end = last.Segment.EndPoint;
+            var geometry = new LesionGeometry((start + end) / 2, SafeDirection(first.Segment),
+                Distance.FromMeters(group.Sum(x => x.Segment.PathLength.Meters)), Distance.FromMeters(MathF.Max(.0005f, group.Max(x => x.Radius))));
+            string id=$"lesion/{track.TrackId}/{ordinal++:D4}/{group.Key}";
+            result.Add(Create(id, track.TrackId, first.Structure, group.Max(x => x.Severity), geometry));
+        }
+        return result.AsReadOnly();
     }
 
     private static Lesion Create(string id,string impact,AnatomicalStructure s,float severity,LesionGeometry g)
