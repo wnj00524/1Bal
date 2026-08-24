@@ -27,12 +27,17 @@ namespace TacticalSim.Core.DependencyInjection
         /// </summary>
         /// <param name="services">The service collection to register services into.</param>
         /// <returns>The service collection for chaining.</returns>
-        public static IServiceCollection AddTacticalSimCore(this IServiceCollection services)
+        public static IServiceCollection AddTacticalSimCore(this IServiceCollection services) =>
+            AddTacticalSimCoreWithDamageModel(services, damageModelOptions: null);
+
+        public static IServiceCollection AddTacticalSimCoreWithDamageModel(
+            this IServiceCollection services,
+            DamageModelOptions? damageModelOptions)
         {
             ArgumentNullException.ThrowIfNull(services);
 
             services.AddDeterministicRandomness();
-            services.AddDamageModel();
+            services.AddDamageModel(damageModelOptions);
             services.AddMaterialPenetration();
             services.AddSimulationServices();
             services.TryAddSingleton<CapabilityActionPolicy>();

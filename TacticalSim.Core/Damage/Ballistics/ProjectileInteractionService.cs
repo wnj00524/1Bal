@@ -49,6 +49,12 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         ArgumentNullException.ThrowIfNull(request);
 
         DamageModelVersion version = request.ModelVersion ?? _options.DefaultVersion;
+        if (version == DamageModelVersion.IntegratedV3
+            && request.TargetPhysiology is not IIntegratedMedicalStateTarget)
+        {
+            throw new InvalidOperationException(
+                "IntegratedV3 requires an actor backed by the integrated medical state.");
+        }
         IReadOnlyList<VoxelRayIntersection> intersections = OrderedVoxelTraversal.FindIntersections(
             request.TargetPhysiology.RootBodyPart,
             request.ProjectileState.Position,
@@ -68,7 +74,15 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
                 intersections,
                 physiologyBefore,
                 capabilityBefore,
-                randomStreams),
+                randomStreams,
+                DamageModelVersion.FoundationsV2),
+            DamageModelVersion.IntegratedV3 => ResolveFoundations(
+                request,
+                intersections,
+                physiologyBefore,
+                capabilityBefore,
+                randomStreams,
+                DamageModelVersion.IntegratedV3),
             DamageModelVersion.LegacyV1 => ResolveLegacy(
                 request,
                 intersections,
@@ -84,7 +98,8 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         IReadOnlyList<VoxelRayIntersection> intersections,
         PhysiologyDebugSnapshot physiologyBefore,
         CapabilityDebugSnapshot capabilityBefore,
-        IDeterministicRandomStreamProvider randomStreams)
+        IDeterministicRandomStreamProvider randomStreams,
+        DamageModelVersion modelVersion)
     {
         BallisticProfile profile = request.ProjectileProfile;
         Vector3 currentVelocity = request.ProjectileState.Velocity;
@@ -251,7 +266,7 @@ public sealed class ProjectileInteractionService : IProjectileInteractionService
         Vector3? retainedPoint = disposition == ProjectileDisposition.Retained ? finalPosition : null;
         var woundTrack = new WoundTrack(
             request.ImpactId,
-            DamageModelVersion.FoundationsV2,
+            modelVersion,
             WoundTrackCoordinateSpace.BodyLocalMeters,
             segments[0].EntryPoint,
             disposition,

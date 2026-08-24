@@ -107,21 +107,23 @@ public sealed class PhysiologyCapabilityResolver
         float systemic = MathF.Min(cardiovascular.PerfusionEffectiveness, oxygen.SystemicDeliveryIndex);
         float cerebral = oxygen.CerebralDeliveryIndex;
         float awake = casualty >= CasualtyState.Unconscious ? 0f : 1f;
+        float cognitive = neurological.CognitiveCapacity;
         var values = new Dictionary<TacticalCapability, float>
         {
             [TacticalCapability.Movement] = awake * MathF.Min(systemic, MathF.Min(musculoskeletal.MovementCapacity, neurological.LowerLimbCapacity)),
             [TacticalCapability.Posture] = awake * MathF.Min(systemic, musculoskeletal.StandingCapacity),
-            [TacticalCapability.Aiming] = awake * MathF.Min(cerebral, neurological.UpperLimbCapacity),
-            [TacticalCapability.Firing] = awake * MathF.Min(cerebral, MathF.Min(musculoskeletal.UpperLimbCapacity, neurological.UpperLimbCapacity)),
-            [TacticalCapability.Reloading] = awake * MathF.Min(systemic, MathF.Min(musculoskeletal.UpperLimbCapacity, neurological.UpperLimbCapacity)),
-            [TacticalCapability.Communication] = awake * cerebral,
-            [TacticalCapability.SelfAid] = awake * MathF.Min(systemic, MathF.Min(cerebral, neurological.UpperLimbCapacity))
+            [TacticalCapability.Aiming] = awake * MathF.Min(cognitive, MathF.Min(cerebral, neurological.UpperLimbCapacity)),
+            [TacticalCapability.Firing] = awake * MathF.Min(cognitive, MathF.Min(cerebral, MathF.Min(musculoskeletal.UpperLimbCapacity, neurological.UpperLimbCapacity))),
+            [TacticalCapability.Reloading] = awake * MathF.Min(cognitive, MathF.Min(systemic, MathF.Min(musculoskeletal.UpperLimbCapacity, neurological.UpperLimbCapacity))),
+            [TacticalCapability.Communication] = awake * MathF.Min(cognitive, cerebral),
+            [TacticalCapability.SelfAid] = awake * MathF.Min(cognitive, MathF.Min(systemic, MathF.Min(cerebral, neurological.UpperLimbCapacity)))
         };
         var reasons = new List<string>();
         if (cardiovascular.PerfusionEffectiveness < .8f) reasons.Add("reduced perfusion");
         if (oxygen.SystemicDeliveryIndex < .8f) reasons.Add("reduced oxygen delivery");
         if (musculoskeletal.MovementCapacity < 1f) reasons.Add("musculoskeletal injury");
         if (neurological.UpperLimbCapacity < 1f || neurological.LowerLimbCapacity < 1f) reasons.Add("neurological injury");
+        if (neurological.CognitiveCapacity < 1f) reasons.Add("brain injury");
         if (awake == 0f) reasons.Add(casualty.ToString().ToLowerInvariant());
         return new(values, reasons);
     }
@@ -138,6 +140,7 @@ public sealed class HemorrhagePhysiologyModel
     public CardiovascularState Cardiovascular { get; private set; } = null!;
     public OxygenDeliveryState OxygenDelivery { get; private set; } = null!;
     public CasualtyState CasualtyState { get; private set; }
+    public float LowCerebralDeliverySeconds => _lowCerebralDeliverySeconds;
     public float VentilationEffectiveness { get; set; } = 1f;
     public float CardiacFunction { get; set; } = 1f;
     public float CurrentBleedRateMlPerSecond => _sources.Sum(x => x.CalculateFlow(Cardiovascular.MeanArterialPressureMmhg));
@@ -191,7 +194,12 @@ public static class BleedingSourceFactory
         try { structure = anatomy.GetRequired(lesion.StructureId); } catch (KeyNotFoundException) { return null; }
         PressureRegime regime; float aperture; bool transection = false;
         if (lesion is VesselLesion vessel) { regime = vessel.PressureRegime; aperture = vessel.Aperture.Meters * 1000f; transection = vessel.CompleteTransection; }
-        else if (lesion.Kind is LesionKind.ParenchymalInjury or LesionKind.CardiacInjury or LesionKind.OpenSoftTissueWound) { regime = lesion.Kind == LesionKind.CardiacInjury ? PressureRegime.Arterial : PressureRegime.Parenchymal; aperture = 1f + lesion.Severity * 3f; }
+        else if (lesion.Kind is LesionKind.ParenchymalInjury or LesionKind.CardiacInjury
+                 or LesionKind.OpenSoftTissueWound
+                 || lesion.Kind == LesionKind.BrainOrSpinalInjury
+                    && structure.Region == BodyPartType.Head
+                    && structure.Type == AnatomicalStructureType.Organ)
+        { regime = lesion.Kind == LesionKind.CardiacInjury ? PressureRegime.Arterial : PressureRegime.Parenchymal; aperture = 1f + lesion.Severity * 3f; }
         else return null;
         bool compressible = structure.Region is BodyPartType.LeftArm or BodyPartType.RightArm or BodyPartType.LeftLeg or BodyPartType.RightLeg || structure.Type is AnatomicalStructureType.Skin;
         return new(lesion.Id, regime, aperture, transection, DestinationFor(structure), compressible);

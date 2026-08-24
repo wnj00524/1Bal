@@ -47,3 +47,36 @@ public sealed class ParameterProvenanceRegistry
         if (missing.Length > 0) throw new InvalidOperationException($"Missing parameter provenance: {string.Join(", ", missing)}.");
     }
 }
+
+/// <summary>Production provenance entries introduced by the integrated neurological model.</summary>
+public static class IntegratedNeurologicalParameterProvenance
+{
+    public static readonly IReadOnlyList<string> RequiredParameterIds =
+    [
+        "neurology.brain.incapacitation-severity",
+        "neurology.brain.unconscious-severity",
+        "neurology.brain.fatal-severity",
+        "neurology.brain.cognitive-loss-multiplier",
+        "neurology.brain.brainstem-loss-multiplier"
+    ];
+
+    public static ParameterProvenanceRegistry CreateRegistry()
+    {
+        var registry = new ParameterProvenanceRegistry();
+        const string source = "DM-802 provisional gameplay calibration; no external clinical cut-off asserted";
+        const string version = "integrated-neurology-v1";
+        const string owner = "damage-model";
+        string[] tests = ["IntegratedNeurologicalGodotPathTests"];
+        registry.Register(new(RequiredParameterIds[0], "neurology", "incapacitation severity", "0.15 ratio",
+            ParameterClassification.Provisional, source, version, owner, tests));
+        registry.Register(new(RequiredParameterIds[1], "neurology", "unconscious severity", "0.30 ratio",
+            ParameterClassification.Provisional, source, version, owner, tests));
+        registry.Register(new(RequiredParameterIds[2], "neurology", "fatal severity", "0.85 ratio",
+            ParameterClassification.Provisional, source, version, owner, tests));
+        registry.Register(new(RequiredParameterIds[3], "neurology", "cognitive loss multiplier", "2.5 ratio",
+            ParameterClassification.GameplayTuning, source, version, owner, tests));
+        registry.Register(new(RequiredParameterIds[4], "neurology", "brainstem loss multiplier", "0.5 ratio",
+            ParameterClassification.GameplayTuning, source, version, owner, tests));
+        return registry;
+    }
+}

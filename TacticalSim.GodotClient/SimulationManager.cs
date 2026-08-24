@@ -9,11 +9,16 @@ using TacticalSim.Core.Simulation.Actions;
 using TacticalSim.Core.Entities;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Damage.Ballistics;
+using TacticalSim.Core.Damage;
+using TacticalSim.Core.Damage.Anatomy;
+using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.DependencyInjection;
 using TacticalSim.Core;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Units;
 using TacticalSim.Core.World;
+using TacticalSim.Core.Randomness;
 using System.Linq;
 
 namespace TacticalSim.GodotClient
@@ -129,7 +134,8 @@ namespace TacticalSim.GodotClient
         private void InitializeDependencyInjection()
         {
             var services = new ServiceCollection();
-            services.AddTacticalSimCore();
+            services.AddTacticalSimCoreWithDamageModel(
+                new DamageModelOptions(DamageModelVersion.IntegratedV3));
             _serviceProvider = services.BuildServiceProvider();
             _projectileInteractionService =
                 _serviceProvider.GetRequiredService<IProjectileInteractionService>();
@@ -508,9 +514,10 @@ namespace TacticalSim.GodotClient
                 return actions;
 
             MedicalReport traumaReport = MedicalAssessor.AssessTrauma(Dummy.Physiology);
-            bool hasOpenChestWound =
-                traumaReport.DestroyedVolumeCc.TryGetValue(OrganType.Lung, out float destroyedLungVolumeCc)
-                && destroyedLungVolumeCc > 0f;
+            bool hasOpenChestWound = Dummy.Physiology is IIntegratedMedicalStateTarget integrated
+                ? integrated.MedicalState.Thoracic.Lesions.Count > 0
+                : traumaReport.DestroyedVolumeCc.TryGetValue(OrganType.Lung, out float destroyedLungVolumeCc)
+                  && destroyedLungVolumeCc > 0f;
             if (hasOpenChestWound && !Dummy.Physiology.HasChestSeal)
                 actions.Add(MedicalAction.ApplyChestSeal);
             if (Dummy.Physiology.TensionPneumothoraxLevel > 0f)
@@ -521,8 +528,11 @@ namespace TacticalSim.GodotClient
             AddTourniquetIfApplicable(actions, BodyPartType.RightLeg, MedicalAction.ApplyRightLegTourniquet);
 
             BodyPart? abdomen = FindBodyPart(Dummy.Physiology.RootBodyPart, BodyPartType.Abdomen);
-            if (abdomen != null && !abdomen.HasWoundPacking &&
-                abdomen.Voxels.Exists(voxel => voxel.IsDestroyed && voxel.Organ == OrganType.Muscle))
+            bool hasPackableAbdominalWound = Dummy.Physiology is IIntegratedMedicalStateTarget integratedTarget
+                ? HasControllableBleedingSource(integratedTarget.MedicalState, BodyPartType.Abdomen)
+                : abdomen != null && !abdomen.HasWoundPacking
+                  && abdomen.Voxels.Exists(voxel => voxel.IsDestroyed && voxel.Organ == OrganType.Muscle);
+            if (hasPackableAbdominalWound)
                 actions.Add(MedicalAction.PackAbdominalWound);
             return actions;
         }
@@ -530,9 +540,46 @@ namespace TacticalSim.GodotClient
         private void AddTourniquetIfApplicable(
             List<MedicalAction> actions, BodyPartType type, MedicalAction action)
         {
+            if (Dummy.Physiology is IIntegratedMedicalStateTarget integrated)
+            {
+                if (HasControllableBleedingSource(integrated.MedicalState, type))
+                    actions.Add(action);
+                return;
+            }
+
             BodyPart? part = FindBodyPart(Dummy.Physiology.RootBodyPart, type);
             if (part != null && !part.HasTourniquet && part.GetActiveBleedRate() > 0f)
                 actions.Add(action);
+        }
+
+        private static bool HasControllableBleedingSource(
+            ActorMedicalState state,
+            BodyPartType region)
+        {
+            foreach (BleedingSource source in state.Hemorrhage.Sources)
+            {
+                if (!source.Compressible
+                    || source.ControlState is BleedingControlState.Tourniquet
+                        or BleedingControlState.Packed
+                        or BleedingControlState.Definitive)
+                {
+                    continue;
+                }
+
+                Lesion? lesion = state.LesionRepository.Lesions.FirstOrDefault(x => x.Id == source.LesionId);
+                if (lesion is null)
+                    continue;
+                try
+                {
+                    if (state.Anatomy.GetRequired(lesion.StructureId).Region == region)
+                        return true;
+                }
+                catch (KeyNotFoundException)
+                {
+                    // A legacy voxel-only structure has no integrated treatment target.
+                }
+            }
+            return false;
         }
 
         private static BodyPart? FindBodyPart(BodyPart part, BodyPartType type)
@@ -624,7 +671,9 @@ namespace TacticalSim.GodotClient
             Dummy = new TacticalEntity(
                 DummyEntityId,
                 new System.Numerics.Vector3(0, 1f, 0),
-                AnatomicalDummyBuilder.BuildDummy());
+                AnatomicalDummyBuilder.BuildIntegratedDummy(
+                    DummyEntityId.ToString("D"),
+                    _serviceProvider.GetRequiredService<IDeterministicRandomStreamProvider>()));
 
             _world.AddEntity(Shooter);
             _world.AddEntity(Dummy);
@@ -685,9 +734,12 @@ namespace TacticalSim.GodotClient
             SetLastProjectileInteraction(result);
 
             MedicalReport report = MedicalAssessor.AssessTrauma(Dummy.Physiology);
-            bool destroyedLung = report.DestroyedVolumeCc.TryGetValue(
-                OrganType.Lung,
-                out float destroyedLungVolumeCc) && destroyedLungVolumeCc > 0f;
+            bool destroyedLung = Dummy.Physiology is IIntegratedMedicalStateTarget integrated
+                ? integrated.MedicalState.LesionRepository.Lesions.Any(
+                    lesion => lesion.StructureId.StartsWith("organ.lung-", StringComparison.Ordinal))
+                : report.DestroyedVolumeCc.TryGetValue(
+                    OrganType.Lung,
+                    out float destroyedLungVolumeCc) && destroyedLungVolumeCc > 0f;
             if (result is null
                 || !result.WoundTrack.Segments.Any(
                     segment => segment.StructureType == OrganType.Lung.ToString())

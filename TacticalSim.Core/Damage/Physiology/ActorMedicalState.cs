@@ -48,8 +48,9 @@ public sealed class ActorMedicalState : IAnatomicalInjuryTarget
         Thoracic = new(Hemorrhage); Inventory = inventory ?? new TreatmentInventory();
         Musculoskeletal = MusculoskeletalFunctionalState.Healthy;
         Neurological = NeurologicalFunctionalState.Healthy;
+        CasualtyState = CasualtyState.Effective;
         Capability = _capabilityResolver.Resolve(Hemorrhage.Cardiovascular, Hemorrhage.OxygenDelivery,
-            Hemorrhage.CasualtyState, Musculoskeletal, Neurological);
+            CasualtyState, Musculoskeletal, Neurological);
     }
 
     public CasualtyProfile Profile { get; }
@@ -63,7 +64,7 @@ public sealed class ActorMedicalState : IAnatomicalInjuryTarget
     public MusculoskeletalFunctionalState Musculoskeletal { get; private set; }
     public NeurologicalFunctionalState Neurological { get; private set; }
     public CapabilityState Capability { get; private set; }
-    public CasualtyState CasualtyState => Hemorrhage.CasualtyState;
+    public CasualtyState CasualtyState { get; private set; }
 
     /// <summary>Adds an impact atomically. A repeated impact ID is a deterministic no-op.</summary>
     public bool ApplyImpact(string impactId, IEnumerable<Lesion> lesions)
@@ -75,16 +76,20 @@ public sealed class ActorMedicalState : IAnatomicalInjuryTarget
         DateTimeOffset timestamp = DateTimeOffset.UnixEpoch.AddSeconds(SimulationTimeSeconds);
         LesionRepository.AddRange(materialized.Select(x => x with { CreatedAt = timestamp }));
         _processedImpactIds.Add(impactId);
-        SynchronizeLesions(); RefreshFunctionalState(); return true;
+        SynchronizeLesions();
+        RefreshFunctionalState();
+        RefreshCasualtyAndCapability();
+        return true;
     }
 
     public void Tick(float seconds)
     {
         if (!float.IsFinite(seconds) || seconds < 0f) throw new ArgumentOutOfRangeException(nameof(seconds));
         SynchronizeLesions(); RefreshFunctionalState();
+        Thoracic.NeurologicalVentilationModifier = Neurological.BrainstemFunction;
+        Thoracic.NeurologicalCardiacModifier = Neurological.BrainstemFunction;
         Thoracic.Tick(seconds); SimulationTimeSeconds += seconds;
-        Capability = _capabilityResolver.Resolve(Hemorrhage.Cardiovascular, Hemorrhage.OxygenDelivery,
-            Hemorrhage.CasualtyState, Musculoskeletal, Neurological);
+        RefreshCasualtyAndCapability();
     }
 
     public ActorMedicalSnapshot CaptureSnapshot()
@@ -118,5 +123,14 @@ public sealed class ActorMedicalState : IAnatomicalInjuryTarget
     {
         Musculoskeletal = _musculoskeletalResolver.Resolve(LesionRepository.Lesions, Anatomy);
         Neurological = _neurologicalResolver.Resolve(LesionRepository.Lesions, Anatomy);
+    }
+
+    private void RefreshCasualtyAndCapability()
+    {
+        CasualtyState = (CasualtyState)Math.Max(
+            (int)Hemorrhage.CasualtyState,
+            (int)Neurological.DirectCasualtyState);
+        Capability = _capabilityResolver.Resolve(Hemorrhage.Cardiovascular, Hemorrhage.OxygenDelivery,
+            CasualtyState, Musculoskeletal, Neurological);
     }
 }

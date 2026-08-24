@@ -198,7 +198,16 @@ public sealed class LesionGenerator : ILesionGenerator
         { bool transection=g.Radius.Meters*2>=s.Calibre.Meters; return new VesselLesion(id,s.Id,impact,transection?LesionKind.VesselTransection:LesionKind.VesselLaceration,severity,g,LesionTreatmentState.Untreated,created,Distance.FromMeters(MathF.Min(s.Calibre.Meters,g.Radius.Meters*2)),s.PressureRegime,transection); }
         if(s.Type==AnatomicalStructureType.Bone) return new FractureLesion(id,s.Id,impact,severity,g,LesionTreatmentState.Untreated,created,FractureStabilityClassifier.Classify(severity),s.FunctionalRole==FunctionalRole.WeightBearing);
         if(s.Type==AnatomicalStructureType.Nerve) return new NerveLesion(id,s.Id,impact,s.FunctionalRole==FunctionalRole.SpinalCord?LesionKind.BrainOrSpinalInjury:LesionKind.NerveInjury,severity,g,LesionTreatmentState.Untreated,created,severity>.7f?NerveDamageGrade.CompleteDisruption:severity>.3f?NerveDamageGrade.PartialDisruption:NerveDamageGrade.Neuropraxia,s.FunctionalRole==FunctionalRole.SpinalCord?InferSpinalLaterality(g.Center.X):s.Laterality,s.FunctionalRole==FunctionalRole.SpinalCord?InferSpinalLevel(s.Id,g.Center.Y):null);
-        LesionKind kind=s.Type switch { AnatomicalStructureType.Airway=>LesionKind.AirwayDisruption, AnatomicalStructureType.Pleura=>LesionKind.PleuralBreach, AnatomicalStructureType.Pericardium=>LesionKind.CardiacInjury, AnatomicalStructureType.Organ=>LesionKind.ParenchymalInjury, _=>LesionKind.OpenSoftTissueWound };
+        LesionKind kind = string.Equals(s.Id, "organ.brain", StringComparison.Ordinal)
+            ? LesionKind.BrainOrSpinalInjury
+            : s.Type switch
+            {
+                AnatomicalStructureType.Airway => LesionKind.AirwayDisruption,
+                AnatomicalStructureType.Pleura => LesionKind.PleuralBreach,
+                AnatomicalStructureType.Pericardium => LesionKind.CardiacInjury,
+                AnatomicalStructureType.Organ => LesionKind.ParenchymalInjury,
+                _ => LesionKind.OpenSoftTissueWound
+            };
         return new TissueLesion(id,s.Id,impact,kind,severity,g,LesionTreatmentState.Untreated,created);
     }
     private static Vector3 SafeDirection(WoundTrackSegment s) { Vector3 d=s.EndPoint-s.EntryPoint; return d.LengthSquared()>0?Vector3.Normalize(d):Vector3.Zero; }

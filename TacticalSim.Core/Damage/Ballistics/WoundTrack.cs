@@ -216,7 +216,7 @@ internal static class WoundTrackContractGuards
             }
         }
 
-        if (modelVersion != DamageModelVersion.FoundationsV2)
+        if (modelVersion is not (DamageModelVersion.FoundationsV2 or DamageModelVersion.IntegratedV3))
             return;
 
         foreach (WoundTrackSegment segment in depositedSegments)

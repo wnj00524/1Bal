@@ -9,6 +9,8 @@ lesion -> bleeding source -> destination ledger -> cardiovascular state
 
 `HemorrhagePhysiologyModel` is the authoritative M7 progression contract. Legacy voxel-derived bleeding remains available only for migration comparisons in `TacticalActorPhysiology`; new damage-model callers should create sources through `BleedingSourceFactory` and advance this model.
 
+`ActorMedicalState` composes hemorrhage, thoracic, neurological, musculoskeletal, casualty, and capability state under one monotonic tick. Direct neurological casualty state is combined with perfusion/oxygen-delivery state using the most restrictive state, and persistent fatal neurological lesions therefore remain terminal. `IntegratedActorPhysiology` is the compatibility projection consumed by existing tactical interfaces; it never scans destroyed voxels for organ function. Godot opts into `IntegratedV3` explicitly, while legacy actors are rejected at that version boundary.
+
 ## Contracts and invariants
 
 - Each lesion owns at most one independently controllable `BleedingSource`.
