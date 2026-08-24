@@ -249,6 +249,9 @@ namespace TacticalSim.GodotClient
         private void OnShootSelected()
         {
             _commandMenu.Hide();
+            // The target actor is created when a scenario is loaded, after the silhouette's
+            // _Ready callback. Rebind here so every shot uses the current model geometry.
+            _targetSilhouette.SetTarget(_simulationManager.Dummy);
             _targetMenu.Position = new Vector2I(
                 (int)_commandScreenPosition.X + 12,
                 (int)_commandScreenPosition.Y + 12);
