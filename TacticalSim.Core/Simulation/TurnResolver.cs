@@ -255,7 +255,7 @@ namespace TacticalSim.Core.Simulation
             }
 
             // Advance physiology for all registered entities in deterministic order (by Id)
-            var entities = _world.GetEntities().OrderBy(e => e.Id).ToList();
+            var entities = _world.GetEntities();
             foreach (var entity in entities)
             {
                 entity.Physiology?.TickPhysiology(dt);
