@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TacticalSim.Core.Damage.Lesions;
 using TacticalSim.Core.Physiology;
 
 namespace TacticalSim.Core
@@ -10,6 +11,8 @@ namespace TacticalSim.Core
         public float TotalBleedRateMlPerMin { get; set; }
         public float LungCapacityLostPercentage { get; set; }
         public Dictionary<OrganType, float> DestroyedVolumeCc { get; set; } = new();
+        public int PersistentLesionCount { get; set; }
+        public IReadOnlyList<string> PersistentLesionDescriptions { get; set; } = Array.Empty<string>();
         public string AssessmentText { get; set; } = string.Empty;
     }
 
@@ -56,6 +59,17 @@ namespace TacticalSim.Core
             
             ProcessBodyPart(dummy.RootBodyPart);
 
+            if (dummy is IAnatomicalInjuryTarget injuryTarget)
+            {
+                Lesion[] lesions = injuryTarget.LesionRepository.Lesions
+                    .OrderBy(static lesion => lesion.Id, StringComparer.Ordinal)
+                    .ToArray();
+                report.PersistentLesionCount = lesions.Length;
+                report.PersistentLesionDescriptions = lesions
+                    .Select(DescribePersistentLesion)
+                    .ToArray();
+            }
+
             // Report actual systemic outflow at the casualty's current pressure,
             // rather than the wounds' normal-pressure maximum.
             totalBleedRateSec = dummy.SystemicBleedRateMlPerSecond;
@@ -78,7 +92,7 @@ namespace TacticalSim.Core
             sb.AppendLine("--- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---");
             sb.AppendLine();
             
-            if (report.DestroyedVolumeCc.Count == 0)
+            if (report.DestroyedVolumeCc.Count == 0 && report.PersistentLesionCount == 0)
             {
                 sb.AppendLine("No significant tissue destruction detected.");
                 sb.AppendLine();
@@ -96,12 +110,25 @@ namespace TacticalSim.Core
                 return report;
             }
 
-            sb.AppendLine("ORGAN DAMAGE (Volume Destroyed):");
-            foreach (var kvp in report.DestroyedVolumeCc)
+            if (report.DestroyedVolumeCc.Count > 0)
             {
-                sb.AppendLine($"- {kvp.Key}: {kvp.Value:F1} cc");
+                sb.AppendLine("ORGAN DAMAGE (Volume Destroyed):");
+                foreach (var kvp in report.DestroyedVolumeCc)
+                {
+                    sb.AppendLine($"- {kvp.Key}: {kvp.Value:F1} cc");
+                }
+                sb.AppendLine();
             }
-            sb.AppendLine();
+
+            if (report.PersistentLesionCount > 0)
+            {
+                sb.AppendLine("PERSISTENT STRUCTURAL INJURY (Authoritative Model):");
+                foreach (string description in report.PersistentLesionDescriptions)
+                {
+                    sb.AppendLine($"- {description}");
+                }
+                sb.AppendLine();
+            }
             
             if (report.DestroyedVolumeCc.ContainsKey(OrganType.Heart))
                 sb.AppendLine(">>> CRITICAL ALARM: CATASTROPHIC CARDIAC HEMORRHAGE DETECTED <<<");
@@ -188,5 +215,8 @@ namespace TacticalSim.Core
             report.AssessmentText = sb.ToString();
             return report;
         }
+
+        private static string DescribePersistentLesion(Lesion lesion) =>
+            $"{lesion.Kind} at {lesion.StructureId} (severity {lesion.Severity:P0})";
     }
 }

@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using TacticalSim.Core;
 using TacticalSim.Core.Ballistics;
 using TacticalSim.Core.Damage;
 using TacticalSim.Core.Damage.Ballistics;
@@ -202,6 +203,12 @@ public class ProjectileInteractionServiceTests
         Assert.False(result.DebugTrace.CapabilityAfter.CanStand);
         Assert.Equal(0f, target.MobilityLevel);
         Assert.False(target.CanStand);
+
+        MedicalReport report = MedicalAssessor.AssessTrauma(target);
+        Assert.Equal(target.LesionRepository.Lesions.Count, report.PersistentLesionCount);
+        Assert.True(report.PersistentLesionCount > 0);
+        Assert.Contains("PERSISTENT STRUCTURAL INJURY", report.AssessmentText);
+        Assert.DoesNotContain("No significant tissue destruction detected.", report.AssessmentText);
     }
 
     [Fact]
