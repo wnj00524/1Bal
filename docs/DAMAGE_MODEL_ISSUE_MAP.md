@@ -43,6 +43,7 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-504 | [Add tactical rescue exposure and opportunity cost](https://github.com/wnj00524/1Bal/issues/143) | M10: Isometric tactical integration | Closed |
 | DM-505 | [Create isometric casualty-status overlays](https://github.com/wnj00524/1Bal/issues/144) | M10: Isometric tactical integration | Closed |
 | DM-506 | [Add casualty-aware scenario objectives and scoring](https://github.com/wnj00524/1Bal/issues/145) | M10: Isometric tactical integration | Closed |
+| DM-507 | [Surface authoritative lesion damage in the Godot medical report](https://github.com/wnj00524/1Bal/issues/203) | M10: Isometric tactical integration | Open |
 | DM-601 | [Add configurable casualty profiles](https://github.com/wnj00524/1Bal/issues/146) | M11: Casualty variation and bounded uncertainty | Closed |
 | DM-602 | [Add bounded, seeded physiological uncertainty](https://github.com/wnj00524/1Bal/issues/147) | M11: Casualty variation and bounded uncertainty | Closed |
 | DM-603 | [Add terminal projectile behavior profiles](https://github.com/wnj00524/1Bal/issues/154) | M11: Casualty variation and bounded uncertainty | Closed |
