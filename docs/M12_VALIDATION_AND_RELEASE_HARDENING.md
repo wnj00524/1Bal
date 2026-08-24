@@ -18,6 +18,8 @@ Core remains authoritative and presentation-independent. SI units are used at ca
 
 `ParameterProvenanceRegistry` is the machine-readable registry contract. Every newly introduced outcome-affecting constant must be registered with a stable ID, component, value and unit, exactly one classification, source, version, owner, and affected tests. The allowed classifications are externally sourced, empirically calibrated, inferred, provisional, and gameplay tuning.
 
+`IntegratedNeurologicalParameterProvenance` registers the DM-802 brain-state thresholds and cognition/brainstem multipliers under `integrated-neurology-v1`. These are explicitly provisional gameplay parameters and must not be presented as clinical cut-offs.
+
 The existing parameter inventories are the initial human-readable registry:
 
 | Component | Canonical inventory | Owner | Version |

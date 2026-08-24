@@ -81,6 +81,8 @@ public sealed class ThoracicInjuryModel
     public PleuralCompartment Right { get; }
     public ThoracicState State { get; private set; }
     public IReadOnlyList<ThoracicLesion> Lesions => _lesions;
+    public float NeurologicalVentilationModifier { get; set; } = 1f;
+    public float NeurologicalCardiacModifier { get; set; } = 1f;
 
     public void AddLesion(ThoracicLesion lesion)
     {
@@ -140,8 +142,11 @@ public sealed class ThoracicInjuryModel
         float tamponade = Math.Clamp((pericardial - _parameters.TamponadeOnsetMl) / MathF.Max(1f, _parameters.TamponadeCriticalMl - _parameters.TamponadeOnsetMl), 0f, 1f);
         float tensionCirculatoryPenalty = Math.Clamp((Left.IsTension ? Left.PressureKpa / 10f : 0f) + (Right.IsTension ? Right.PressureKpa / 10f : 0f), 0f, .7f);
         float cardiac = Math.Clamp((1f - tamponade * .85f) * (1f - tensionCirculatoryPenalty), 0f, 1f);
-        _physiology.VentilationEffectiveness = ventilation; _physiology.CardiacFunction = cardiac;
-        State = new(Left, Right, ventilation, cardiac, pericardial, tamponade);
+        float effectiveVentilation = ventilation * Math.Clamp(NeurologicalVentilationModifier, 0f, 1f);
+        float effectiveCardiac = cardiac * Math.Clamp(NeurologicalCardiacModifier, 0f, 1f);
+        _physiology.VentilationEffectiveness = effectiveVentilation;
+        _physiology.CardiacFunction = effectiveCardiac;
+        State = new(Left, Right, effectiveVentilation, effectiveCardiac, pericardial, tamponade);
     }
 
     private void UpdateCompartment(PleuralCompartment compartment, float dt)

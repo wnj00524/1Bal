@@ -1,6 +1,9 @@
 using System.Numerics;
 using TacticalSim.Core.Physiology;
 using TacticalSim.Core.Damage.Anatomy;
+using TacticalSim.Core.Damage.Physiology;
+using TacticalSim.Core.Damage.Variation;
+using TacticalSim.Core.Randomness;
 
 namespace TacticalSim.Core
 {
@@ -9,10 +12,39 @@ namespace TacticalSim.Core
         public static IActorPhysiology BuildDummy()
         {
             var physiology = new TacticalActorPhysiology();
-            
-            var root = new BodyPart { Type = BodyPartType.Thorax };
+            BodyPart root = BuildBody();
             physiology.SetRoot(root);
             physiology.SetAnatomy(StandardAnatomy.CreateCatalog());
+            return physiology;
+        }
+
+        /// <summary>
+        /// Builds the production lesion-authoritative actor. Voxel data is retained
+        /// for deterministic projectile traversal and visualization only.
+        /// </summary>
+        public static IntegratedActorPhysiology BuildIntegratedDummy(
+            string actorId,
+            IDeterministicRandomStreamProvider random,
+            CasualtyProfile? profile = null,
+            PhysiologicalUncertaintyOptions? uncertainty = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+            ArgumentNullException.ThrowIfNull(random);
+
+            BodyPart root = BuildBody();
+            IAnatomicalStructureCatalog anatomy = StandardAnatomy.CreateCatalog();
+            var state = new ActorMedicalState(
+                actorId,
+                profile ?? CasualtyProfile.Default,
+                anatomy,
+                random,
+                uncertainty ?? new PhysiologicalUncertaintyOptions { Enabled = false });
+            return new IntegratedActorPhysiology(root, state);
+        }
+
+        private static BodyPart BuildBody()
+        {
+            var root = new BodyPart { Type = BodyPartType.Thorax };
             var abdomen = new BodyPart { Type = BodyPartType.Abdomen, Parent = root };
             
             var neck = new BodyPart { Type = BodyPartType.Neck, Parent = root };
@@ -39,7 +71,7 @@ namespace TacticalSim.Core
             PopulateLimbVoxels(leftLeg, new Vector3(-0.1f, -0.4f, 0f), new Vector3(0.12f, 0.4f, 0.12f)); // Left Leg
             PopulateLimbVoxels(rightLeg, new Vector3(0.1f, -0.4f, 0f), new Vector3(0.12f, 0.4f, 0.12f)); // Right Leg
             
-            return physiology;
+            return root;
         }
 
         private static void PopulateLimbVoxels(BodyPart limb, Vector3 center, Vector3 extents)

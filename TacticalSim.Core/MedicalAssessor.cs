@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using TacticalSim.Core.Damage.Lesions;
+using TacticalSim.Core.Damage.Physiology;
 using TacticalSim.Core.Physiology;
 
 namespace TacticalSim.Core
@@ -13,6 +14,7 @@ namespace TacticalSim.Core
         public Dictionary<OrganType, float> DestroyedVolumeCc { get; set; } = new();
         public int PersistentLesionCount { get; set; }
         public IReadOnlyList<string> PersistentLesionDescriptions { get; set; } = Array.Empty<string>();
+        public CasualtyState? AuthoritativeCasualtyState { get; set; }
         public string AssessmentText { get; set; } = string.Empty;
     }
 
@@ -20,6 +22,10 @@ namespace TacticalSim.Core
     {
         public static MedicalReport AssessTrauma(IActorPhysiology dummy)
         {
+            ArgumentNullException.ThrowIfNull(dummy);
+            if (dummy is IIntegratedMedicalStateTarget integrated)
+                return AssessIntegrated(dummy, integrated.MedicalState);
+
             var report = new MedicalReport();
             
             float totalLungVolume = 0;
@@ -211,6 +217,75 @@ namespace TacticalSim.Core
             {
                 sb.AppendLine($"Consciousness: {(dummy.ConsciousnessLevel*100f):F0}%");
             }
+
+            report.AssessmentText = sb.ToString();
+            return report;
+        }
+
+        private static MedicalReport AssessIntegrated(
+            IActorPhysiology physiology,
+            ActorMedicalState state)
+        {
+            ActorMedicalSnapshot snapshot = state.CaptureSnapshot();
+            Lesion[] lesions = snapshot.Lesions
+                .OrderBy(static lesion => lesion.Id, StringComparer.Ordinal)
+                .ToArray();
+            var report = new MedicalReport
+            {
+                TotalBleedRateMlPerMin = state.Hemorrhage.CurrentBleedRateMlPerSecond * 60f,
+                LungCapacityLostPercentage = (1f - snapshot.Thoracic.VentilationEffectiveness) * 100f,
+                PersistentLesionCount = lesions.Length,
+                PersistentLesionDescriptions = lesions.Select(DescribePersistentLesion).ToArray(),
+                AuthoritativeCasualtyState = snapshot.Casualty
+            };
+
+            var sb = new StringBuilder();
+            sb.AppendLine("--- IMMEDIATE POST-IMPACT MEDICAL ASSESSMENT ---");
+            sb.AppendLine();
+            if (lesions.Length == 0)
+            {
+                sb.AppendLine("No significant structural injury detected.");
+                sb.AppendLine();
+            }
+            else
+            {
+                sb.AppendLine("PERSISTENT STRUCTURAL INJURY (Authoritative Model):");
+                foreach (string description in report.PersistentLesionDescriptions)
+                    sb.AppendLine($"- {description}");
+                sb.AppendLine();
+            }
+
+            if (snapshot.Neurological.DirectCasualtyState >= CasualtyState.Incapacitated)
+            {
+                sb.AppendLine($">>> NEUROLOGICAL ALARM: {snapshot.Neurological.DirectCasualtyState.ToString().ToUpperInvariant()} FROM BRAIN INJURY <<<");
+            }
+            if (snapshot.Thoracic.VentilationEffectiveness < .8f)
+                sb.AppendLine($">>> RESPIRATORY ALARM: VENTILATION {(snapshot.Thoracic.VentilationEffectiveness * 100f):F0}% <<<");
+
+            sb.AppendLine($"SYSTEMIC BLEED RATE: {report.TotalBleedRateMlPerMin:F0} ml/min");
+            sb.AppendLine($"AUTHORITATIVE CASUALTY STATE: {snapshot.Casualty.ToString().ToUpperInvariant()}");
+            sb.AppendLine(snapshot.Casualty switch
+            {
+                CasualtyState.Dead => "ESTIMATED TIME TO UNCONSCIOUSNESS: Not applicable (dead)",
+                CasualtyState.Unconscious => "ESTIMATED TIME TO UNCONSCIOUSNESS: Already unconscious",
+                _ => "ESTIMATED TIME TO UNCONSCIOUSNESS: Not projected; state advances through the authoritative physiology model"
+            });
+
+            sb.AppendLine();
+            sb.AppendLine("--- LIVE VITALS ---");
+            sb.AppendLine($"Blood Volume: {(snapshot.CirculatingBloodMl / 1000f):F2} L / {(state.Hemorrhage.Blood.BaselineMilliliters / 1000f):F2} L");
+            sb.AppendLine($"Blood Pressure (MAP): {snapshot.Cardiovascular.MeanArterialPressureMmhg:F0} mmHg");
+            sb.AppendLine($"Heart Rate: {snapshot.Cardiovascular.HeartRateBpm:F0} BPM");
+            sb.AppendLine($"SpO2 (Oxygenation): {(snapshot.OxygenDelivery.ArterialSaturation * 100f):F0}%");
+            sb.AppendLine($"Cerebral Delivery: {(snapshot.OxygenDelivery.CerebralDeliveryIndex * 100f):F0}%");
+            sb.AppendLine($"Brain Function: {(snapshot.Neurological.CognitiveCapacity * 100f):F0}%");
+            sb.AppendLine($"Brainstem Function: {(snapshot.Neurological.BrainstemFunction * 100f):F0}%");
+            sb.AppendLine(snapshot.Casualty switch
+            {
+                CasualtyState.Dead => "Consciousness: [DEAD]",
+                CasualtyState.Unconscious => "Consciousness: [UNCONSCIOUS]",
+                _ => $"Consciousness: {(physiology.ConsciousnessLevel * 100f):F0}%"
+            });
 
             report.AssessmentText = sb.ToString();
             return report;

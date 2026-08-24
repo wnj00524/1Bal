@@ -55,6 +55,8 @@ DM-105 divides the spinal cord into stable cervical, thoracic, and lumbar struct
 
 `TacticalActorPhysiology` combines neurological lower-limb capacity with movement and standing, and neurological upper-limb capacity with weapon handling. This state is refreshed after authoritative lesion generation and on physiology ticks. It does not consult destroyed brain or nerve voxel fractions, and it cannot improve a more restrictive legacy voxel or fracture result. Sensory loss, pain, reflexes, autonomic pathways, hand-specific actions, gait selection, and the general DM-207 capability model remain outside this bounded bridge.
 
+DM-802 completes the production brain-injury bridge for the integrated model. An intersection with `organ.brain` now creates a `BrainOrSpinalInjury` lesion rather than a generic parenchymal record. `NeurologicalFunctionalResolver` derives cognition, brainstem function, and direct effective/incapacitated/unconscious/dead state from that persistent named lesion. The production Godot dummy uses `IntegratedActorPhysiology`, whose voxels are projectile traversal and visualization data only; its medical, casualty, and capability projections come from `ActorMedicalState`. `TacticalActorPhysiology` remains available for explicit `LegacyV1` and `FoundationsV2` comparisons and legacy-focused tests.
+
 ## Serialization and inspection
 
 The lesion base contract uses explicit JSON polymorphism and round-trips every subtype through `DamageModelJson`. `LesionDebugInspector` returns read-only rows containing structure, lesion kind, severity, treatment state, origin impact, and subtype detail. Reference impact outputs now mark lesions available and include their serialized representations.
@@ -78,5 +80,10 @@ The lesion base contract uses explicit JSON polymorphism and round-trips every s
 | Partial nerve disruption capacity | `0.40` | provisional gameplay mapping; not clinically validated | bounded partial motor constraint |
 | Complete nerve disruption capacity | `0.00` | provisional gameplay mapping; not clinically validated | loss of the relevant motor pathway |
 | Multiple nerve lesion aggregation | minimum capacity (worst effect) | provisional deterministic rule; not clinically validated | order-independent per-limb result |
+| Brain incapacitation threshold | severity `0.15` | provisional; not clinically validated | direct cognitive incapacity before loss of consciousness |
+| Brain unconsciousness threshold | severity `0.30` | provisional; not clinically validated | immediate lesion-driven unconscious state |
+| Brain fatal threshold | severity `0.85` | provisional; not clinically validated | direct terminal neurological state |
+| Brain cognitive loss multiplier | `2.5` | provisional gameplay tuning | maps bounded lesion severity to cognitive capability |
+| Brainstem loss multiplier | `0.5` | provisional gameplay tuning | maps bounded brain-lesion severity to autonomic modifier pending finer brain substructures |
 
-The standard map is deliberately coarse and is not a clinical predictor. Pleural volumes are represented as intersectable centreline capsules rather than exact membranes. Membrane-accurate geometry and finer solid-organ substructures remain follow-up refinements. M7 owns pressure-dependent bleeding and the general physiology-to-capability model; DM-104 supplies only the bounded musculoskeletal bridge described above. Legacy voxel-derived physiology remains temporarily active behind the existing migration boundary.
+The standard map is deliberately coarse and is not a clinical predictor. Pleural volumes are represented as intersectable centreline capsules rather than exact membranes. Membrane-accurate geometry and distinct cerebral/brainstem substructures remain follow-up refinements. M7 owns pressure-dependent bleeding and the general physiology-to-capability model. Legacy voxel-derived physiology remains available behind explicit legacy/foundations model versions, but it is no longer the production Godot casualty state.
