@@ -57,7 +57,8 @@ public static class IntegratedNeurologicalParameterProvenance
         "neurology.brain.unconscious-severity",
         "neurology.brain.fatal-severity",
         "neurology.brain.cognitive-loss-multiplier",
-        "neurology.brain.brainstem-loss-multiplier"
+        "neurology.brain.brainstem-loss-multiplier",
+        "neurology.brain.penetrating-minimum-severity"
     ];
 
     public static ParameterProvenanceRegistry CreateRegistry()
@@ -77,6 +78,10 @@ public static class IntegratedNeurologicalParameterProvenance
             ParameterClassification.GameplayTuning, source, version, owner, tests));
         registry.Register(new(RequiredParameterIds[4], "neurology", "brainstem loss multiplier", "0.5 ratio",
             ParameterClassification.GameplayTuning, source, version, owner, tests));
+        registry.Register(new(RequiredParameterIds[5], "lesion generation", "penetrating brain minimum severity", "0.30 ratio",
+            ParameterClassification.Provisional,
+            "Issue #207 M12 regression calibration; direct brain wound tracks must not present as near-normal function; no clinical prognostic cut-off asserted",
+            "integrated-neurology-v2", owner, tests));
         return registry;
     }
 }

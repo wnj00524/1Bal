@@ -55,6 +55,7 @@ All roadmap issues use the roadmap’s type, priority, size, dependency, and acc
 | DM-704 | [Add damage-model performance benchmarks](https://github.com/wnj00524/1Bal/issues/160) | M12: Validation, balancing, performance, and release hardening | Closed |
 | DM-705 | [Add model-versioned save and replay support](https://github.com/wnj00524/1Bal/issues/161) | M12: Validation, balancing, performance, and release hardening | Closed |
 | DM-706 | [Publish damage-model developer documentation](https://github.com/wnj00524/1Bal/issues/162) | M12: Validation, balancing, performance, and release hardening | Closed |
+| DM-707 | [Calibrate penetrating brain trauma and verify Godot authoritative-state reporting](https://github.com/wnj00524/1Bal/issues/207) | M12: Validation, balancing, performance, and release hardening | In progress |
 | DM-801 | [Make projectile lesion application idempotent and simulation-timestamped](https://github.com/wnj00524/1Bal/issues/187) | M6: Anatomical structures and persistent lesions | Open |
 | DM-802 | [Integrate lesion-driven neurological and casualty state in Godot](https://github.com/wnj00524/1Bal/issues/205) | M7: Hemorrhage, circulation, and tactical capability | Closed |
 
