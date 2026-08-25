@@ -17,6 +17,50 @@ namespace TacticalSim.Tests;
 
 public sealed class IntegratedNeurologicalGodotPathTests
 {
+    [Theory]
+    [MemberData(nameof(PistolHeadImpactProfiles))]
+    public void PistolBrainPenetration_UsesAuthoritativeCoreOutcomeAndProgression(
+        string projectileName,
+        float velocity,
+        float mass,
+        float area,
+        float drag)
+    {
+        (IntegratedActorPhysiology target, ProjectileInteractionResult result) = FireHeadImpact(
+            207UL, projectileName, velocity, mass, area, drag);
+
+        Lesion brain = Assert.Single(target.LesionRepository.Lesions,
+            lesion => lesion.StructureId == "organ.brain");
+        Assert.True(brain.Geometry.Length.Meters > 0f);
+        Assert.True(brain.Severity >= LesionGenerator.PenetratingBrainMinimumSeverity);
+        Assert.Equal(CasualtyState.Unconscious, target.MedicalState.CasualtyState);
+        Assert.Equal(0f, target.ConsciousnessLevel);
+        Assert.All(target.MedicalState.Capability.Capacity.Values,
+            capacity => Assert.Equal(0f, capacity));
+        Assert.Equal(DamageModelVersion.IntegratedV3, result.WoundTrack.ModelVersion);
+
+        ActorMedicalSnapshot before = target.MedicalState.CaptureSnapshot();
+        MedicalReport immediate = MedicalAssessor.AssessTrauma(target);
+        Assert.Contains("Brain Function: 25%", immediate.AssessmentText);
+        Assert.Contains("Authoritative Model Time: 0.0 s", immediate.AssessmentText);
+
+        target.TickPhysiology(5f);
+
+        ActorMedicalSnapshot after = target.MedicalState.CaptureSnapshot();
+        MedicalReport progressed = MedicalAssessor.AssessTrauma(target);
+        Assert.Equal(5f, after.SimulationTimeSeconds);
+        Assert.True(after.CirculatingBloodMl < before.CirculatingBloodMl);
+        Assert.Equal(CasualtyState.Unconscious, progressed.AuthoritativeCasualtyState);
+        Assert.Contains("Authoritative Model Time: 5.0 s", progressed.AssessmentText);
+        Assert.Contains("Cumulative Blood Loss:", progressed.AssessmentText);
+    }
+
+    public static TheoryData<string, float, float, float, float> PistolHeadImpactProfiles => new()
+    {
+        { ".380 ACP", 290f, .0062f, .0000456f, .14f },
+        { "9x19mm Parabellum", 380f, .008f, .0000636f, .15f }
+    };
+
     [Fact]
     public void TwelveGaugeSlugHeadImpact_ImmediatelyDrivesAuthoritativeUnconsciousState()
     {

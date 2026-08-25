@@ -273,7 +273,9 @@ namespace TacticalSim.Core
 
             sb.AppendLine();
             sb.AppendLine("--- LIVE VITALS ---");
+            sb.AppendLine($"Authoritative Model Time: {snapshot.SimulationTimeSeconds:F1} s");
             sb.AppendLine($"Blood Volume: {(snapshot.CirculatingBloodMl / 1000f):F2} L / {(state.Hemorrhage.Blood.BaselineMilliliters / 1000f):F2} L");
+            sb.AppendLine($"Cumulative Blood Loss: {(state.Hemorrhage.Blood.BaselineMilliliters - snapshot.CirculatingBloodMl):F1} ml");
             sb.AppendLine($"Blood Pressure (MAP): {snapshot.Cardiovascular.MeanArterialPressureMmhg:F0} mmHg");
             sb.AppendLine($"Heart Rate: {snapshot.Cardiovascular.HeartRateBpm:F0} BPM");
             sb.AppendLine($"SpO2 (Oxygenation): {(snapshot.OxygenDelivery.ArterialSaturation * 100f):F0}%");
