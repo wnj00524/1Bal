@@ -11,6 +11,9 @@ public static class AmmunitionCatalog
     public static AmmunitionProfile ThreeEightyAcp => Create(
         ".380 ACP", 290f, 0.0062f, 0.0000456f, 0.14f);
 
+    public static AmmunitionProfile NineMillimeterParabellum => Create(
+        "9x19mm Parabellum", 380f, 0.008f, 0.0000636f, 0.15f);
+
     private static AmmunitionProfile Create(
         string name, float velocity, float mass, float area, float dragCoefficient) => new()
     {

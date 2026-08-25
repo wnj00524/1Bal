@@ -74,7 +74,7 @@ namespace TacticalSim.GodotClient
             AmmunitionCatalog.TwentyTwoLongRifle,
             AmmunitionCatalog.ThreeEightyAcp,
             CreateWeapon("5.56x45mm NATO", 900f, 0.004f, 0.000024f, 0.3f),
-            CreateWeapon("9x19mm Parabellum", 380f, 0.008f, 0.0000636f, 0.15f),
+            AmmunitionCatalog.NineMillimeterParabellum,
             CreateWeapon(".308 Winchester", 800f, 0.0097f, 0.000048f, 0.4f),
             CreateWeapon("12 Gauge Slug", 480f, 0.0283f, 0.00025f, 0.5f),
             CreateWeapon("Combat Knife (Abdomen)", 15f, 0.4f, 0.00015f, 10f),
@@ -423,7 +423,13 @@ namespace TacticalSim.GodotClient
 
         private void BindPhysiologicalState(NeurologicalFunctionalState state)
         {
-            float capacity = Math.Clamp(Math.Min(state.UpperLimbCapacity, state.LowerLimbCapacity), 0f, 1f);
+            // Presentation derives its emphasis exclusively from the core resolver's
+            // immutable functional state. It does not estimate damage from calibre,
+            // projectile visuals, voxel destruction, or elapsed client time.
+            float capacity = state.DirectCasualtyState >= CasualtyState.Unconscious
+                ? 0f
+                : Math.Clamp(Math.Min(state.CognitiveCapacity,
+                    Math.Min(state.UpperLimbCapacity, state.LowerLimbCapacity)), 0f, 1f);
             float impairment = 1f - capacity;
             _reportText.Modulate = new Color(1f, 1f - (0.65f * impairment), 1f - (0.8f * impairment),
                 0.55f + (0.45f * capacity));

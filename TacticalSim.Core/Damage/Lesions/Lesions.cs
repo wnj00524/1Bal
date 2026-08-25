@@ -147,6 +147,13 @@ public interface ILesionGenerator { IReadOnlyList<Lesion> Generate(WoundTrack tr
 /// <summary>Deterministic M6 translation of wound geometry into persistent structural injury.</summary>
 public sealed class LesionGenerator : ILesionGenerator
 {
+    // Provisional M12 calibration: a wound track that physically intersects the
+    // brain is not equivalent to a diffuse low-energy deposit in generic tissue.
+    // Until regional brain anatomy is available, the deterministic model treats
+    // that penetrating structural injury as at least immediately unconscious.
+    // The value is registered in IntegratedNeurologicalParameterProvenance.
+    public const float PenetratingBrainMinimumSeverity = .30f;
+
     public IReadOnlyList<Lesion> Generate(WoundTrack track, IAnatomicalStructureCatalog anatomy)
     {
         ArgumentNullException.ThrowIfNull(track); ArgumentNullException.ThrowIfNull(anatomy);
@@ -186,10 +193,21 @@ public sealed class LesionGenerator : ILesionGenerator
             var geometry = new LesionGeometry(center, SafeDirection(first.Segment),
                 Distance.FromMeters(group.Sum(x => x.Segment.PathLength.Meters)), Distance.FromMeters(MathF.Max(.0005f, group.Max(x => x.Radius))));
             string id=$"lesion/{track.TrackId}/{ordinal++:D4}/{group.Key}";
-            result.Add(Create(id, track.TrackId, first.Structure, group.Max(x => x.Severity), geometry));
+            float severity = CalibrateStructuralSeverity(
+                track.ModelVersion, first.Structure, group.Max(x => x.Severity));
+            result.Add(Create(id, track.TrackId, first.Structure, severity, geometry));
         }
         return result.AsReadOnly();
     }
+
+    private static float CalibrateStructuralSeverity(
+        DamageModelVersion modelVersion,
+        AnatomicalStructure structure,
+        float energySeverity) =>
+        modelVersion == DamageModelVersion.IntegratedV3
+        && string.Equals(structure.Id, "organ.brain", StringComparison.Ordinal)
+            ? MathF.Max(energySeverity, PenetratingBrainMinimumSeverity)
+            : energySeverity;
 
     private static Lesion Create(string id,string impact,AnatomicalStructure s,float severity,LesionGeometry g)
     {
