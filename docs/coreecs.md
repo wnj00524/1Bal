@@ -85,8 +85,9 @@ The system is configured with an optional positive per-tick increase so simulati
 **Goal:** Present the player's team-level intelligence without exposing Ground Truth to ImGui.
 
 * The spawner marks five distinct randomly selected agents with `OperativeTag`, or marks every agent when the population is smaller than five.
+* Each selected Operative receives `Identity.IntelligenceRole = Officer`; all other spawned agents receive `IntelligenceRole = None`. `Agent` and `Informant` remain available for future assignment systems.
 * `PlayerIntelligenceDB.Capture` copies all agent identity metadata and combines outgoing `EdgeData.KnownTraitMask` values from Operatives with bitwise `OR` for each target.
-* The `Surveillance Terminal` consumes only the immutable database and static trait definitions. It never reads `Entity`, `Psychology`, or another Ground Truth component.
+* The `Surveillance Terminal` consumes only the immutable database and static trait definitions. It never reads `Entity`, `Psychology`, or another Ground Truth component; intelligence roles are copied into the database at the ECS/UI boundary.
 * Dossier trait visibility is resolved with `(knownMask & trait.Bit) != 0`; hidden traits render `Trait: ???`, while known traits render their configured names.
 
 ---

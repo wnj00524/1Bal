@@ -39,6 +39,19 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void IntelligenceRoleUsesNoneAsTheDefaultAndSupportsAllDefinedValues()
+    {
+        Assert.Equal(IntelligenceRole.None, new Identity().IntelligenceRole);
+        Assert.Equal(new[]
+        {
+            IntelligenceRole.None,
+            IntelligenceRole.Officer,
+            IntelligenceRole.Agent,
+            IntelligenceRole.Informant
+        }, Enum.GetValues<IntelligenceRole>());
+    }
+
+    [Fact]
     public void DebugModeOnlyEnablesForTheDebugCommandLineArgument()
     {
         Assert.False(DebugMode.IsEnabled(Array.Empty<string>()));
@@ -84,6 +97,13 @@ public sealed class SimulationTests
         Assert.Equal(SimulationDefaults.OperativeCount, firstOperatives.Length);
         Assert.Equal(firstOperatives.Length, firstOperatives.Distinct().Count());
         Assert.Equal(firstOperatives, secondOperatives);
+        Assert.All(firstStore.Query<Identity>().Entities, entity =>
+        {
+            var expectedRole = entity.Tags.Has<OperativeTag>()
+                ? IntelligenceRole.Officer
+                : IntelligenceRole.None;
+            Assert.Equal(expectedRole, entity.GetComponent<Identity>().IntelligenceRole);
+        });
     }
 
     [Fact]
@@ -95,6 +115,8 @@ public sealed class SimulationTests
         new AgentSpawner(catalog).Spawn(store, 3, new Random(99));
 
         Assert.Equal(3, store.Query<Identity>().Entities.Count(entity => entity.Tags.Has<OperativeTag>()));
+        Assert.All(store.Query<Identity>().Entities,
+            entity => Assert.Equal(IntelligenceRole.Officer, entity.GetComponent<Identity>().IntelligenceRole));
     }
 
     [Fact]
@@ -102,10 +124,10 @@ public sealed class SimulationTests
     {
         var catalog = LoadCatalog();
         var store = new EntityStore();
-        var operativeOne = store.CreateEntity(new Identity { NameId = 11 }, Tags.Get<OperativeTag>());
-        var operativeTwo = store.CreateEntity(new Identity { NameId = 12 }, Tags.Get<OperativeTag>());
-        var nonOperative = store.CreateEntity(new Identity { NameId = 13 });
-        var target = store.CreateEntity(new Identity { NameId = 14 });
+        var operativeOne = store.CreateEntity(new Identity { NameId = 11, IntelligenceRole = IntelligenceRole.Officer }, Tags.Get<OperativeTag>());
+        var operativeTwo = store.CreateEntity(new Identity { NameId = 12, IntelligenceRole = IntelligenceRole.Officer }, Tags.Get<OperativeTag>());
+        var nonOperative = store.CreateEntity(new Identity { NameId = 13, IntelligenceRole = IntelligenceRole.None });
+        var target = store.CreateEntity(new Identity { NameId = 14, IntelligenceRole = IntelligenceRole.Informant });
 
         store.CreateEntity(new EdgeData
         {
@@ -137,6 +159,8 @@ public sealed class SimulationTests
         Assert.Equal(new[] { operativeOne.Id, operativeTwo.Id }, intelligence.OperativeEntityIds);
         Assert.Equal(1L | 4L, intelligence.Agents.Single(agent => agent.EntityId == target.Id).KnownTraitMask);
         Assert.Equal(0L, intelligence.Agents.Single(agent => agent.EntityId == nonOperative.Id).KnownTraitMask);
+        Assert.Equal(IntelligenceRole.Officer, intelligence.Agents.Single(agent => agent.EntityId == operativeOne.Id).IntelligenceRole);
+        Assert.Equal(IntelligenceRole.Informant, intelligence.Agents.Single(agent => agent.EntityId == target.Id).IntelligenceRole);
         Assert.Equal(4, intelligence.Agents.Count);
     }
 
@@ -328,6 +352,10 @@ public sealed class SimulationTests
         {
             Assert.Equal(catalog.AgentAttributes.Count, snapshot.Attributes.Count);
             Assert.Equal(catalog.Traits.Count, snapshot.Traits.Count);
+            var entity = store.Query<Identity>().Entities.Single(candidate => candidate.Id == snapshot.EntityId);
+            Assert.Equal(
+                entity.Tags.Has<OperativeTag>() ? IntelligenceRole.Officer : IntelligenceRole.None,
+                snapshot.IntelligenceRole);
             Assert.Contains(snapshot.OccupationName, catalog.Jobs.Select(job => job.Name));
             Assert.Contains(snapshot.FactionName, catalog.Factions.Select(faction => faction.Name));
             Assert.Contains(snapshot.CurrentActionName, catalog.Actions.Select(action => action.Name));

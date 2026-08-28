@@ -14,9 +14,17 @@ public struct Tier2LodTag : ITag { } // Reserved for hourly updates.
 public struct Tier3LodTag : ITag { } // Reserved for daily updates.
 public struct OperativeTag : ITag { } // Player-controlled intelligence source.
 
+public enum IntelligenceRole : byte {
+    None,       // Zero/default value for unassigned agents.
+    Officer,
+    Agent,
+    Informant
+}
+
 public struct Identity : IComponent {
     public int NameId;       // Hash mapped to localization.
     public int OccupationId; // Hash mapped to job data.
+    public IntelligenceRole IntelligenceRole;
 }
 
 public struct PoliticalAlignment : IComponent {
@@ -154,9 +162,11 @@ select all available agents. Selection uses the spawner's injected `Random`, so
 seeded runs reproduce the same team membership.
 
 `PlayerIntelligenceAgentSnapshot` contains an agent ID, name ID, Operative
-marker, and the team-known trait mask. `PlayerIntelligenceDB` contains a
+marker, intelligence role, and the team-known trait mask. `PlayerIntelligenceDB` contains a
 read-only list of these snapshots plus the selected Operative IDs. Its capture
 boundary scans only outgoing edges whose source has `OperativeTag` and combines
 their known trait masks per target with bitwise `OR`. It does not copy
-`Psychology` or retain ECS entities. The dossier applies each configured trait
-bit with `knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.
+`Psychology` or retain ECS entities. Operatives are assigned the `Officer` role
+when spawned; other agents default to `None`. The dossier displays non-empty
+roles alongside each agent and applies each configured trait bit with
+`knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.

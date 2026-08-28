@@ -14,6 +14,7 @@ public sealed record PlayerIntelligenceAgentSnapshot(
     int EntityId,
     int NameId,
     bool IsOperative,
+    IntelligenceRole IntelligenceRole,
     long KnownTraitMask)
 {
     public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
@@ -82,6 +83,7 @@ public sealed class PlayerIntelligenceDB
                     entity.Id,
                     identity.NameId,
                     operativeEntityIds.Contains(entity.Id),
+                    identity.IntelligenceRole,
                     knownMasksByTarget.GetValueOrDefault(entity.Id));
             })
             .ToList();
@@ -142,8 +144,8 @@ public sealed class DossierWindow
         foreach (var agent in intelligence.Agents)
         {
             var selected = agent.EntityId == _selectedAgentId;
-            var label = agent.IsOperative
-                ? $"[OPERATIVE] {agent.DisplayName}"
+            var label = agent.IntelligenceRole != IntelligenceRole.None
+                ? $"[{agent.IntelligenceRole}] {agent.DisplayName}"
                 : agent.DisplayName;
             if (ImGui.Selectable(label, selected))
             {
@@ -173,6 +175,7 @@ public sealed class DossierWindow
         IReadOnlyList<TraitDefinition> traits)
     {
         ImGui.Text(agent.DisplayName);
+        ImGui.Text($"Intelligence role: {agent.IntelligenceRole}");
         if (agent.IsOperative)
         {
             ImGui.Text("Operative team member");

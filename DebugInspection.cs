@@ -35,6 +35,7 @@ public sealed record DebugAgentSnapshot(
     int NameId,
     int OccupationId,
     string OccupationName,
+    IntelligenceRole IntelligenceRole,
     byte FactionId,
     string FactionName,
     IReadOnlyList<DebugAttributeSnapshot> Attributes,
@@ -87,6 +88,7 @@ public static class DebugSnapshotBuilder
                 identity.NameId,
                 identity.OccupationId,
                 jobName,
+                identity.IntelligenceRole,
                 faction.FactionId,
                 factionName,
                 CopyAttributes(attributes, catalog.AgentAttributes),
@@ -210,6 +212,7 @@ public sealed class DebugWindow
         ImGui.Text("Identity");
         ImGui.BulletText($"Entity ID: {agent.EntityId}");
         ImGui.BulletText($"Name ID: {agent.NameId}");
+        ImGui.BulletText($"Intelligence role: {agent.IntelligenceRole}");
         ImGui.BulletText($"Occupation: {agent.OccupationName} ({agent.OccupationId})");
         ImGui.BulletText($"Faction: {agent.FactionName} ({agent.FactionId})");
 
