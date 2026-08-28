@@ -52,6 +52,19 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void SecretStatesLoadWithNoneAsTheDefaultAndSurveillanceAvailable()
+    {
+        var catalog = LoadCatalog();
+
+        Assert.Equal(0, new AgentState().SecretStateHash);
+        Assert.Equal("None", catalog.SecretStates.Single(secretState => secretState.Hash == 0).Name);
+        Assert.Equal(0, catalog.SecretStates.Single(secretState =>
+            string.Equals(secretState.Id, "none", StringComparison.OrdinalIgnoreCase)).Hash);
+        Assert.Equal("Surveillance", catalog.SecretStates.Single(secretState =>
+            string.Equals(secretState.Id, "surveillance", StringComparison.OrdinalIgnoreCase)).Name);
+    }
+
+    [Fact]
     public void DebugModeOnlyEnablesForTheDebugCommandLineArgument()
     {
         Assert.False(DebugMode.IsEnabled(Array.Empty<string>()));
@@ -120,6 +133,18 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void SpawnerDefaultsEveryAgentToNoSecretState()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+
+        new AgentSpawner(catalog).Spawn(store, 10, new Random(99));
+
+        Assert.All(store.Query<AgentState>().Entities,
+            entity => Assert.Equal(0, entity.GetComponent<AgentState>().SecretStateHash));
+    }
+
+    [Fact]
     public void PlayerIntelligenceUsesTheUnionOfOperativeOutgoingMasks()
     {
         var catalog = LoadCatalog();
@@ -162,6 +187,34 @@ public sealed class SimulationTests
         Assert.Equal(IntelligenceRole.Officer, intelligence.Agents.Single(agent => agent.EntityId == operativeOne.Id).IntelligenceRole);
         Assert.Equal(IntelligenceRole.Informant, intelligence.Agents.Single(agent => agent.EntityId == target.Id).IntelligenceRole);
         Assert.Equal(4, intelligence.Agents.Count);
+    }
+
+    [Fact]
+    public void DebugSnapshotCopiesAndResolvesSecretStateWithoutAddingItToPlayerIntelligence()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        var entity = store.CreateEntity(
+            new Identity { NameId = 1 },
+            new PoliticalAlignment { FactionId = catalog.Factions[0].FactionId },
+            new AgentAttributes { Values = catalog.AgentAttributes.Definitions.Select(definition => definition.Average).ToArray() },
+            new Psychology(),
+            new AgentState { CurrentActionHash = catalog.Actions[0].Hash, SecretStateHash = 1 },
+            new AgentLocation(),
+            new AgentTravel { RouteLocationIds = Array.Empty<int>() });
+
+        var snapshot = DebugSnapshotBuilder.Capture(store, catalog).Single();
+        var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
+
+        Assert.Equal(1, snapshot.SecretStateHash);
+        Assert.Equal("Surveillance", snapshot.SecretStateName);
+        Assert.DoesNotContain("SecretState", typeof(PlayerIntelligenceAgentSnapshot)
+            .GetProperties()
+            .Select(property => property.Name));
+        Assert.DoesNotContain("SecretStateHash", typeof(PlayerIntelligenceAgentSnapshot)
+            .GetProperties()
+            .Select(property => property.Name));
+        Assert.Single(intelligence.Agents);
     }
 
     [Fact]
@@ -512,6 +565,32 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void CommutingSystemPreservesSecretStateWhileUpdatingPublicAction()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        var clock = new WorldClockSystem(store);
+        var entity = store.CreateEntity(
+            new Identity { NameId = 1, OccupationId = 2001 },
+            new AgentLocation { HomeLocationId = 3001, WorkLocationId = 3004, CurrentLocationId = 3001 },
+            new AgentTravel
+            {
+                RouteLocationIds = new[] { 3001, 3003, 3004 },
+                TotalTravelMinutes = 25,
+                Mode = AgentTravelMode.AtHome
+            },
+            new AgentState { CurrentActionHash = 1002, SecretStateHash = 1 },
+            Tags.Get<Tier1LodTag>());
+        var root = new SystemRoot(store) { clock, new CommutingSystem(catalog, clock.ClockEntity) };
+
+        AdvanceMinutes(clock, root, 455);
+        AdvanceMinutes(clock, root, 25);
+
+        Assert.Equal(1001, entity.GetComponent<AgentState>().CurrentActionHash);
+        Assert.Equal(1, entity.GetComponent<AgentState>().SecretStateHash);
+    }
+
+    [Fact]
     public void SpawnerRejectsAssignmentsWhenNoHomeToWorkRouteExists()
     {
         using var directory = TestContent.CreateDirectory();
@@ -678,6 +757,28 @@ public sealed class SimulationTests
         TestContent.CopyCatalogFiles(directory.RootPath);
         File.WriteAllText(System.IO.Path.Combine(directory.RootPath, "agent-schema.json"),
             "{\"attributes\":[{\"id\":\"fatigue\",\"min\":10,\"max\":1,\"average\":5},{\"id\":\"stress\",\"min\":0,\"max\":100,\"average\":20}]}" );
+
+        Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
+    }
+
+    [Fact]
+    public void CatalogRejectsSecretStatesWithoutDefaultNone()
+    {
+        using var directory = TestContent.CreateDirectory();
+        TestContent.CopyCatalogFiles(directory.RootPath);
+        File.WriteAllText(Path.Combine(directory.RootPath, "secret-states.json"),
+            "[{\"id\":\"surveillance\",\"name\":\"Surveillance\",\"hash\":1}]" );
+
+        Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
+    }
+
+    [Fact]
+    public void CatalogRejectsDuplicateSecretStateHashes()
+    {
+        using var directory = TestContent.CreateDirectory();
+        TestContent.CopyCatalogFiles(directory.RootPath);
+        File.WriteAllText(Path.Combine(directory.RootPath, "secret-states.json"),
+            "[{\"id\":\"none\",\"name\":\"None\",\"hash\":0},{\"id\":\"surveillance\",\"name\":\"Surveillance\",\"hash\":0}]" );
 
         Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
     }
@@ -856,7 +957,7 @@ public sealed class SimulationTests
         public static void CopyCatalogFiles(string directory)
         {
             var source = System.IO.Path.Combine(AppContext.BaseDirectory, "data");
-            foreach (var fileName in new[] { "actions.json", "factions.json", "traits.json", "agent-schema.json", "jobs.json", "world.json" })
+            foreach (var fileName in new[] { "actions.json", "secret-states.json", "factions.json", "traits.json", "agent-schema.json", "jobs.json", "world.json" })
             {
                 File.Copy(System.IO.Path.Combine(source, fileName), System.IO.Path.Combine(directory, fileName));
             }

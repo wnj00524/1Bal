@@ -56,6 +56,10 @@ public struct EdgeData : IComponent
 public struct AgentState : IComponent
 {
     public int CurrentActionHash;
+    // A secret state is independent from the public action so an agent can
+    // appear to be working while covertly performing another activity.
+    // Hash zero is reserved for the content-defined None state.
+    public int SecretStateHash;
 }
 
 public struct WorldTime : IComponent

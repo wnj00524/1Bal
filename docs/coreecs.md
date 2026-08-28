@@ -9,6 +9,8 @@
 * Resolve numeric values by name through `AgentAttributeSchema`.
 * Score formula: `BaseScore + (TraitModifiers) - (Fatigue/Stress Penalties)`.
 * Assign highest-scoring action to `AgentState.CurrentActionHash`.
+* Leave `AgentState.SecretStateHash` unchanged; covert activity is independent
+  of the public action and is assigned by a future secret-state system.
 
 ### 4.2 Interaction & Discovery System
 
@@ -61,7 +63,7 @@ The system is configured with an optional positive per-tick increase so simulati
 
 * Debug mode is enabled only when the process receives the `-debug` command-line argument (case-insensitive).
 * `DebugSnapshotBuilder` copies the current agent component values into immutable, UI-facing snapshots once per frame.
-* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, locations, and travel state.
+* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, secret state, locations, and travel state.
 * The ImGui layer consumes snapshots only; it never queries or mutates the Ground Truth ECS store.
 
 ### 4.7 World-Time Status Bar
@@ -89,5 +91,18 @@ The system is configured with an optional positive per-tick increase so simulati
 * `PlayerIntelligenceDB.Capture` copies all agent identity metadata and combines outgoing `EdgeData.KnownTraitMask` values from Operatives with bitwise `OR` for each target.
 * The `Surveillance Terminal` consumes only the immutable database and static trait definitions. It never reads `Entity`, `Psychology`, or another Ground Truth component; intelligence roles are copied into the database at the ECS/UI boundary.
 * Dossier trait visibility is resolved with `(knownMask & trait.Bit) != 0`; hidden traits render `Trait: ???`, while known traits render their configured names.
+
+### 4.10 Agent Secret States
+
+**Goal:** Represent covert activity independently from an agent's visible action.
+
+* `ContentCatalog` loads and validates `data/secret-states.json` definitions.
+* The catalog requires a unique `none` definition with hash `0`; spawned agents
+  begin in that state.
+* `AgentState.SecretStateHash` can identify a covert activity such as
+  `Surveillance` while `CurrentActionHash` remains `Work`, `Rest`, or another
+  public action.
+* Secret state is copied only into `DebugAgentSnapshot`; the player dossier does
+  not receive or display it.
 
 ---

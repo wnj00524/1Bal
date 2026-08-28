@@ -31,3 +31,4 @@
 - [x] Select five distinct random Operatives (or the full population when smaller) and mark them with an ECS tag.
 - [x] Draw a list of all Agents. When the user clicks an Agent, open their "Dossier".
 - [x] Crucial Security Check: The Dossier UI displays only traits unlocked in the union of the five Operatives' Knowledge Masks. It uses bitwise AND (&) logic; if the mask bit is 0, it renders "Trait: ???", and if 1, it renders the trait name.
+- [x] Add JSON-defined agent secret states with a default `None` state, debug-only inspection, and preservation across public action updates.
