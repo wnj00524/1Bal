@@ -20,11 +20,13 @@ dotnet run --project ProxyState.csproj -- -debug
 
 The application loads numeric agent attributes from `data/agent-schema.json`,
 traits from `data/traits.json`, jobs from `data/jobs.json`, and the location
-network from `data/world.json`. It then opens the Raylib canvas and an ImGui
-placeholder terminal. One in-world day advances in about ten real minutes, and
+network from `data/world.json`. It then opens the Raylib canvas and the ImGui
+Applications program manager. One in-world day advances in about ten real minutes, and
 agents commute along shortest-time routes between assigned homes and workplaces.
-With debug mode enabled, the `Debug` window lists all agents and shows the full
-copied simulation state for the selected agent.
+The `Applications` window acts as the program manager: double-click `Dossiers`
+to open the `Surveillance Terminal`, or, in debug mode, double-click the
+`Debug Window` icon to open the development inspector. The debug window lists
+all agents and shows the full copied simulation state for the selected agent.
 
 Every mode also includes a bottom status bar showing the in-game day, weekday,
 and time of day from the simulation clock. Agents have five unique social peers

@@ -42,6 +42,21 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void ApplicationsLauncherOnlyExposesDebugWindowInDebugMode()
+    {
+        var normalApplications = ApplicationCatalog.GetAvailable(debugMode: false);
+        var debugApplications = ApplicationCatalog.GetAvailable(debugMode: true);
+
+        Assert.Equal(new[] { ApplicationId.Dossiers }, normalApplications.Select(application => application.Id));
+        Assert.Equal(
+            new[] { ApplicationId.Dossiers, ApplicationId.DebugWindow },
+            debugApplications.Select(application => application.Id));
+        Assert.Equal("Surveillance Terminal", ApplicationShell.DossiersWindowTitle);
+        Assert.Equal("Debug Window", debugApplications[1].Label);
+        Assert.Equal("Debug Window", ApplicationShell.DebugWindowTitle);
+    }
+
+    [Fact]
     public void SpawnerCreatesFiveUniqueBidirectionalRelationshipsPerAgent()
     {
         var catalog = LoadCatalog();

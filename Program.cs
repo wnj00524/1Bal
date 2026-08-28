@@ -31,12 +31,14 @@ public static class Program
             new InteractionSystem(catalog, new Random())
         };
 
-        Raylib.InitWindow(1280, 720, "Proxy State - Intelligence Terminal");
+        Raylib.InitWindow(1280, 720, "Proxy State - Applications");
         Raylib.SetTargetFPS(60);
 
         try
         {
             rlImGui.Setup(true);
+            Windows31Theme.Apply();
+            var applicationShell = new ApplicationShell();
             var debugWindow = debugMode ? new DebugWindow() : null;
 
             while (!Raylib.WindowShouldClose())
@@ -51,14 +53,13 @@ public static class Program
                 Raylib.ClearBackground(new Color(15, 15, 15, 255));
 
                 rlImGui.Begin();
-                ImGui.Begin("Intelligence Dossier");
-                ImGui.Text("Agent data will render here...");
-                ImGui.End();
-                if (debugWindow is not null)
+                applicationShell.DrawLauncher(debugMode);
+                applicationShell.DrawDossiersWindow();
+                if (debugWindow is not null && applicationShell.DebugWindowOpen)
                 {
                     // Capture immutable values before drawing so the UI never
                     // reaches into the Ground Truth ECS store directly.
-                    debugWindow.Draw(DebugSnapshotBuilder.Capture(store, catalog));
+                    applicationShell.DrawDebugWindow(DebugSnapshotBuilder.Capture(store, catalog), debugWindow);
                 }
                 WorldTimeBar.Draw(worldTime);
                 rlImGui.End();

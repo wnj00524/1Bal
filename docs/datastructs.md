@@ -130,3 +130,17 @@ public readonly record struct WorldTimeSnapshot(
 ```
 
 The application creates this snapshot after the clock and simulation systems update. `WorldTimeBar` renders it without retaining or querying the ECS clock entity, preserving the intelligence isolation boundary for the ImGui layer.
+
+### 2.5 Application Launcher State
+
+`ApplicationId` identifies the presentation applications exposed by the launcher:
+
+```csharp
+public enum ApplicationId
+{
+    Dossiers,
+    DebugWindow
+}
+```
+
+`ApplicationIcon` pairs an application identifier with its launcher label and compact icon glyph. `ApplicationShell` keeps the selected icon and open/closed presentation state for the `Surveillance Terminal` and `Debug Window`; it contains no ECS entity references or simulation data.
