@@ -44,6 +44,7 @@ public static class Program
                 // state produced by the current ECS tick.
                 clock.Advance(Raylib.GetFrameTime());
                 systems.Update(default);
+                var worldTime = WorldTimeSnapshot.From(clock.ClockEntity.GetComponent<WorldTime>());
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(new Color(15, 15, 15, 255));
@@ -58,6 +59,7 @@ public static class Program
                     // reaches into the Ground Truth ECS store directly.
                     debugWindow.Draw(DebugSnapshotBuilder.Capture(store, catalog));
                 }
+                WorldTimeBar.Draw(worldTime);
                 rlImGui.End();
 
                 Raylib.EndDrawing();
