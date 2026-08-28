@@ -41,6 +41,7 @@ public struct Psychology : IComponent {
 
 public struct AgentState : IComponent {
     public int CurrentActionHash;  // Hash supplied by data/actions.json.
+    public int SecretStateHash;    // Hash supplied by data/secret-states.json; 0 is None.
 }
 
 public struct WorldTime : IComponent {
@@ -72,6 +73,13 @@ public struct AgentTravel : IComponent {
 one floating-point value per definition, so adding an attribute requires only a
 data-file change. Values are sampled from a bounded normal distribution centered
 on the configured average and constrained to the configured range.
+
+Public activity and covert activity are independent. `AgentState.CurrentActionHash`
+is the visible action, while `AgentState.SecretStateHash` identifies a separate
+secret activity such as `Surveillance`. Secret states are loaded from
+`data/secret-states.json`; the required `none` definition uses hash `0`, making a
+default-initialized `AgentState` safe. Agents are spawned with `None`, and future
+simulation systems may change the secret hash without changing the public action.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
@@ -125,7 +133,7 @@ source's known mask.
 
 ### 2.3 Debug Inspection Snapshots
 
-Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, action, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, and the travel route/state. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, and the travel route/state. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
 
 ### 2.4 World-Time Presentation Snapshot
 
@@ -162,7 +170,8 @@ select all available agents. Selection uses the spawner's injected `Random`, so
 seeded runs reproduce the same team membership.
 
 `PlayerIntelligenceAgentSnapshot` contains an agent ID, name ID, Operative
-marker, intelligence role, and the team-known trait mask. `PlayerIntelligenceDB` contains a
+marker, intelligence role, and the team-known trait mask. It intentionally omits
+the ground-truth secret state. `PlayerIntelligenceDB` contains a
 read-only list of these snapshots plus the selected Operative IDs. Its capture
 boundary scans only outgoing edges whose source has `OperativeTag` and combines
 their known trait masks per target with bitwise `OR`. It does not copy

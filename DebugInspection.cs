@@ -43,6 +43,8 @@ public sealed record DebugAgentSnapshot(
     long TraitMask,
     int CurrentActionHash,
     string CurrentActionName,
+    int SecretStateHash,
+    string SecretStateName,
     DebugLocationSnapshot Home,
     DebugLocationSnapshot Workplace,
     DebugLocationSnapshot CurrentLocation,
@@ -61,6 +63,7 @@ public static class DebugSnapshotBuilder
         var jobsByHash = catalog.Jobs.ToDictionary(job => job.Hash);
         var factionsById = catalog.Factions.ToDictionary(faction => faction.FactionId);
         var actionsByHash = catalog.Actions.ToDictionary(action => action.Hash);
+        var secretStatesByHash = catalog.SecretStates.ToDictionary(secretState => secretState.Hash);
         var snapshots = new List<DebugAgentSnapshot>();
 
         foreach (var entity in store.Query<Identity>().Entities.OrderBy(entity => entity.Id))
@@ -82,6 +85,9 @@ public static class DebugSnapshotBuilder
             var actionName = actionsByHash.TryGetValue(state.CurrentActionHash, out var action)
                 ? action.Name
                 : $"Unknown ({state.CurrentActionHash})";
+            var secretStateName = secretStatesByHash.TryGetValue(state.SecretStateHash, out var secretState)
+                ? secretState.Name
+                : $"Unknown ({state.SecretStateHash})";
 
             snapshots.Add(new DebugAgentSnapshot(
                 entity.Id,
@@ -96,6 +102,8 @@ public static class DebugSnapshotBuilder
                 psychology.TraitMask,
                 state.CurrentActionHash,
                 actionName,
+                state.SecretStateHash,
+                secretStateName,
                 DescribeLocation(location.HomeLocationId, catalog.World),
                 DescribeLocation(location.WorkLocationId, catalog.World),
                 DescribeLocation(location.CurrentLocationId, catalog.World),
@@ -233,6 +241,7 @@ public sealed class DebugWindow
         ImGui.Separator();
         ImGui.Text("State");
         ImGui.BulletText($"Current action: {agent.CurrentActionName} ({agent.CurrentActionHash})");
+        ImGui.BulletText($"Secret state: {agent.SecretStateName} ({agent.SecretStateHash})");
         ImGui.BulletText($"Home: {FormatLocation(agent.Home)}");
         ImGui.BulletText($"Workplace: {FormatLocation(agent.Workplace)}");
         ImGui.BulletText($"Current location: {FormatLocation(agent.CurrentLocation)}");

@@ -19,8 +19,9 @@ dotnet run --project ProxyState.csproj -- -debug
 ```
 
 The application loads numeric agent attributes from `data/agent-schema.json`,
-traits from `data/traits.json`, jobs from `data/jobs.json`, and the location
-network from `data/world.json`. It then opens the Raylib canvas and the ImGui
+traits from `data/traits.json`, secret states from `data/secret-states.json`,
+jobs from `data/jobs.json`, and the location network from `data/world.json`. It
+then opens the Raylib canvas and the ImGui
 Applications program manager. One in-world day advances in about ten real minutes, and
 agents commute along shortest-time routes between assigned homes and workplaces.
 The `Applications` window acts as the program manager: double-click `Dossiers`
@@ -41,6 +42,12 @@ represented by reciprocal directed edge entities. Every 60 simulation ticks,
 each edge can discover one present target trait through an opposed Perception
 versus Willpower d100 contest; Paranoid targets receive a 20-point Willpower
 bonus.
+
+Agents also have a covert state separate from their public action. New agents
+default to `None`; a future simulation system can set a state such as
+`Surveillance` while the public action remains `Work`. Secret state is shown only
+in the optional ground-truth debug inspector and is not exposed to the player
+intelligence dossier.
 
 ## Test
 

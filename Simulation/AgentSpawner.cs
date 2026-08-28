@@ -67,7 +67,8 @@ public sealed class AgentSpawner
                 },
                 new AgentState
                 {
-                    CurrentActionHash = _catalog.Actions[random.Next(_catalog.Actions.Count)].Hash
+                    CurrentActionHash = _catalog.Actions[random.Next(_catalog.Actions.Count)].Hash,
+                    SecretStateHash = 0
                 },
                 new AgentLocation
                 {

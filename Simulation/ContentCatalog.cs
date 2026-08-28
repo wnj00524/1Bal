@@ -4,6 +4,7 @@ namespace ProxyState.Simulation;
 
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
 public sealed record ActionDefinition(string Id, string Name, int Hash);
+public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
 public sealed record JobDefinition(
@@ -58,6 +59,7 @@ public sealed class ContentCatalog
     private ContentCatalog(
         IReadOnlyList<TraitDefinition> traits,
         IReadOnlyList<ActionDefinition> actions,
+        IReadOnlyList<SecretStateDefinition> secretStates,
         IReadOnlyList<FactionDefinition> factions,
         AgentAttributeSchema agentAttributes,
         IReadOnlyList<JobDefinition> jobs,
@@ -65,6 +67,7 @@ public sealed class ContentCatalog
     {
         Traits = traits;
         Actions = actions;
+        SecretStates = secretStates;
         Factions = factions;
         AgentAttributes = agentAttributes;
         Jobs = jobs;
@@ -74,6 +77,7 @@ public sealed class ContentCatalog
 
     public IReadOnlyList<TraitDefinition> Traits { get; }
     public IReadOnlyList<ActionDefinition> Actions { get; }
+    public IReadOnlyList<SecretStateDefinition> SecretStates { get; }
     public IReadOnlyList<FactionDefinition> Factions { get; }
     public AgentAttributeSchema AgentAttributes { get; }
     public IReadOnlyList<JobDefinition> Jobs { get; }
@@ -87,14 +91,16 @@ public sealed class ContentCatalog
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var traits = LoadFile<TraitDefinition>(directory, "traits.json", options);
         var actions = LoadFile<ActionDefinition>(directory, "actions.json", options);
+        var secretStates = LoadFile<SecretStateDefinition>(directory, "secret-states.json", options);
         var factions = LoadFile<FactionDefinition>(directory, "factions.json", options);
         var schemaDocument = LoadObject<AgentSchemaDocument>(directory, "agent-schema.json", options);
         var jobs = LoadFile<JobDefinition>(directory, "jobs.json", options);
         var worldDocument = LoadObject<WorldDocument>(directory, "world.json", options);
 
+        ValidateSecretStates(secretStates);
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
-        return new ContentCatalog(traits, actions, factions, agentAttributes, jobs, world);
+        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(
@@ -198,6 +204,46 @@ public sealed class ContentCatalog
         _ = schema.GetIndex("fatigue");
         _ = schema.GetIndex("stress");
         return schema;
+    }
+
+    private static void ValidateSecretStates(IReadOnlyList<SecretStateDefinition> secretStates)
+    {
+        if (secretStates.Count == 0)
+        {
+            throw new InvalidDataException("At least one secret-state definition is required.");
+        }
+
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hashes = new HashSet<int>();
+        foreach (var secretState in secretStates)
+        {
+            if (string.IsNullOrWhiteSpace(secretState.Id) || !ids.Add(secretState.Id))
+            {
+                throw new InvalidDataException(
+                    $"Secret-state IDs must be non-empty and unique; '{secretState.Id}' is invalid or duplicated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(secretState.Name))
+            {
+                throw new InvalidDataException($"Secret state '{secretState.Id}' must have a name.");
+            }
+
+            if (!hashes.Add(secretState.Hash))
+            {
+                throw new InvalidDataException(
+                    $"Secret-state hashes must be unique; '{secretState.Hash}' is duplicated.");
+            }
+        }
+
+        // Hash zero keeps a default-initialized AgentState safe even before a
+        // system or content assignment supplies a covert activity.
+        var noneStates = secretStates
+            .Where(secretState => string.Equals(secretState.Id, "none", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (noneStates.Length != 1 || noneStates[0].Hash != 0)
+        {
+            throw new InvalidDataException("A unique 'none' secret-state definition with hash 0 is required.");
+        }
     }
 
     private static WorldTopology ValidateWorld(
