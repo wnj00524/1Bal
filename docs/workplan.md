@@ -28,5 +28,6 @@
 - [x] Add a shared bottom bar showing the current in-game world day and time in every mode.
 - [x] Add a Windows 3.1-style `Applications` launcher with `Dossiers` and optional `Debug Window` icons; double-clicking an icon opens its application window.
 - [x] Create an ImGui window titled "Surveillance Terminal" from the `Dossiers` launcher icon.
-- [ ] Draw a list of all Agents. When the user clicks an Agent, open their "Dossier".
-- [ ] Crucial Security Check: The Dossier UI must ONLY display traits that are unlocked in the Player's Knowledge Mask for that Agent. Use bitwise AND (&) logic. If the mask bit is 0, render "Trait: ???". If 1, render the trait name.
+- [x] Select five distinct random Operatives (or the full population when smaller) and mark them with an ECS tag.
+- [x] Draw a list of all Agents. When the user clicks an Agent, open their "Dossier".
+- [x] Crucial Security Check: The Dossier UI displays only traits unlocked in the union of the five Operatives' Knowledge Masks. It uses bitwise AND (&) logic; if the mask bit is 0, it renders "Trait: ???", and if 1, it renders the trait name.
