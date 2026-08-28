@@ -43,11 +43,15 @@ public sealed class AgentSpawner
         for (var index = 0; index < assignments.Count; index++)
         {
             var assignment = assignments[index];
+            var isOperative = operativeIndexes.Contains(index);
             var entity = store.CreateEntity(
                 new Identity
                 {
                     NameId = random.Next(),
-                    OccupationId = assignment.Job.Hash
+                    OccupationId = assignment.Job.Hash,
+                    IntelligenceRole = isOperative
+                        ? IntelligenceRole.Officer
+                        : IntelligenceRole.None
                 },
                 new PoliticalAlignment
                 {
@@ -81,7 +85,7 @@ public sealed class AgentSpawner
                 },
                 Tags.Get<Tier1LodTag>());
 
-            if (operativeIndexes.Contains(index))
+            if (isOperative)
             {
                 entity.AddTag<OperativeTag>();
             }

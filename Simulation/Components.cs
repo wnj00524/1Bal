@@ -8,6 +8,16 @@ public struct Tier1LodTag : ITag { }
 public struct Tier2LodTag : ITag { }
 public struct Tier3LodTag : ITag { }
 
+// None is the zero value so manually created agents do not accidentally gain
+// an intelligence assignment before a simulation or content system sets one.
+public enum IntelligenceRole : byte
+{
+    None,
+    Officer,
+    Agent,
+    Informant
+}
+
 // Operatives are the player-controlled intelligence sources. Keeping team
 // membership as an ECS tag lets simulation systems and the UI boundary query
 // the same authoritative assignment without exposing entities to ImGui.
@@ -18,6 +28,7 @@ public struct Identity : IComponent
     public int NameId;
     // This is the stable hash of the assigned JobDefinition.
     public int OccupationId;
+    public IntelligenceRole IntelligenceRole;
 }
 
 public struct PoliticalAlignment : IComponent

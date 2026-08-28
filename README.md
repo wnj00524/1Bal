@@ -29,9 +29,11 @@ to open the `Surveillance Terminal`, or, in debug mode, double-click the
 all agents and shows the full copied simulation state for the selected agent.
 
 The simulation randomly selects five agents as Operatives (or all agents when
-the population is smaller). The Surveillance Terminal lists every agent and
-shows only traits discovered by at least one Operative. Operative knowledge is
-combined at the ECS/UI boundary; hidden traits are displayed as `Trait: ???`.
+the population is smaller). Selected Operatives have the `Officer`
+IntelligenceRole; all other agents default to `None`. The Surveillance Terminal
+lists every agent, shows any assigned intelligence role, and displays only
+traits discovered by at least one Operative. Operative knowledge is combined at
+the ECS/UI boundary; hidden traits are displayed as `Trait: ???`.
 
 Every mode also includes a bottom status bar showing the in-game day, weekday,
 and time of day from the simulation clock. Agents have five unique social peers
