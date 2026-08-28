@@ -73,4 +73,11 @@ The system is configured with an optional positive per-tick increase so simulati
 * The bar is pinned to the bottom edge of the ImGui viewport and displays the simulation day, weekday, and time of day.
 * Formatting uses only the copied snapshot; it never reads the local system clock or the Ground Truth ECS store.
 
+### 4.8 Applications Launcher and Window Navigation
+
+* `ApplicationShell` renders the `Applications` program-manager window and exposes only the applications allowed by the process mode: `Dossiers` always appears, while `Debug Window` appears only with `-debug`.
+* Application tiles select on a single click and launch on a left-button double-click. The launcher stores only presentation state for whether the `Surveillance Terminal` or `Debug Window` is open.
+* The dossier view is titled `Surveillance Terminal`; the debug inspector is titled `Debug Window`. Both are independently closable from their ImGui title bars.
+* The launcher and navigation state never query the ECS store. Debug content continues to arrive through immutable `DebugAgentSnapshot` values captured at the ECS boundary.
+
 ---

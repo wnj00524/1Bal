@@ -156,7 +156,7 @@ public sealed class DebugWindow
 {
     private int? _selectedAgentId;
 
-    public void Draw(IReadOnlyList<DebugAgentSnapshot> agents)
+    public void Draw(IReadOnlyList<DebugAgentSnapshot> agents, ref bool isOpen)
     {
         ArgumentNullException.ThrowIfNull(agents);
 
@@ -165,7 +165,7 @@ public sealed class DebugWindow
             _selectedAgentId = null;
         }
 
-        if (!ImGui.Begin("Debug"))
+        if (!ImGui.Begin(ApplicationShell.DebugWindowTitle, ref isOpen))
         {
             ImGui.End();
             return;
