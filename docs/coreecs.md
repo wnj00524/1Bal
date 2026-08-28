@@ -4,8 +4,9 @@
 
 **Goal:** Determine what an agent does this tick.
 
-* Query all entities with `AgentState` and `Tier1LodTag`.
+* Query all entities with `AgentAttributes` and `Tier1LodTag`.
 * Iterate through available actions (Work, Rest, Socialize) loaded from `actions.json`.
+* Resolve numeric values by name through `AgentAttributeSchema`.
 * Score formula: `BaseScore + (TraitModifiers) - (Fatigue/Stress Penalties)`.
 * Assign highest-scoring action to `AgentState.CurrentActionHash`.
 
@@ -13,7 +14,7 @@
 
 **Goal:** Handle target interrogation/surveillance based on Perception vs Willpower.
 
-* When `Source` interacts with `Target`, calculate: `Source.Perception` vs `Target.Willpower` (modified by Target's `Paranoid` trait).
+* When `Source` interacts with `Target`, calculate the schema-defined `perception` value vs the schema-defined `willpower` value (modified by Target's `Paranoid` trait).
 * On success, perform bitwise `OR` on `EdgeData.KnownTraitMask`. (e.g., `KnownTraitMask |= 0x0004` to reveal the Greedy trait).
 * Recalculate `Affinity` by checking shared traits: `Target.Psychology.TraitMask & EdgeData.KnownTraitMask`.
 
@@ -21,8 +22,9 @@
 
 **Goal:** Advance the short-term state of active agents every simulation tick.
 
-* Query entities with `AgentState` and `Tier1LodTag` using Friflo's `QuerySystem`.
-* Increase `Fatigue` and `Stress` by `0.1` per update by default.
+* Query entities with `AgentAttributes` and `Tier1LodTag` using Friflo's `QuerySystem`.
+* Resolve `fatigue` and `stress` indexes from `AgentAttributeSchema`.
+* Increase both values by `0.1` per update by default.
 * Reset each value independently to `0` when its updated value reaches or exceeds `100`.
 * Entities without `Tier1LodTag` are excluded, leaving Tier 2 and Tier 3 agents for later systems.
 * The application executes the system through `SystemRoot.Update(default)` before the Raylib rendering phase.

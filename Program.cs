@@ -15,7 +15,7 @@ public static class Program
         var contentDirectory = Path.Combine(AppContext.BaseDirectory, "data");
         var catalog = ContentCatalog.Load(contentDirectory);
         var store = new EntityStore();
-        var spawner = new DummyAgentSpawner(catalog);
+        var spawner = new AgentSpawner(catalog);
 
         // A fresh seed gives each interactive run a new population. The spawner
         // accepts Random explicitly so tests and future replay tools can inject one.
@@ -23,7 +23,7 @@ public static class Program
 
         var systems = new SystemRoot(store)
         {
-            new FatigueStressSystem()
+                new FatigueStressSystem(catalog.AgentAttributes)
         };
 
         Raylib.InitWindow(1280, 720, "Proxy State - Intelligence Terminal");
