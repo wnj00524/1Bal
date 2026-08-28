@@ -41,6 +41,20 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void WorldTimeSnapshotFormatsTheInGameCalendarAndClock()
+    {
+        var time = new WorldTime
+        {
+            ElapsedSimulationSeconds = 2 * SimulationDefaults.SimulationSecondsPerDay +
+                (13 * 60 + 7) * SimulationDefaults.SimulationSecondsPerMinute
+        };
+
+        var snapshot = WorldTimeSnapshot.From(time);
+
+        Assert.Equal("Day 3 | Wednesday | 13:07", WorldTimeFormatter.Format(snapshot));
+    }
+
+    [Fact]
     public void DebugSnapshotContainsCopiedDetailsForEveryAgent()
     {
         var catalog = LoadCatalog();

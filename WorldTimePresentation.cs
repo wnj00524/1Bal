@@ -1,0 +1,73 @@
+using ImGuiNET;
+using ProxyState.Simulation;
+
+namespace ProxyState;
+
+/// <summary>
+/// Immutable world-time data captured for presentation code. Keeping this
+/// separate from the ECS entity prevents ImGui from reading Ground Truth.
+/// </summary>
+public readonly record struct WorldTimeSnapshot(int DayNumber, int DayOfWeek, int MinuteOfDay)
+{
+    public static WorldTimeSnapshot From(WorldTime time) =>
+        new(time.DayIndex + 1, time.DayOfWeek, time.MinuteOfDay);
+}
+
+public static class WorldTimeFormatter
+{
+    private static readonly string[] DayNames =
+    {
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+    };
+
+    public static string Format(WorldTimeSnapshot time)
+    {
+        var hours = time.MinuteOfDay / 60;
+        var minutes = time.MinuteOfDay % 60;
+        var dayName = time.DayOfWeek is >= 1 and <= 7
+            ? DayNames[time.DayOfWeek - 1]
+            : "Unknown day";
+
+        return $"Day {time.DayNumber} | {dayName} | {hours:00}:{minutes:00}";
+    }
+}
+
+public static class WorldTimeBar
+{
+    private const float Height = 32f;
+
+    public static void Draw(WorldTimeSnapshot time)
+    {
+        var displaySize = ImGui.GetIO().DisplaySize;
+        if (displaySize.X <= 0f || displaySize.Y <= 0f)
+        {
+            return;
+        }
+
+        // Draw last and pin the window to the viewport so every application
+        // mode receives the same persistent status bar during resizing.
+        ImGui.SetNextWindowPos(new System.Numerics.Vector2(0f, MathF.Max(0f, displaySize.Y - Height)), ImGuiCond.Always);
+        ImGui.SetNextWindowSize(new System.Numerics.Vector2(displaySize.X, Height), ImGuiCond.Always);
+
+        const ImGuiWindowFlags flags =
+            ImGuiWindowFlags.NoTitleBar |
+            ImGuiWindowFlags.NoResize |
+            ImGuiWindowFlags.NoMove |
+            ImGuiWindowFlags.NoScrollbar |
+            ImGuiWindowFlags.NoSavedSettings |
+            ImGuiWindowFlags.NoNavFocus;
+
+        if (ImGui.Begin("##world-time-bar", flags))
+        {
+            ImGui.Text($"WORLD TIME  {WorldTimeFormatter.Format(time)}");
+        }
+
+        ImGui.End();
+    }
+}

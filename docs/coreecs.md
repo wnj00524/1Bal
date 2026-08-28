@@ -60,4 +60,13 @@ The system is configured with an optional positive per-tick increase so simulati
 * The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, locations, and travel state.
 * The ImGui layer consumes snapshots only; it never queries or mutates the Ground Truth ECS store.
 
+### 4.7 World-Time Status Bar
+
+**Goal:** Keep the current in-game calendar visible in every application mode.
+
+* After the ECS update, the bootstrapper copies the singleton `WorldTime` values into a `WorldTimeSnapshot`.
+* The shared ImGui phase renders `WorldTimeBar` after the normal and optional debug windows, so the same bar appears in both modes.
+* The bar is pinned to the bottom edge of the ImGui viewport and displays the simulation day, weekday, and time of day.
+* Formatting uses only the copied snapshot; it never reads the local system clock or the Ground Truth ECS store.
+
 ---

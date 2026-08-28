@@ -25,6 +25,9 @@ agents commute along shortest-time routes between assigned homes and workplaces.
 With debug mode enabled, the `Debug` window lists all agents and shows the full
 copied simulation state for the selected agent.
 
+Every mode also includes a bottom status bar showing the in-game day, weekday,
+and time of day from the simulation clock.
+
 ## Test
 
 ```text
