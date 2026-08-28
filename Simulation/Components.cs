@@ -17,16 +17,6 @@ public struct Identity : IComponent
 public struct PoliticalAlignment : IComponent
 {
     public byte FactionId;
-    public float Preference;
-    public float Salience;
-}
-
-public struct BaseStats : IComponent
-{
-    public byte Intelligence;
-    public byte Charisma;
-    public byte Perception;
-    public byte Willpower;
 }
 
 public struct Psychology : IComponent
@@ -36,10 +26,14 @@ public struct Psychology : IComponent
 
 public struct AgentState : IComponent
 {
-    public float Fatigue;
-    public float Stress;
-    public float Wealth;
     public int CurrentActionHash;
+}
+
+// Numeric agent attributes are kept in schema order. The shared schema supplies
+// the meaning of each index, avoiding a per-agent dictionary and fixed fields.
+public struct AgentAttributes : IComponent
+{
+    public float[] Values;
 }
 
 public static class SimulationDefaults

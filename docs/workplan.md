@@ -6,6 +6,7 @@
 - [x] Implement the Program.cs bootstrapper as defined in #3. Application Bootstrapper (Raylib + ImGui) of agents.md.
 - [x] Implement the struct definitions from Section 2.
 - [x] Write a spawner function to instantiate 1,000 dummy entities with randomized stats and traits.
+- [x] Replace the dummy spawner with a JSON schema-driven numeric attribute generator and prevalence-driven binary trait generation.
 - [x] Write a basic Friflo System that slowly increases Fatigue and Stress on all entities and resets them when they hit 100.
 
 ## Milestone 2: Social Graph & Bitwise Discovery

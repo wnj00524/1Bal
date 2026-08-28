@@ -20,15 +20,10 @@ public struct Identity : IComponent {
 
 public struct PoliticalAlignment : IComponent {
     public byte FactionId;   // JSON faction ID.
-    public float Preference; // 0.0 to 1.0.
-    public float Salience;   // 0.0 to 1.0.
 }
 
-public struct BaseStats : IComponent {
-    public byte Intelligence; // 1 to 100.
-    public byte Charisma;     // 1 to 100.
-    public byte Perception;   // 1 to 100.
-    public byte Willpower;    // 1 to 100.
+public struct AgentAttributes : IComponent {
+    public float[] Values; // Values are ordered by data/agent-schema.json.
 }
 
 public struct Psychology : IComponent {
@@ -36,16 +31,20 @@ public struct Psychology : IComponent {
 }
 
 public struct AgentState : IComponent {
-    public float Fatigue;          // [0, 100); reset at 100.
-    public float Stress;           // [0, 100); reset at 100.
-    public float Wealth;           // [0, 10,000].
     public int CurrentActionHash;  // Hash supplied by data/actions.json.
 }
 ```
 
-Milestone 1 creates 1,000 entities with all five components and `Tier1LodTag`.
-Dummy values are generated from an injected `Random`; the application supplies a
-fresh random generator on launch, while tests can use a fixed seed.
+`AgentAttributeSchema` loads the ordered numeric definitions from
+`data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores
+one floating-point value per definition, so adding an attribute requires only a
+data-file change. Values are sampled from a bounded normal distribution centered
+on the configured average and constrained to the configured range.
+
+Binary attributes are traits defined in `data/traits.json`. Their unique positive
+single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
+independent probability that a generated agent has each trait. The `long` mask
+currently supports up to 63 positive single-bit traits.
 
 ### 2.2 The Social Graph (Edge Entities)
 

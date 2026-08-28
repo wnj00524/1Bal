@@ -1,6 +1,6 @@
 [
-  { "id": "brave", "name": "Brave", "bit": 1 },
-  { "id": "chaste", "name": "Chaste", "bit": 2 },
-  { "id": "greedy", "name": "Greedy", "bit": 4 },
-  { "id": "paranoid", "name": "Paranoid", "bit": 8 }
+  { "id": "brave", "name": "Brave", "bit": 1, "prevalence": 0.5 },
+  { "id": "chaste", "name": "Chaste", "bit": 2, "prevalence": 0.5 },
+  { "id": "greedy", "name": "Greedy", "bit": 4, "prevalence": 0.35 },
+  { "id": "paranoid", "name": "Paranoid", "bit": 8, "prevalence": 0.2 }
 ]
