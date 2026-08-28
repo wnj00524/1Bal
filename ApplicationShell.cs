@@ -1,5 +1,6 @@
 using System.Numerics;
 using ImGuiNET;
+using ProxyState.Simulation;
 
 namespace ProxyState;
 
@@ -85,22 +86,22 @@ public sealed class ApplicationShell
         ImGui.End();
     }
 
-    public void DrawDossiersWindow()
+    public void DrawDossiersWindow(
+        PlayerIntelligenceDB intelligence,
+        IReadOnlyList<TraitDefinition> traits,
+        DossierWindow dossierWindow)
     {
+        ArgumentNullException.ThrowIfNull(intelligence);
+        ArgumentNullException.ThrowIfNull(traits);
+        ArgumentNullException.ThrowIfNull(dossierWindow);
+
         if (!DossiersOpen)
         {
             return;
         }
 
         var isOpen = DossiersOpen;
-        if (ImGui.Begin(DossiersWindowTitle, ref isOpen))
-        {
-            ImGui.Text("Dossiers");
-            ImGui.Separator();
-            ImGui.Text("Agent data will render here...");
-        }
-
-        ImGui.End();
+        dossierWindow.Draw(intelligence, traits, ref isOpen);
         DossiersOpen = isOpen;
     }
 

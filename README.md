@@ -28,6 +28,11 @@ to open the `Surveillance Terminal`, or, in debug mode, double-click the
 `Debug Window` icon to open the development inspector. The debug window lists
 all agents and shows the full copied simulation state for the selected agent.
 
+The simulation randomly selects five agents as Operatives (or all agents when
+the population is smaller). The Surveillance Terminal lists every agent and
+shows only traits discovered by at least one Operative. Operative knowledge is
+combined at the ECS/UI boundary; hidden traits are displayed as `Trait: ???`.
+
 Every mode also includes a bottom status bar showing the in-game day, weekday,
 and time of day from the simulation clock. Agents have five unique social peers
 represented by reciprocal directed edge entities. Every 60 simulation ticks,

@@ -39,6 +39,7 @@ public static class Program
             rlImGui.Setup(true);
             Windows31Theme.Apply();
             var applicationShell = new ApplicationShell();
+            var dossierWindow = new DossierWindow();
             var debugWindow = debugMode ? new DebugWindow() : null;
 
             while (!Raylib.WindowShouldClose())
@@ -48,13 +49,14 @@ public static class Program
                 clock.Advance(Raylib.GetFrameTime());
                 systems.Update(default);
                 var worldTime = WorldTimeSnapshot.From(clock.ClockEntity.GetComponent<WorldTime>());
+                var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(new Color(15, 15, 15, 255));
 
                 rlImGui.Begin();
                 applicationShell.DrawLauncher(debugMode);
-                applicationShell.DrawDossiersWindow();
+                applicationShell.DrawDossiersWindow(intelligence, catalog.Traits, dossierWindow);
                 if (debugWindow is not null && applicationShell.DebugWindowOpen)
                 {
                     // Capture immutable values before drawing so the UI never

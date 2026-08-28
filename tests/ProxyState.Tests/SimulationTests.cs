@@ -26,7 +26,13 @@ public sealed class SimulationTests
             typeof(AgentLocation),
             typeof(AgentTravel)
         };
-        var tags = new[] { typeof(Tier1LodTag), typeof(Tier2LodTag), typeof(Tier3LodTag) };
+        var tags = new[]
+        {
+            typeof(Tier1LodTag),
+            typeof(Tier2LodTag),
+            typeof(Tier3LodTag),
+            typeof(OperativeTag)
+        };
 
         Assert.All(components, type => Assert.True(typeof(IComponent).IsAssignableFrom(type), type.Name));
         Assert.All(tags, type => Assert.True(typeof(ITag).IsAssignableFrom(type), type.Name));
@@ -54,6 +60,95 @@ public sealed class SimulationTests
         Assert.Equal("Surveillance Terminal", ApplicationShell.DossiersWindowTitle);
         Assert.Equal("Debug Window", debugApplications[1].Label);
         Assert.Equal("Debug Window", ApplicationShell.DebugWindowTitle);
+    }
+
+    [Fact]
+    public void SpawnerSelectsExactlyFiveDistinctOperatives()
+    {
+        var catalog = LoadCatalog();
+        var firstStore = new EntityStore();
+        var secondStore = new EntityStore();
+
+        new AgentSpawner(catalog).Spawn(firstStore, 20, new Random(321));
+        new AgentSpawner(catalog).Spawn(secondStore, 20, new Random(321));
+
+        var firstOperatives = firstStore.Query<Identity>().Entities
+            .Where(entity => entity.Tags.Has<OperativeTag>())
+            .Select(entity => entity.Id)
+            .ToArray();
+        var secondOperatives = secondStore.Query<Identity>().Entities
+            .Where(entity => entity.Tags.Has<OperativeTag>())
+            .Select(entity => entity.Id)
+            .ToArray();
+
+        Assert.Equal(SimulationDefaults.OperativeCount, firstOperatives.Length);
+        Assert.Equal(firstOperatives.Length, firstOperatives.Distinct().Count());
+        Assert.Equal(firstOperatives, secondOperatives);
+    }
+
+    [Fact]
+    public void SpawnerSelectsAtMostThePopulationForSmallOperativeTeams()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+
+        new AgentSpawner(catalog).Spawn(store, 3, new Random(99));
+
+        Assert.Equal(3, store.Query<Identity>().Entities.Count(entity => entity.Tags.Has<OperativeTag>()));
+    }
+
+    [Fact]
+    public void PlayerIntelligenceUsesTheUnionOfOperativeOutgoingMasks()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        var operativeOne = store.CreateEntity(new Identity { NameId = 11 }, Tags.Get<OperativeTag>());
+        var operativeTwo = store.CreateEntity(new Identity { NameId = 12 }, Tags.Get<OperativeTag>());
+        var nonOperative = store.CreateEntity(new Identity { NameId = 13 });
+        var target = store.CreateEntity(new Identity { NameId = 14 });
+
+        store.CreateEntity(new EdgeData
+        {
+            Source = operativeOne,
+            Target = target,
+            KnownTraitMask = 1L
+        });
+        store.CreateEntity(new EdgeData
+        {
+            Source = operativeTwo,
+            Target = target,
+            KnownTraitMask = 4L
+        });
+        store.CreateEntity(new EdgeData
+        {
+            Source = target,
+            Target = operativeOne,
+            KnownTraitMask = 2L
+        });
+        store.CreateEntity(new EdgeData
+        {
+            Source = nonOperative,
+            Target = target,
+            KnownTraitMask = 8L
+        });
+
+        var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
+
+        Assert.Equal(new[] { operativeOne.Id, operativeTwo.Id }, intelligence.OperativeEntityIds);
+        Assert.Equal(1L | 4L, intelligence.Agents.Single(agent => agent.EntityId == target.Id).KnownTraitMask);
+        Assert.Equal(0L, intelligence.Agents.Single(agent => agent.EntityId == nonOperative.Id).KnownTraitMask);
+        Assert.Equal(4, intelligence.Agents.Count);
+    }
+
+    [Fact]
+    public void DossierTraitFormatterRevealsOnlyKnownBits()
+    {
+        var brave = new TraitDefinition("brave", "Brave", 1L, 0.5f);
+        var greedy = new TraitDefinition("greedy", "Greedy", 4L, 0.5f);
+
+        Assert.Equal("Trait: ???", DossierTraitFormatter.Format(brave, 0L));
+        Assert.Equal("Brave", DossierTraitFormatter.Format(brave, 1L));
+        Assert.Equal("Trait: ???", DossierTraitFormatter.Format(greedy, 1L));
     }
 
     [Fact]

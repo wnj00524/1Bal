@@ -8,6 +8,11 @@ public struct Tier1LodTag : ITag { }
 public struct Tier2LodTag : ITag { }
 public struct Tier3LodTag : ITag { }
 
+// Operatives are the player-controlled intelligence sources. Keeping team
+// membership as an ECS tag lets simulation systems and the UI boundary query
+// the same authoritative assignment without exposing entities to ImGui.
+public struct OperativeTag : ITag { }
+
 public struct Identity : IComponent
 {
     public int NameId;
@@ -100,6 +105,7 @@ public static class SimulationDefaults
     public const int DaysPerWeek = 7;
     public const string ResidentialLocationType = "residential";
     public const int SocialRelationshipsPerAgent = 5;
+    public const int OperativeCount = 5;
     public const int InteractionIntervalTicks = 60;
     public const int InteractionD100Sides = 100;
     public const int ParanoidWillpowerBonus = 20;

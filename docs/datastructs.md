@@ -12,6 +12,7 @@ using Friflo.Engine.ECS;
 public struct Tier1LodTag : ITag { } // Updated every simulation tick.
 public struct Tier2LodTag : ITag { } // Reserved for hourly updates.
 public struct Tier3LodTag : ITag { } // Reserved for daily updates.
+public struct OperativeTag : ITag { } // Player-controlled intelligence source.
 
 public struct Identity : IComponent {
     public int NameId;       // Hash mapped to localization.
@@ -144,3 +145,18 @@ public enum ApplicationId
 ```
 
 `ApplicationIcon` pairs an application identifier with its launcher label and compact icon glyph. `ApplicationShell` keeps the selected icon and open/closed presentation state for the `Surveillance Terminal` and `Debug Window`; it contains no ECS entity references or simulation data.
+
+### 2.6 Operative Intelligence Snapshots
+
+`OperativeTag` identifies the five randomly selected agents controlled by the
+player's team. `SimulationDefaults.OperativeCount` is `5`; smaller populations
+select all available agents. Selection uses the spawner's injected `Random`, so
+seeded runs reproduce the same team membership.
+
+`PlayerIntelligenceAgentSnapshot` contains an agent ID, name ID, Operative
+marker, and the team-known trait mask. `PlayerIntelligenceDB` contains a
+read-only list of these snapshots plus the selected Operative IDs. Its capture
+boundary scans only outgoing edges whose source has `OperativeTag` and combines
+their known trait masks per target with bitwise `OR`. It does not copy
+`Psychology` or retain ECS entities. The dossier applies each configured trait
+bit with `knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.

@@ -38,9 +38,11 @@ public sealed class AgentSpawner
             assignments.Add(new AgentWorldAssignment(job, home, workplace, route));
         }
 
+        var operativeIndexes = SelectOperativeIndexes(count, random);
         var agents = new List<Entity>(count);
-        foreach (var assignment in assignments)
+        for (var index = 0; index < assignments.Count; index++)
         {
+            var assignment = assignments[index];
             var entity = store.CreateEntity(
                 new Identity
                 {
@@ -79,13 +81,32 @@ public sealed class AgentSpawner
                 },
                 Tags.Get<Tier1LodTag>());
 
-            // Entity creation is the only structural operation in this loop.
+            if (operativeIndexes.Contains(index))
+            {
+                entity.AddTag<OperativeTag>();
+            }
+
+            // The Operative tag is added only for the selected team members;
+            // all other simulation state is created in one ECS operation.
             agents.Add(entity);
         }
 
         _socialGraphBuilder.Populate(store, agents, random);
 
         return count;
+    }
+
+    private static HashSet<int> SelectOperativeIndexes(int count, Random random)
+    {
+        var selectedCount = Math.Min(SimulationDefaults.OperativeCount, count);
+        var indexes = Enumerable.Range(0, count).ToArray();
+        for (var index = 0; index < selectedCount; index++)
+        {
+            var other = index + random.Next(count - index);
+            (indexes[index], indexes[other]) = (indexes[other], indexes[index]);
+        }
+
+        return indexes.Take(selectedCount).ToHashSet();
     }
 
     private sealed record AgentWorldAssignment(
