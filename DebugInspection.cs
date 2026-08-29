@@ -66,7 +66,7 @@ public static class DebugSnapshotBuilder
         var secretStatesByHash = catalog.SecretStates.ToDictionary(secretState => secretState.Hash);
         var snapshots = new List<DebugAgentSnapshot>();
 
-        foreach (var entity in store.Query<Identity>().Entities.OrderBy(entity => entity.Id))
+        foreach (var entity in store.Query<Identity>().Entities)
         {
             var identity = entity.GetComponent<Identity>();
             var faction = entity.GetComponent<PoliticalAlignment>();
