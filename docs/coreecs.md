@@ -105,4 +105,25 @@ The system is configured with an optional positive per-tick increase so simulati
 * Secret state is copied only into `DebugAgentSnapshot`; the player dossier does
   not receive or display it.
 
+### 4.11 Agent Network Service (Milestone 5)
+
+**Goal:** Preserve flat-family and single-supervisor company invariants at one
+runtime mutation boundary.
+
+* `AgentNetworkService.CreateNetwork` creates an `AgentNetworkData` entity only
+  after resolving its static type hash through `AgentNetworkCatalog`.
+* Memberships are native Friflo link relations from agents to network entities.
+  The service verifies both endpoints, role ownership, type-level cardinality,
+  and uniqueness before adding one.
+* Flat networks reject supervisors. Hierarchical networks have one root, require
+  one same-network supervisor for every non-root, reject self-supervision, and
+  walk the supervisor chain before a change to prevent cycles.
+* Manager removal reparents direct reports to the removed manager's supervisor.
+  Root removal requires a direct-report successor; deletion cleanup selects the
+  lowest-ID direct report when external agent deletion makes explicit selection
+  impossible.
+* The service subscribes to ECS entity deletion events because Friflo cleans up
+  the keyed `Network` link but cannot clean the non-key `Supervisor` field.
+  Network deletion first removes all incoming membership relations.
+
 ---

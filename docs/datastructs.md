@@ -194,5 +194,23 @@ is also a registered set (`HomeLocation` and `WorkLocation`), rather than a
 content-supplied query language. A generator contains bounded weighted sizes,
 an explicit remainder policy, data-driven role hashes, and (only for a
 single-supervisor hierarchy) span-of-control and depth limits. Runtime ECS
-network and membership structures are intentionally deferred to milestone 5,
-slice 2.
+network instances use `AgentNetworkData` ECS entities. `TypeHash` selects their
+validated type, `AnchorLocationId` is the partition location (or zero for an
+unanchored network), and `Ordinal` provides deterministic identity within a
+generated series.
+
+Agent membership is an `AgentNetworkMembership : ILinkRelation` stored on the
+agent and keyed by its `Network` entity. It carries the data-driven `RoleHash`
+and an optional `Supervisor` entity. The relation key guarantees at most one
+membership per agent/network pair while still allowing unrelated family and
+company memberships. The supervisor is intentionally not another relation key,
+so deletion cleanup must update it explicitly.
+
+`AgentNetworkService` is the only supported mutation boundary. It validates
+live agent/network entities, catalog roles, per-type cardinality, flat versus
+single-supervisor rules, and acyclic supervision. A removed manager's direct
+reports move to that manager's supervisor. A live root can be removed only with
+an explicit direct-report successor; when an agent is deleted externally, the
+lowest-entity-ID direct report succeeds a deleted root deterministically.
+Deleting a network removes every incoming membership before deleting its ECS
+entity. Its type, anchor, and ordinal are immutable after creation.
