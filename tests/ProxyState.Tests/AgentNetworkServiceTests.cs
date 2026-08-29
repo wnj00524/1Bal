@@ -21,6 +21,8 @@ public sealed class AgentNetworkServiceTests
 
             Assert.Equal(42, family.GetComponent<AgentNetworkData>().AnchorLocationId);
             Assert.Equal(family, service.GetMembership(agent, family).Network);
+            Assert.Single(service.GetMemberships(agent));
+            Assert.Equal(agent, Assert.Single(service.GetNetworkMembers(family)).Agent);
             Assert.Throws<InvalidOperationException>(() => service.AddMembership(agent, family,
                 catalog.GetRole("family-member").Hash));
             Assert.Throws<InvalidOperationException>(() => service.AddMembership(agent, secondFamily,

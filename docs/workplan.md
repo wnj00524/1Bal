@@ -65,7 +65,7 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 - [x] Enforce hierarchy invariants: flat networks have no supervisors; supervisors are not self, belong to the same network, and cannot introduce cycles; each non-root company member has exactly one supervisor.
 - [x] Define explicit manager removal, root succession, agent deletion cleanup, and network deletion behavior. Do not rely on Friflo target-link cleanup for the non-key `Supervisor` field.
 - [x] Keep networks immutable after initial generation in the first delivery while retaining the service as the invariant-preserving path for future mutations.
-- [ ] Test outgoing and incoming membership views, duplicate prevention, role and cardinality validation, flat/hierarchical rules, cycle rejection, and lifecycle cleanup.
+- [x] Test outgoing and incoming membership views, duplicate prevention, role and cardinality validation, flat/hierarchical rules, cycle rejection, and lifecycle cleanup.
 
 ### Slice 3 — Deterministic generation
 
