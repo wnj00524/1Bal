@@ -957,7 +957,7 @@ public sealed class SimulationTests
         public static void CopyCatalogFiles(string directory)
         {
             var source = System.IO.Path.Combine(AppContext.BaseDirectory, "data");
-            foreach (var fileName in new[] { "actions.json", "secret-states.json", "factions.json", "traits.json", "agent-schema.json", "jobs.json", "world.json" })
+            foreach (var fileName in new[] { "actions.json", "secret-states.json", "factions.json", "traits.json", "agent-schema.json", "jobs.json", "world.json", "networks.json" })
             {
                 File.Copy(System.IO.Path.Combine(source, fileName), System.IO.Path.Combine(directory, fileName));
             }
