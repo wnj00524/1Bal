@@ -32,3 +32,65 @@
 - [x] Draw a list of all Agents. When the user clicks an Agent, open their "Dossier".
 - [x] Crucial Security Check: The Dossier UI displays only traits unlocked in the union of the five Operatives' Knowledge Masks. It uses bitwise AND (&) logic; if the mask bit is 0, it renders "Trait: ???", and if 1, it renders the trait name.
 - [x] Add JSON-defined agent secret states with a default `None` state, debug-only inspection, and preservation across public action updates.
+
+## Milestone 5: Agent Networks — Families and Companies
+
+Tracked by [#22: Add data-driven agent networks with flat and hierarchical membership](https://github.com/wnj00524/proxystate/issues/22).
+
+### Design direction
+
+- [ ] Keep **network types** as validated static definitions in `data/networks.json` (for example, `family` and `company`).
+- [ ] Represent each runtime **network instance** (for example, “Family 17”) as an ECS entity with compact `AgentNetworkData` containing a type hash, optional anchor location ID, and deterministic ordinal.
+- [ ] Represent **membership** as an `AgentNetworkMembership : ILinkRelation` from an agent to a network entity, keyed by the network and carrying compact role and optional supervisor data.
+- [ ] Keep categorical network membership separate from `EdgeData`, which remains the directional, intelligence-bearing representation of interpersonal relationships.
+- [ ] Store hierarchy structurally on membership through `Supervisor`; do not infer reporting lines from roles or add a redundant manager-keyed reverse relation until profiling justifies one.
+- [ ] Keep generated company sizes bounded so member enumeration and direct-report filtering remain predictable without per-network member arrays or transitive closures.
+- [ ] Treat networks as Ground Truth only for this milestone. Expose copied immutable debug snapshots, and do not add network knowledge to `PlayerIntelligenceDB` until a separate intelligence model defines confidence, provenance, and known or suspected membership.
+
+### Slice 1 — Catalog and schema
+
+- [ ] Add `data/networks.json` with network type, role, and generator definitions for flat families and single-supervisor companies.
+- [ ] Keep roles data-driven rather than adding family or company role enums to ECS components.
+- [ ] Add validated runtime definitions for hierarchy mode, partition key, roles, network types, size weights, and generators; convert JSON identifiers and references to cached integer-hash lookups during catalog loading.
+- [ ] Use a controlled set of registered partition strategies, initially `home-location` and `work-location`, instead of a JSON query or reflection-based rule language.
+- [ ] Validate empty or duplicate IDs, duplicate hashes, missing roles, cross-type role references, incompatible hierarchy fields, invalid sizes and weights, impossible remainder handling, invalid membership cardinality, span/depth constraints, unknown partition keys, and company sizes that exceed hierarchy capacity.
+- [ ] Add malformed-content tests for every validation category and lookup tests by both ID and hash.
+
+### Slice 2 — ECS primitives and service
+
+- [ ] Add `AgentNetworkData : IComponent` with `TypeHash`, `AnchorLocationId`, and `Ordinal`; zero anchor means the network is unanchored.
+- [ ] Add `AgentNetworkMembership : ILinkRelation` with `Network` as the relation key plus `RoleHash` and `Supervisor` fields.
+- [ ] Add `AgentNetworkService` as the sole mutation boundary for creating and deleting networks and for adding, changing, querying, supervising, and removing memberships.
+- [ ] Enforce live agent/network entities, network targets with `AgentNetworkData`, roles belonging to the selected network type, type-level membership cardinality, and one membership per agent/network pair.
+- [ ] Enforce hierarchy invariants: flat networks have no supervisors; supervisors are not self, belong to the same network, and cannot introduce cycles; each non-root company member has exactly one supervisor.
+- [ ] Define explicit manager removal, root succession, agent deletion cleanup, and network deletion behavior. Do not rely on Friflo target-link cleanup for the non-key `Supervisor` field.
+- [ ] Keep networks immutable after initial generation in the first delivery while retaining the service as the invariant-preserving path for future mutations.
+- [ ] Test outgoing and incoming membership views, duplicate prevention, role and cardinality validation, flat/hierarchical rules, cycle rejection, and lifecycle cleanup.
+
+### Slice 3 — Deterministic generation
+
+- [ ] Split the injected seed into independent deterministic streams for population assignments, operative selection, network generation, and the social graph so a network-data change cannot reshuffle social relationships.
+- [ ] Run network generation after all agent entities and home/work assignments exist, but before generating interpersonal social edges.
+- [ ] Add an `AgentNetworkBuilder` with a shared partitioning stage: select the configured location key, bucket agents, deterministically shuffle each bucket, sample bounded sizes, partition the bucket, create network entities, and add memberships.
+- [ ] Define deterministic remainder handling so every eligible agent is consumed exactly once for types whose `MaxNetworksPerAgent` is one.
+- [ ] Generate synthetic flat families within each home-location bucket, assign the family-member role, leave supervisors null, and avoid inventing genealogical parent, child, spouse, age, or surname semantics.
+- [ ] Generate bounded companies within each work-location bucket and construct an acyclic breadth-first hierarchy with configured target/maximum span of control and maximum depth.
+- [ ] Assign exactly one company head, manager roles only to non-root members with reports, and employee roles to leaves; explicitly support a one-person company as a supervisor-less head.
+- [ ] Add deterministic generation tests covering repeatable seeds, full membership coverage, location anchoring, bounds, hierarchy balance, acyclicity, role assignment, and random-stream isolation.
+
+### Slice 4 — Inspection, performance, and documentation
+
+- [ ] Add immutable `DebugNetworkSnapshot` and `DebugNetworkMembershipSnapshot` projections that resolve static type, role, and display names without exposing live Ground Truth entities to ordinary UI.
+- [ ] Extend only the ground-truth debug inspector to show an agent's networks, roles, and supervisor and to summarize each network's anchor and member count.
+- [ ] Keep persistent network storage linear in population: approximately one family and one company membership per agent, with no persistent lists, dictionaries, strings, member arrays, descendant closures, or redundant hierarchy indexes in ECS data.
+- [ ] Add benchmarks at 1,000, 10,000, and 100,000 agents for generation time, relation count, and allocation-free incoming-member enumeration; verify linear growth.
+- [ ] Process packed membership relation pairs once for network-wide systems and introduce a manager-keyed reverse index only if a benchmark demonstrates a bounded company scan is hot.
+- [ ] Update `README.md`, `docs/coreecs.md`, and `docs/datastructs.md` alongside implementation, documenting Friflo query paths and expected costs: agent networks `O(d)`, network members `O(k)`, one membership `O(d)`, direct reports `O(k)`, all memberships `O(M)`, and management-chain walks `O(depth)`.
+
+### Delivery criteria
+
+- [ ] `ContentCatalog` exposes validated, cached network definitions without runtime string searches.
+- [ ] Every generated agent belongs to the configured family and company network counts, and no agent can be inserted twice into the same network.
+- [ ] Generated company hierarchies are deterministic, bounded, connected, and acyclic, with exactly one root.
+- [ ] Network generation does not alter population assignments, operative selection, or social edges for the same root seed.
+- [ ] Debug inspection uses copied snapshots, while player-facing intelligence remains isolated and unchanged.
