@@ -18,12 +18,14 @@ public sealed class WorldTopology
         _travelMinutes = new Dictionary<(int From, int To), int>();
         _neighbors = locations.ToDictionary(location => location.Hash, _ => new List<(int, int)>());
 
+        var locationsById = locations.ToDictionary(
+            location => location.Id,
+            StringComparer.OrdinalIgnoreCase);
+
         foreach (var connection in connections)
         {
-            var from = _locationsByHash.Values.First(location =>
-                string.Equals(location.Id, connection.From, StringComparison.OrdinalIgnoreCase));
-            var to = _locationsByHash.Values.First(location =>
-                string.Equals(location.Id, connection.To, StringComparison.OrdinalIgnoreCase));
+            var from = locationsById[connection.From];
+            var to = locationsById[connection.To];
 
             AddConnection(from.Hash, to.Hash, connection.TravelMinutes);
             AddConnection(to.Hash, from.Hash, connection.TravelMinutes);
