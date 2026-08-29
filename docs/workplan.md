@@ -69,14 +69,14 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 
 ### Slice 3 — Deterministic generation
 
-- [ ] Split the injected seed into independent deterministic streams for population assignments, operative selection, network generation, and the social graph so a network-data change cannot reshuffle social relationships.
-- [ ] Run network generation after all agent entities and home/work assignments exist, but before generating interpersonal social edges.
-- [ ] Add an `AgentNetworkBuilder` with a shared partitioning stage: select the configured location key, bucket agents, deterministically shuffle each bucket, sample bounded sizes, partition the bucket, create network entities, and add memberships.
-- [ ] Define deterministic remainder handling so every eligible agent is consumed exactly once for types whose `MaxNetworksPerAgent` is one.
-- [ ] Generate synthetic flat families within each home-location bucket, assign the family-member role, leave supervisors null, and avoid inventing genealogical parent, child, spouse, age, or surname semantics.
-- [ ] Generate bounded companies within each work-location bucket and construct an acyclic breadth-first hierarchy with configured target/maximum span of control and maximum depth.
-- [ ] Assign exactly one company head, manager roles only to non-root members with reports, and employee roles to leaves; explicitly support a one-person company as a supervisor-less head.
-- [ ] Add deterministic generation tests covering repeatable seeds, full membership coverage, location anchoring, bounds, hierarchy balance, acyclicity, role assignment, and random-stream isolation.
+- [x] Split the injected seed into independent deterministic streams for population assignments, operative selection, network generation, and the social graph so a network-data change cannot reshuffle social relationships.
+- [x] Run network generation after all agent entities and home/work assignments exist, but before generating interpersonal social edges.
+- [x] Add an `AgentNetworkBuilder` with a shared partitioning stage: select the configured location key, bucket agents, deterministically shuffle each bucket, sample bounded sizes, partition the bucket, create network entities, and add memberships.
+- [x] Define deterministic remainder handling so every eligible agent is consumed exactly once for types whose `MaxNetworksPerAgent` is one.
+- [x] Generate synthetic flat families within each home-location bucket, assign the family-member role, leave supervisors null, and avoid inventing genealogical parent, child, spouse, age, or surname semantics.
+- [x] Generate bounded companies within each work-location bucket and construct an acyclic breadth-first hierarchy with configured target/maximum span of control and maximum depth.
+- [x] Assign exactly one company head, manager roles only to non-root members with reports, and employee roles to leaves; explicitly support a one-person company as a supervisor-less head.
+- [x] Add deterministic generation tests covering repeatable seeds, full membership coverage, location anchoring, bounds, hierarchy balance, acyclicity, role assignment, and random-stream isolation.
 
 ### Slice 4 — Inspection and documentation
 
