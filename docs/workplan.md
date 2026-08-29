@@ -49,12 +49,12 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 
 ### Slice 1 — Catalog and schema
 
-- [ ] Add `data/networks.json` with network type, role, and generator definitions for flat families and single-supervisor companies.
-- [ ] Keep roles data-driven rather than adding family or company role enums to ECS components.
-- [ ] Add validated runtime definitions for hierarchy mode, partition key, roles, network types, size weights, and generators; convert JSON identifiers and references to cached integer-hash lookups during catalog loading.
-- [ ] Use a controlled set of registered partition strategies, initially `home-location` and `work-location`, instead of a JSON query or reflection-based rule language.
-- [ ] Validate empty or duplicate IDs, duplicate hashes, missing roles, cross-type role references, incompatible hierarchy fields, invalid sizes and weights, impossible remainder handling, invalid membership cardinality, span/depth constraints, unknown partition keys, and company sizes that exceed hierarchy capacity.
-- [ ] Add malformed-content tests for every validation category and lookup tests by both ID and hash.
+- [x] Add `data/networks.json` with network type, role, and generator definitions for flat families and single-supervisor companies.
+- [x] Keep roles data-driven rather than adding family or company role enums to ECS components.
+- [x] Add validated runtime definitions for hierarchy mode, partition key, roles, network types, size weights, and generators; convert JSON identifiers and references to cached integer-hash lookups during catalog loading.
+- [x] Use a controlled set of registered partition strategies, initially `home-location` and `work-location`, instead of a JSON query or reflection-based rule language.
+- [x] Validate empty or duplicate IDs, duplicate hashes, missing roles, cross-type role references, incompatible hierarchy fields, invalid sizes and weights, impossible remainder handling, invalid membership cardinality, span/depth constraints, unknown partition keys, and company sizes that exceed hierarchy capacity.
+- [x] Add malformed-content tests for every validation category and lookup tests by both ID and hash.
 
 ### Slice 2 — ECS primitives and service
 

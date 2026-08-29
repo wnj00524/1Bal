@@ -63,7 +63,8 @@ public sealed class ContentCatalog
         IReadOnlyList<FactionDefinition> factions,
         AgentAttributeSchema agentAttributes,
         IReadOnlyList<JobDefinition> jobs,
-        WorldTopology world)
+        WorldTopology world,
+        AgentNetworkCatalog networks)
     {
         Traits = traits;
         Actions = actions;
@@ -72,6 +73,7 @@ public sealed class ContentCatalog
         AgentAttributes = agentAttributes;
         Jobs = jobs;
         World = world;
+        Networks = networks;
         AllTraitBits = traits.Aggregate(0L, (mask, trait) => mask | trait.Bit);
     }
 
@@ -82,6 +84,7 @@ public sealed class ContentCatalog
     public AgentAttributeSchema AgentAttributes { get; }
     public IReadOnlyList<JobDefinition> Jobs { get; }
     public WorldTopology World { get; }
+    public AgentNetworkCatalog Networks { get; }
     public long AllTraitBits { get; }
 
     public static ContentCatalog Load(string directory)
@@ -96,11 +99,15 @@ public sealed class ContentCatalog
         var schemaDocument = LoadObject<AgentSchemaDocument>(directory, "agent-schema.json", options);
         var jobs = LoadFile<JobDefinition>(directory, "jobs.json", options);
         var worldDocument = LoadObject<WorldDocument>(directory, "world.json", options);
+        var networksPath = Path.Combine(directory, "networks.json");
+        if (!File.Exists(networksPath))
+            throw new FileNotFoundException($"Required content file was not found: {networksPath}", networksPath);
 
         ValidateSecretStates(secretStates);
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
-        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world);
+        var networks = AgentNetworkCatalog.Load(networksPath, options);
+        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world, networks);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(
