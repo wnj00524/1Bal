@@ -8,6 +8,7 @@ public sealed class AgentSpawner
     private readonly AgentAttributeSchema _schema;
     private readonly WorldTopology _world;
     private readonly SocialGraphBuilder _socialGraphBuilder;
+    private readonly AgentNetworkBuilder _networkBuilder;
 
     public AgentSpawner(
         ContentCatalog catalog,
@@ -17,20 +18,35 @@ public sealed class AgentSpawner
         _schema = catalog.AgentAttributes;
         _world = catalog.World;
         _socialGraphBuilder = socialGraphBuilder ?? new SocialGraphBuilder();
+        _networkBuilder = new AgentNetworkBuilder(catalog.Networks);
     }
 
     public int Spawn(EntityStore store, int count, Random random)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(random);
+        return Spawn(store, count, random.Next());
+    }
+
+    public int Spawn(EntityStore store, int count, int seed)
+        => Spawn(store, count, seed, generateNetworks: true);
+
+    // The switch supports isolation tests and content tooling that needs a
+    // population preview; normal simulation entry points always enable it.
+    public int Spawn(EntityStore store, int count, int seed, bool generateNetworks)
+    {
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        var populationRandom = SimulationRandomStreams.Population(seed);
+        var operativeRandom = SimulationRandomStreams.Operatives(seed);
 
         var assignments = new List<AgentWorldAssignment>(count);
         for (var index = 0; index < count; index++)
         {
-            var job = _catalog.Jobs[random.Next(_catalog.Jobs.Count)];
-            var home = ChooseLocation(random, SimulationDefaults.ResidentialLocationType);
-            var workplace = ChooseLocation(random, job.WorkplaceType);
+            var job = _catalog.Jobs[populationRandom.Next(_catalog.Jobs.Count)];
+            var home = ChooseLocation(populationRandom, SimulationDefaults.ResidentialLocationType);
+            var workplace = ChooseLocation(populationRandom, job.WorkplaceType);
             var route = _world.FindShortestRoute(home.Hash, workplace.Hash)
                 ?? throw new InvalidDataException(
                     $"No route exists from residential location '{home.Id}' to workplace type '{job.WorkplaceType}'.");
@@ -38,7 +54,7 @@ public sealed class AgentSpawner
             assignments.Add(new AgentWorldAssignment(job, home, workplace, route));
         }
 
-        var operativeIndexes = SelectOperativeIndexes(count, random);
+        var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -47,7 +63,7 @@ public sealed class AgentSpawner
             var entity = store.CreateEntity(
                 new Identity
                 {
-                    NameId = random.Next(),
+                    NameId = populationRandom.Next(),
                     OccupationId = assignment.Job.Hash,
                     IntelligenceRole = isOperative
                         ? IntelligenceRole.Officer
@@ -55,19 +71,19 @@ public sealed class AgentSpawner
                 },
                 new PoliticalAlignment
                 {
-                    FactionId = _catalog.Factions[random.Next(_catalog.Factions.Count)].FactionId
+                    FactionId = _catalog.Factions[populationRandom.Next(_catalog.Factions.Count)].FactionId
                 },
                 new AgentAttributes
                 {
-                    Values = CreateAttributeValues(random)
+                    Values = CreateAttributeValues(populationRandom)
                 },
                 new Psychology
                 {
-                    TraitMask = CreateTraitMask(random)
+                    TraitMask = CreateTraitMask(populationRandom)
                 },
                 new AgentState
                 {
-                    CurrentActionHash = _catalog.Actions[random.Next(_catalog.Actions.Count)].Hash,
+                    CurrentActionHash = _catalog.Actions[populationRandom.Next(_catalog.Actions.Count)].Hash,
                     SecretStateHash = 0
                 },
                 new AgentLocation
@@ -96,7 +112,14 @@ public sealed class AgentSpawner
             agents.Add(entity);
         }
 
-        _socialGraphBuilder.Populate(store, agents, random);
+        // Network construction needs completed location assignments and runs
+        // before social edges, using independent streams for replay isolation.
+        if (generateNetworks)
+        {
+            var networkService = new AgentNetworkService(store, _catalog.Networks);
+            _networkBuilder.Populate(networkService, agents, SimulationRandomStreams.Networks(seed));
+        }
+        _socialGraphBuilder.Populate(store, agents, SimulationRandomStreams.SocialGraph(seed));
 
         return count;
     }

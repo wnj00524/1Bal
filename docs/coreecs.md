@@ -126,4 +126,31 @@ runtime mutation boundary.
   the keyed `Network` link but cannot clean the non-key `Supervisor` field.
   Network deletion first removes all incoming membership relations.
 
+### 4.12 Deterministic Agent Network Generation
+
+**Goal:** Generate location-coherent families and bounded company hierarchies
+without coupling unrelated replay outcomes.
+
+* `AgentSpawner` derives separate population, Operative, network, and social
+  graph random streams from one injected seed. Network content changes can
+  consume different random values without changing assignments, Operatives, or
+  social peers.
+* Network generation runs after every agent has home and work assignments and
+  before `SocialGraphBuilder` creates interpersonal edges.
+* `AgentNetworkBuilder` buckets agents by the generator's registered home- or
+  work-location strategy, sorts buckets by location hash, shuffles each bucket,
+  samples configured weighted sizes, and consumes every member exactly once.
+  Each resulting network is anchored to its bucket location.
+* Families are flat synthetic groupings whose members all use the configured
+  member role and have no supervisor. Generation intentionally adds no inferred
+  genealogy, ages, or surnames.
+* Companies are built breadth-first. Children are distributed evenly across a
+  level up to the configured target span; validated size capacity guarantees
+  the maximum depth is sufficient. The root is the only head, non-root agents
+  with reports become managers, and leaves remain employees. A one-person
+  company consists only of a supervisor-less head.
+* All entity and relation creation goes through `AgentNetworkService`, so
+  generated data is subject to the same role, cardinality, supervisor, and
+  cycle invariants as future runtime mutations.
+
 ---
