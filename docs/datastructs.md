@@ -179,3 +179,20 @@ their known trait masks per target with bitwise `OR`. It does not copy
 when spawned; other agents default to `None`. The dossier displays non-empty
 roles alongside each agent and applies each configured trait bit with
 `knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.
+
+### 2.7 Agent Network Catalog
+
+`data/networks.json` is the static source of network types, roles, and generation
+policies. `AgentNetworkCatalog` validates that document at startup and exposes
+immutable `NetworkTypeDefinition`, `NetworkRoleDefinition`, and
+`NetworkGeneratorDefinition` records. Identifiers and references are converted
+to stable FNV-1a integer hashes during loading; lookups by either ID or hash are
+cached dictionaries and do not perform runtime string searches.
+
+Hierarchy is deliberately limited to `Flat` and `SingleSupervisor`. Partitioning
+is also a registered set (`HomeLocation` and `WorkLocation`), rather than a
+content-supplied query language. A generator contains bounded weighted sizes,
+an explicit remainder policy, data-driven role hashes, and (only for a
+single-supervisor hierarchy) span-of-control and depth limits. Runtime ECS
+network and membership structures are intentionally deferred to milestone 5,
+slice 2.
