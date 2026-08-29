@@ -35,6 +35,22 @@ Make sure that design principles/data structures/GUI rules are documented in the
 
 
 
+## Git Authorship
+
+Agentic coders MUST use a Git author name based on the model performing the
+work. Before creating a commit, set the repository-local author name to the
+model's full, specific name (for example, `GPT-5.6 Sol`), rather than a generic
+tool name such as `Codex` or `AI Agent`:
+
+```bash
+git config --local user.name "<model name>"
+git config --local --get user.name
+```
+
+Do not change `user.email` unless the user explicitly requests it. Existing
+email and signing configuration belongs to the repository user and must be
+preserved.
+
 ## GitHub Project & Tracking
 
 Agents working in this repository MUST track their progress and align tasks with the GitHub Project "PState".
