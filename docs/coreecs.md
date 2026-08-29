@@ -153,4 +153,25 @@ without coupling unrelated replay outcomes.
   generated data is subject to the same role, cardinality, supervisor, and
   cycle invariants as future runtime mutations.
 
+### 4.13 Agent Network Query and Inspection Costs
+
+**Goal:** Inspect network ground truth without adding persistent indexes or
+leaking ECS entities into ordinary presentation code.
+
+* An agent's outgoing `GetRelations<AgentNetworkMembership>()` enumerates its
+  network degree in `O(d)`; keyed `TryGetRelation` retrieves one membership in
+  `O(d)` with the current compact relation representation.
+* A network's incoming `GetIncomingLinks<AgentNetworkMembership>()` enumerates
+  only its `k` members in `O(k)`. Direct reports are filtered from those members
+  in `O(k)`; a management-chain walk follows supervisors in `O(depth)`.
+* Network-wide work visits packed incoming relation pairs once, for `O(M)` total
+  memberships. `DebugSnapshotBuilder.CaptureInspection` follows this path and
+  creates transient immutable agent-membership and network-summary projections.
+* No persistent member list, descendant closure, or manager-keyed reverse
+  relation is maintained. This keeps storage `O(M)` and avoids redundant ECS
+  indexes until profiling demonstrates a need.
+* `DebugWindow` receives only `DebugInspectionSnapshot`. Network type/role names,
+  anchor names, supervisor display names, and counts are resolved at the
+  Ground Truth boundary; `PlayerIntelligenceDB` and dossiers remain unchanged.
+
 ---

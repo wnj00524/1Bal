@@ -105,9 +105,9 @@ public sealed class ApplicationShell
         DossiersOpen = isOpen;
     }
 
-    public void DrawDebugWindow(IReadOnlyList<DebugAgentSnapshot> agents, DebugWindow debugWindow)
+    public void DrawDebugWindow(DebugInspectionSnapshot inspection, DebugWindow debugWindow)
     {
-        ArgumentNullException.ThrowIfNull(agents);
+        ArgumentNullException.ThrowIfNull(inspection);
         ArgumentNullException.ThrowIfNull(debugWindow);
 
         if (!DebugWindowOpen)
@@ -116,7 +116,7 @@ public sealed class ApplicationShell
         }
 
         var isOpen = DebugWindowOpen;
-        debugWindow.Draw(agents, ref isOpen);
+        debugWindow.Draw(inspection, ref isOpen);
         DebugWindowOpen = isOpen;
     }
 
