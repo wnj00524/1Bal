@@ -121,8 +121,8 @@ public sealed class ContentCatalog
             throw new FileNotFoundException($"Required content file was not found: {path}", path);
         }
 
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<List<T>>(json, options)
+        using var stream = File.OpenRead(path);
+        return JsonSerializer.Deserialize<List<T>>(stream, options)
             ?? throw new InvalidDataException($"Content file is empty or invalid: {path}");
     }
 
@@ -137,8 +137,8 @@ public sealed class ContentCatalog
             throw new FileNotFoundException($"Required content file was not found: {path}", path);
         }
 
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<T>(json, options)
+        using var stream = File.OpenRead(path);
+        return JsonSerializer.Deserialize<T>(stream, options)
             ?? throw new InvalidDataException($"Content file is empty or invalid: {path}");
     }
 
