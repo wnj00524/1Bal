@@ -133,7 +133,7 @@ source's known mask.
 
 ### 2.3 Debug Inspection Snapshots
 
-Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, and the travel route/state. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, and resolved network memberships. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
 
 ### 2.4 World-Time Presentation Snapshot
 
@@ -214,3 +214,9 @@ an explicit direct-report successor; when an agent is deleted externally, the
 lowest-entity-ID direct report succeeds a deleted root deterministically.
 Deleting a network removes every incoming membership before deleting its ECS
 entity. Its type, anchor, and ordinal are immutable after creation.
+
+Persistent network storage remains linear in population. ECS data contains no
+display strings, member arrays, dictionaries, descendant closures, or redundant
+supervisor indexes: each generated agent contributes approximately one family
+and one company relation. Resolved names and summary collections are transient
+debug projections and are discarded after presentation.

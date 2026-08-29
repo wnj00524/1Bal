@@ -28,6 +28,27 @@ public sealed record DebugTravelSnapshot(
     float RemainingTravelMinutes,
     AgentTravelMode Mode);
 
+public sealed record DebugNetworkMembershipSnapshot(
+    int NetworkEntityId,
+    string NetworkDisplayName,
+    string NetworkTypeName,
+    int RoleHash,
+    string RoleName,
+    int? SupervisorEntityId,
+    string? SupervisorDisplayName);
+
+public sealed record DebugNetworkSnapshot(
+    int EntityId,
+    string DisplayName,
+    int TypeHash,
+    string TypeName,
+    DebugLocationSnapshot? Anchor,
+    int MemberCount);
+
+public sealed record DebugInspectionSnapshot(
+    IReadOnlyList<DebugAgentSnapshot> Agents,
+    IReadOnlyList<DebugNetworkSnapshot> Networks);
+
 // These records intentionally contain only copied values. The UI can inspect
 // them freely without retaining an ECS Entity or a mutable component reference.
 public sealed record DebugAgentSnapshot(
@@ -48,7 +69,8 @@ public sealed record DebugAgentSnapshot(
     DebugLocationSnapshot Home,
     DebugLocationSnapshot Workplace,
     DebugLocationSnapshot CurrentLocation,
-    DebugTravelSnapshot Travel)
+    DebugTravelSnapshot Travel,
+    IReadOnlyList<DebugNetworkMembershipSnapshot> Networks)
 {
     public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
 }
@@ -56,6 +78,9 @@ public sealed record DebugAgentSnapshot(
 public static class DebugSnapshotBuilder
 {
     public static IReadOnlyList<DebugAgentSnapshot> Capture(EntityStore store, ContentCatalog catalog)
+        => CaptureInspection(store, catalog).Agents;
+
+    public static DebugInspectionSnapshot CaptureInspection(EntityStore store, ContentCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -64,7 +89,38 @@ public static class DebugSnapshotBuilder
         var factionsById = catalog.Factions.ToDictionary(faction => faction.FactionId);
         var actionsByHash = catalog.Actions.ToDictionary(action => action.Hash);
         var secretStatesByHash = catalog.SecretStates.ToDictionary(secretState => secretState.Hash);
+        var networkMembershipsByAgent = new Dictionary<int, List<DebugNetworkMembershipSnapshot>>();
+        var networkSnapshots = new List<DebugNetworkSnapshot>();
         var snapshots = new List<DebugAgentSnapshot>();
+
+        // Incoming links constrain each network-wide pass to that network's packed
+        // relation pairs. Every membership is copied once, without a population scan.
+        foreach (var network in store.Query<AgentNetworkData>().Entities)
+        {
+            var data = network.GetComponent<AgentNetworkData>();
+            var type = catalog.Networks.GetType(data.TypeHash);
+            var displayName = $"{type.Name} {data.Ordinal + 1}";
+            var memberCount = 0;
+            foreach (var link in network.GetIncomingLinks<AgentNetworkMembership>())
+            {
+                var agent = link.Entity;
+                var membership = agent.GetRelation<AgentNetworkMembership, Entity>(network);
+                var role = catalog.Networks.GetRole(membership.RoleHash);
+                var supervisorId = membership.Supervisor.IsNull ? (int?)null : membership.Supervisor.Id;
+                var copied = new DebugNetworkMembershipSnapshot(
+                    network.Id, displayName, type.Name, role.Hash, role.Name, supervisorId,
+                    supervisorId is null ? null : DescribeAgent(membership.Supervisor));
+                if (!networkMembershipsByAgent.TryGetValue(agent.Id, out var memberships))
+                    networkMembershipsByAgent.Add(agent.Id, memberships = new());
+                memberships.Add(copied);
+                memberCount++;
+            }
+
+            networkSnapshots.Add(new DebugNetworkSnapshot(
+                network.Id, displayName, data.TypeHash, type.Name,
+                data.AnchorLocationId == 0 ? null : DescribeLocation(data.AnchorLocationId, catalog.World),
+                memberCount));
+        }
 
         foreach (var entity in store.Query<Identity>().Entities)
         {
@@ -115,10 +171,15 @@ public static class DebugSnapshotBuilder
                     travel.TotalTravelMinutes,
                     travel.RoutePosition,
                     travel.RemainingTravelMinutes,
-                    travel.Mode)));
+                    travel.Mode),
+                (networkMembershipsByAgent.TryGetValue(entity.Id, out var memberships)
+                    ? memberships.OrderBy(item => item.NetworkEntityId).ToArray()
+                    : Array.Empty<DebugNetworkMembershipSnapshot>()).AsReadOnly()));
         }
 
-        return snapshots.AsReadOnly();
+        return new DebugInspectionSnapshot(
+            snapshots.AsReadOnly(),
+            networkSnapshots.OrderBy(network => network.EntityId).ToArray().AsReadOnly());
     }
 
     private static IReadOnlyList<DebugAttributeSnapshot> CopyAttributes(
@@ -160,15 +221,22 @@ public static class DebugSnapshotBuilder
             return new DebugLocationSnapshot(locationId, $"Unknown ({locationId})");
         }
     }
+
+    private static string DescribeAgent(Entity agent)
+    {
+        var identity = agent.GetComponent<Identity>();
+        return $"Agent {agent.Id} (Name ID {identity.NameId})";
+    }
 }
 
 public sealed class DebugWindow
 {
     private int? _selectedAgentId;
 
-    public void Draw(IReadOnlyList<DebugAgentSnapshot> agents, ref bool isOpen)
+    public void Draw(DebugInspectionSnapshot inspection, ref bool isOpen)
     {
-        ArgumentNullException.ThrowIfNull(agents);
+        ArgumentNullException.ThrowIfNull(inspection);
+        var agents = inspection.Agents;
 
         if (_selectedAgentId is not null && agents.All(agent => agent.EntityId != _selectedAgentId.Value))
         {
@@ -183,6 +251,15 @@ public sealed class DebugWindow
 
         ImGui.Text("Debug mode: ON");
         ImGui.Text($"Agents: {agents.Count}");
+        ImGui.Text($"Networks: {inspection.Networks.Count}");
+        if (ImGui.CollapsingHeader("Network summary"))
+        {
+            foreach (var network in inspection.Networks)
+            {
+                var anchor = network.Anchor is null ? "Unanchored" : FormatLocation(network.Anchor);
+                ImGui.BulletText($"{network.DisplayName}: {anchor}; {network.MemberCount} members");
+            }
+        }
         ImGui.Separator();
 
         ImGui.BeginChild("debug-agent-list", new Vector2(280, 0), ImGuiChildFlags.Borders);
@@ -253,6 +330,19 @@ public sealed class DebugWindow
         ImGui.BulletText($"Route position: {agent.Travel.RoutePosition}");
         ImGui.BulletText($"Remaining travel: {agent.Travel.RemainingTravelMinutes:0.##} minutes");
         ImGui.BulletText($"Route: {string.Join(" -> ", agent.Travel.Route.Select(FormatLocation))}");
+
+        ImGui.Separator();
+        ImGui.Text("Networks");
+        if (agent.Networks.Count == 0) ImGui.BulletText("None");
+        foreach (var membership in agent.Networks)
+        {
+            var supervisor = membership.SupervisorDisplayName ?? "None (root/flat)";
+            ImGui.BulletText($"{membership.NetworkDisplayName} ({membership.NetworkTypeName})");
+            ImGui.Indent();
+            ImGui.BulletText($"Role: {membership.RoleName} ({membership.RoleHash})");
+            ImGui.BulletText($"Supervisor: {supervisor}");
+            ImGui.Unindent();
+        }
     }
 
     private static string FormatLocation(DebugLocationSnapshot location) =>

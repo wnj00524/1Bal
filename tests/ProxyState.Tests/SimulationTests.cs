@@ -218,6 +218,37 @@ public sealed class SimulationTests
     }
 
     [Fact]
+    public void DebugInspectionCopiesResolvedAgentNetworkAndSummaryValues()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        new AgentSpawner(catalog).Spawn(store, 12, new Random(47));
+
+        var inspection = DebugSnapshotBuilder.CaptureInspection(store, catalog);
+
+        Assert.Equal(12, inspection.Agents.Count);
+        Assert.All(inspection.Agents, agent => Assert.Equal(2, agent.Networks.Count));
+        Assert.NotEmpty(inspection.Networks);
+        Assert.Equal(24, inspection.Networks.Sum(network => network.MemberCount));
+        Assert.All(inspection.Networks, network =>
+        {
+            Assert.NotEmpty(network.DisplayName);
+            Assert.NotEmpty(network.TypeName);
+            Assert.NotNull(network.Anchor);
+            Assert.True(network.MemberCount > 0);
+        });
+        Assert.All(inspection.Agents.SelectMany(agent => agent.Networks), membership =>
+        {
+            Assert.NotEmpty(membership.NetworkDisplayName);
+            Assert.NotEmpty(membership.NetworkTypeName);
+            Assert.NotEmpty(membership.RoleName);
+            Assert.Equal(membership.SupervisorEntityId is null, membership.SupervisorDisplayName is null);
+        });
+        Assert.DoesNotContain(typeof(Entity), typeof(DebugNetworkSnapshot).GetProperties().Select(property => property.PropertyType));
+        Assert.DoesNotContain(typeof(Entity), typeof(DebugNetworkMembershipSnapshot).GetProperties().Select(property => property.PropertyType));
+    }
+
+    [Fact]
     public void DossierTraitFormatterRevealsOnlyKnownBits()
     {
         var brave = new TraitDefinition("brave", "Brave", 1L, 0.5f);

@@ -61,7 +61,7 @@ public static class Program
                 {
                     // Capture immutable values before drawing so the UI never
                     // reaches into the Ground Truth ECS store directly.
-                    applicationShell.DrawDebugWindow(DebugSnapshotBuilder.Capture(store, catalog), debugWindow);
+                    applicationShell.DrawDebugWindow(DebugSnapshotBuilder.CaptureInspection(store, catalog), debugWindow);
                 }
                 WorldTimeBar.Draw(worldTime);
                 rlImGui.End();

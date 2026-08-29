@@ -80,11 +80,11 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 
 ### Slice 4 — Inspection and documentation
 
-- [ ] Add immutable `DebugNetworkSnapshot` and `DebugNetworkMembershipSnapshot` projections that resolve static type, role, and display names without exposing live Ground Truth entities to ordinary UI.
-- [ ] Extend only the ground-truth debug inspector to show an agent's networks, roles, and supervisor and to summarize each network's anchor and member count.
-- [ ] Keep persistent network storage linear in population: approximately one family and one company membership per agent, with no persistent lists, dictionaries, strings, member arrays, descendant closures, or redundant hierarchy indexes in ECS data.
-- [ ] Process packed membership relation pairs once for network-wide systems.
-- [ ] Update `README.md`, `docs/coreecs.md`, and `docs/datastructs.md` alongside implementation, documenting Friflo query paths and expected costs: agent networks `O(d)`, network members `O(k)`, one membership `O(d)`, direct reports `O(k)`, all memberships `O(M)`, and management-chain walks `O(depth)`.
+- [x] Add immutable `DebugNetworkSnapshot` and `DebugNetworkMembershipSnapshot` projections that resolve static type, role, and display names without exposing live Ground Truth entities to ordinary UI.
+- [x] Extend only the ground-truth debug inspector to show an agent's networks, roles, and supervisor and to summarize each network's anchor and member count.
+- [x] Keep persistent network storage linear in population: approximately one family and one company membership per agent, with no persistent lists, dictionaries, strings, member arrays, descendant closures, or redundant hierarchy indexes in ECS data.
+- [x] Process packed membership relation pairs once for network-wide systems.
+- [x] Update `README.md`, `docs/coreecs.md`, and `docs/datastructs.md` alongside implementation, documenting Friflo query paths and expected costs: agent networks `O(d)`, network members `O(k)`, one membership `O(d)`, direct reports `O(k)`, all memberships `O(M)`, and management-chain walks `O(depth)`.
 
 ### Slice 5 — Performance verification
 
