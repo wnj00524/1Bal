@@ -78,14 +78,20 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 - [ ] Assign exactly one company head, manager roles only to non-root members with reports, and employee roles to leaves; explicitly support a one-person company as a supervisor-less head.
 - [ ] Add deterministic generation tests covering repeatable seeds, full membership coverage, location anchoring, bounds, hierarchy balance, acyclicity, role assignment, and random-stream isolation.
 
-### Slice 4 — Inspection, performance, and documentation
+### Slice 4 — Inspection and documentation
 
 - [ ] Add immutable `DebugNetworkSnapshot` and `DebugNetworkMembershipSnapshot` projections that resolve static type, role, and display names without exposing live Ground Truth entities to ordinary UI.
 - [ ] Extend only the ground-truth debug inspector to show an agent's networks, roles, and supervisor and to summarize each network's anchor and member count.
 - [ ] Keep persistent network storage linear in population: approximately one family and one company membership per agent, with no persistent lists, dictionaries, strings, member arrays, descendant closures, or redundant hierarchy indexes in ECS data.
-- [ ] Add benchmarks at 1,000, 10,000, and 100,000 agents for generation time, relation count, and allocation-free incoming-member enumeration; verify linear growth.
-- [ ] Process packed membership relation pairs once for network-wide systems and introduce a manager-keyed reverse index only if a benchmark demonstrates a bounded company scan is hot.
+- [ ] Process packed membership relation pairs once for network-wide systems.
 - [ ] Update `README.md`, `docs/coreecs.md`, and `docs/datastructs.md` alongside implementation, documenting Friflo query paths and expected costs: agent networks `O(d)`, network members `O(k)`, one membership `O(d)`, direct reports `O(k)`, all memberships `O(M)`, and management-chain walks `O(depth)`.
+
+### Slice 5 — Performance verification
+
+- [ ] Add a large-population generation benchmark covering at least 1,000, 10,000, and 100,000 agents, recording generation time and allocations.
+- [ ] Confirm from benchmarked membership and network-instance counts that persistent relation storage grows linearly with agent population.
+- [ ] Confirm incoming-link member enumeration visits only the selected network's members and does not scan or materialize the full agent population.
+- [ ] Measure bounded direct-report scans and use the results to decide whether a manager-keyed reverse relation is justified; do not add the relation without benchmark evidence.
 
 ### Delivery criteria
 
