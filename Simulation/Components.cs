@@ -81,6 +81,26 @@ public struct AgentLocation : IComponent
     public int CurrentLocationId;
 }
 
+// A network instance is an ECS entity. Type and role identifiers are stable
+// catalog hashes; an anchor of zero deliberately represents no location.
+public struct AgentNetworkData : IComponent
+{
+    public int TypeHash;
+    public int AnchorLocationId;
+    public int Ordinal;
+}
+
+// Membership is keyed by its network, allowing one agent to participate in
+// several unrelated networks without allocating intermediary edge entities.
+public struct AgentNetworkMembership : ILinkRelation
+{
+    public Entity Network;
+    public int RoleHash;
+    public Entity Supervisor;
+
+    public readonly Entity GetRelationKey() => Network;
+}
+
 public enum AgentTravelMode : byte
 {
     AtHome,

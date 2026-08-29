@@ -58,13 +58,13 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 
 ### Slice 2 — ECS primitives and service
 
-- [ ] Add `AgentNetworkData : IComponent` with `TypeHash`, `AnchorLocationId`, and `Ordinal`; zero anchor means the network is unanchored.
-- [ ] Add `AgentNetworkMembership : ILinkRelation` with `Network` as the relation key plus `RoleHash` and `Supervisor` fields.
-- [ ] Add `AgentNetworkService` as the sole mutation boundary for creating and deleting networks and for adding, changing, querying, supervising, and removing memberships.
-- [ ] Enforce live agent/network entities, network targets with `AgentNetworkData`, roles belonging to the selected network type, type-level membership cardinality, and one membership per agent/network pair.
-- [ ] Enforce hierarchy invariants: flat networks have no supervisors; supervisors are not self, belong to the same network, and cannot introduce cycles; each non-root company member has exactly one supervisor.
-- [ ] Define explicit manager removal, root succession, agent deletion cleanup, and network deletion behavior. Do not rely on Friflo target-link cleanup for the non-key `Supervisor` field.
-- [ ] Keep networks immutable after initial generation in the first delivery while retaining the service as the invariant-preserving path for future mutations.
+- [x] Add `AgentNetworkData : IComponent` with `TypeHash`, `AnchorLocationId`, and `Ordinal`; zero anchor means the network is unanchored.
+- [x] Add `AgentNetworkMembership : ILinkRelation` with `Network` as the relation key plus `RoleHash` and `Supervisor` fields.
+- [x] Add `AgentNetworkService` as the sole mutation boundary for creating and deleting networks and for adding, changing, querying, supervising, and removing memberships.
+- [x] Enforce live agent/network entities, network targets with `AgentNetworkData`, roles belonging to the selected network type, type-level membership cardinality, and one membership per agent/network pair.
+- [x] Enforce hierarchy invariants: flat networks have no supervisors; supervisors are not self, belong to the same network, and cannot introduce cycles; each non-root company member has exactly one supervisor.
+- [x] Define explicit manager removal, root succession, agent deletion cleanup, and network deletion behavior. Do not rely on Friflo target-link cleanup for the non-key `Supervisor` field.
+- [x] Keep networks immutable after initial generation in the first delivery while retaining the service as the invariant-preserving path for future mutations.
 - [ ] Test outgoing and incoming membership views, duplicate prevention, role and cardinality validation, flat/hierarchical rules, cycle rejection, and lifecycle cleanup.
 
 ### Slice 3 — Deterministic generation
