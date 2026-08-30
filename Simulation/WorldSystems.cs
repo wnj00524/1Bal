@@ -49,24 +49,25 @@ public sealed class WorldClockSystem : QuerySystem<WorldTime>
     }
 }
 
-public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Identity, AgentState>
+public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, IntentionState, ActivityState, DecisionState>
 {
     private readonly WorldTopology _world;
     private readonly Entity _clockEntity;
-    private readonly Dictionary<int, JobDefinition> _jobsByHash;
     private readonly int _workActionHash;
     private readonly int _restActionHash;
+    private readonly int _socializeActionHash;
 
     public CommutingSystem(ContentCatalog catalog, Entity clockEntity)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _world = catalog.World;
         _clockEntity = clockEntity;
-        _jobsByHash = catalog.Jobs.ToDictionary(job => job.Hash);
         _workActionHash = catalog.Actions.First(action =>
             string.Equals(action.Id, "work", StringComparison.OrdinalIgnoreCase)).Hash;
         _restActionHash = catalog.Actions.First(action =>
             string.Equals(action.Id, "rest", StringComparison.OrdinalIgnoreCase)).Hash;
+        _socializeActionHash = catalog.Actions.First(action =>
+            string.Equals(action.Id, "socialize", StringComparison.OrdinalIgnoreCase)).Hash;
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -79,27 +80,21 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Id
             return;
         }
 
-        var jobDay = time.DayOfWeek;
-        var minuteOfDay = time.MinuteOfDay;
         Query.ForEachEntity((
             ref AgentLocation location,
             ref AgentTravel travel,
-            ref Identity identity,
-            ref AgentState state,
+            ref IntentionState intention,
+            ref ActivityState activity,
+            ref DecisionState decision,
             Entity _) =>
         {
-            if (!_jobsByHash.TryGetValue(identity.OccupationId, out var job))
-            {
-                return;
-            }
-
             UpdateAgent(
                 ref location,
                 ref travel,
-                ref state,
-                job,
-                jobDay,
-                minuteOfDay,
+                ref intention,
+                ref activity,
+                ref decision,
+                (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute),
                 elapsedMinutes);
         });
     }
@@ -107,39 +102,40 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Id
     private void UpdateAgent(
         ref AgentLocation location,
         ref AgentTravel travel,
-        ref AgentState state,
-        JobDefinition job,
-        int dayOfWeek,
-        int minuteOfDay,
+        ref IntentionState intention,
+        ref ActivityState activity,
+        ref DecisionState decision,
+        long minute,
         double elapsedMinutes)
     {
         if (travel.Mode is AgentTravelMode.TravellingToWork or AgentTravelMode.TravellingHome)
         {
-            AdvanceTravel(ref location, ref travel, elapsedMinutes);
+            if (AdvanceTravel(ref location, ref travel, elapsedMinutes)) decision.Dirty = true;
         }
 
-        var isWorkday = job.WorkDays.Contains(dayOfWeek);
-        var routeDuration = travel.TotalTravelMinutes;
-        var departureMinute = job.WorkStartMinute - routeDuration;
-
-        if (travel.Mode == AgentTravelMode.AtWork &&
-            (!isWorkday || minuteOfDay >= job.WorkEndMinute))
+        if (intention.ActionHash == _restActionHash && travel.Mode == AgentTravelMode.AtWork)
         {
             BeginTravelHome(ref location, ref travel);
         }
-        else if (travel.Mode == AgentTravelMode.AtHome && isWorkday &&
-                 minuteOfDay >= departureMinute && minuteOfDay < job.WorkEndMinute)
+        else if (intention.ActionHash == _workActionHash && travel.Mode == AgentTravelMode.AtHome)
         {
             BeginTravelToWork(ref location, ref travel);
         }
 
-        if (travel.Mode == AgentTravelMode.AtWork)
+        var kind = travel.Mode is AgentTravelMode.TravellingHome or AgentTravelMode.TravellingToWork
+            ? ActivityKind.Commuting
+            : intention.ActionHash == _workActionHash && travel.Mode == AgentTravelMode.AtWork
+                ? ActivityKind.Working
+                : intention.ActionHash == _socializeActionHash
+                    ? ActivityKind.Socializing
+                    : intention.ActionHash == _restActionHash && travel.Mode == AgentTravelMode.AtHome
+                        ? ActivityKind.Resting
+                        : ActivityKind.Idle;
+        if (activity.Kind != kind || activity.CurrentActionHash != intention.ActionHash)
         {
-            state.CurrentActionHash = _workActionHash;
-        }
-        else if (travel.Mode == AgentTravelMode.AtHome)
-        {
-            state.CurrentActionHash = _restActionHash;
+            activity.Kind = kind;
+            activity.CurrentActionHash = intention.ActionHash;
+            activity.StartedAtMinute = minute;
         }
     }
 
@@ -177,11 +173,12 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Id
             travel.RouteLocationIds[^2]);
     }
 
-    private void AdvanceTravel(
+    private bool AdvanceTravel(
         ref AgentLocation location,
         ref AgentTravel travel,
         double elapsedMinutes)
     {
+        var arrivedAtDestination = false;
         while (elapsedMinutes > 0d &&
                travel.Mode is AgentTravelMode.TravellingToWork or AgentTravelMode.TravellingHome)
         {
@@ -208,6 +205,7 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Id
                 travel.Mode = travel.Mode == AgentTravelMode.TravellingToWork
                     ? AgentTravelMode.AtWork
                     : AgentTravelMode.AtHome;
+                arrivedAtDestination = true;
                 continue;
             }
 
@@ -218,5 +216,6 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, Id
                 travel.RouteLocationIds[nextPosition],
                 travel.RouteLocationIds[followingPosition]);
         }
+        return arrivedAtDestination;
     }
 }

@@ -129,6 +129,7 @@ public static class DebugSnapshotBuilder
             var attributes = entity.GetComponent<AgentAttributes>();
             var psychology = entity.GetComponent<Psychology>();
             var state = entity.GetComponent<AgentState>();
+            var activity = entity.GetComponent<ActivityState>();
             var location = entity.GetComponent<AgentLocation>();
             var travel = entity.GetComponent<AgentTravel>();
 
@@ -138,9 +139,9 @@ public static class DebugSnapshotBuilder
             var factionName = factionsById.TryGetValue(faction.FactionId, out var factionDefinition)
                 ? factionDefinition.Name
                 : $"Unknown ({faction.FactionId})";
-            var actionName = actionsByHash.TryGetValue(state.CurrentActionHash, out var action)
+            var actionName = actionsByHash.TryGetValue(activity.CurrentActionHash, out var action)
                 ? action.Name
-                : $"Unknown ({state.CurrentActionHash})";
+                : $"Unknown ({activity.CurrentActionHash})";
             var secretStateName = secretStatesByHash.TryGetValue(state.SecretStateHash, out var secretState)
                 ? secretState.Name
                 : $"Unknown ({state.SecretStateHash})";
@@ -156,7 +157,7 @@ public static class DebugSnapshotBuilder
                 CopyAttributes(attributes, catalog.AgentAttributes),
                 CopyTraits(psychology.TraitMask, catalog.Traits),
                 psychology.TraitMask,
-                state.CurrentActionHash,
+                activity.CurrentActionHash,
                 actionName,
                 state.SecretStateHash,
                 secretStateName,

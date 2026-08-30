@@ -55,11 +55,49 @@ public struct EdgeData : IComponent
 
 public struct AgentState : IComponent
 {
-    public int CurrentActionHash;
     // A secret state is independent from the public action so an agent can
     // appear to be working while covertly performing another activity.
     // Hash zero is reserved for the content-defined None state.
     public int SecretStateHash;
+}
+
+// An intention is the outcome of deliberation. It is deliberately separate
+// from both the activity currently being performed and its state effects.
+public struct IntentionState : IComponent
+{
+    public int ActionHash;
+    public int TargetEntityId;
+    public int TargetLocationId;
+    public long SelectedAtMinute;
+    public float Utility;
+}
+
+public enum ActivityKind : byte
+{
+    Idle,
+    Working,
+    Resting,
+    Socializing,
+    Commuting
+}
+
+public struct ActivityState : IComponent
+{
+    // This public action moved out of AgentState. SecretStateHash therefore
+    // remains an independent covert/public boundary.
+    public int CurrentActionHash;
+    public ActivityKind Kind;
+    public long StartedAtMinute;
+}
+
+public struct DecisionState : IComponent
+{
+    public long LastConsideredMinute;
+    public bool Dirty;
+    // Parallel arrays avoid a dictionary allocation per agent. There are only
+    // three candidates in this first slice.
+    public int[] CooldownActionHashes;
+    public long[] CooldownUntilMinutes;
 }
 
 public struct WorldTime : IComponent
