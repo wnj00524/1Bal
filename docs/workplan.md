@@ -130,10 +130,10 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 9: Data-Defined Targeting](https://github.com/wnj00524/proxystate/milestone/10)
 
-- [ ] [M9.1 — Introduce target definition model](https://github.com/wnj00524/proxystate/issues/50)
-- [ ] [M9.2 — Build generic social-relation target query](https://github.com/wnj00524/proxystate/issues/51)
-- [ ] [M9.3 — Move destination resolution into intent data](https://github.com/wnj00524/proxystate/issues/52)
-- [ ] [M9.4 — Generalise decision result structure](https://github.com/wnj00524/proxystate/issues/53)
+- [x] [M9.1 — Introduce target definition model](https://github.com/wnj00524/proxystate/issues/50)
+- [x] [M9.2 — Build generic social-relation target query](https://github.com/wnj00524/proxystate/issues/51)
+- [x] [M9.3 — Move destination resolution into intent data](https://github.com/wnj00524/proxystate/issues/52)
+- [x] [M9.4 — Generalise decision result structure](https://github.com/wnj00524/proxystate/issues/53)
 
 ## [Milestone 10: Generic Execution](https://github.com/wnj00524/proxystate/milestone/11)
 

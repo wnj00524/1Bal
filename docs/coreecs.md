@@ -17,6 +17,12 @@
   are compositions in data rather than semantic source cases in runtime code.
   Numeric and predicate evaluation use fixed stack spans and direct fact access with no runtime
   parsing, casing, string comparison, or expression allocation.
+* Every action declares a `none`, `location`, or `entity` target. Direct location
+  values resolve home, work, or current location without action-ID branches.
+  Entity queries traverse the declared social relation, evaluate compiled target
+  requirements, rank candidates lexicographically, and break exact ties by
+  ascending entity ID. Losing or changing the selected target dirties the
+  decision immediately through the same generic resolver.
 * The highest score wins. Exact ties use ascending stable action hash, never
   JSON or query order. A switch additionally pays the configured switching
   threshold unless its score reaches the urgent-preemption threshold.
@@ -29,10 +35,12 @@
   applies data-defined attribute rates using elapsed simulation minutes.
 * `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
   covert state remains independent of public intentions and activities.
-* Milestone 6 locks these semantics with deterministic Ground Truth fixtures and
+* Milestone 6 locks the original semantics with deterministic Ground Truth fixtures and
   a test-only immutable decision trace. The measured 1,000-agent Release
   baseline, allocation method, and current intent-ID architectural debt are
-  recorded in `docs/decisionbaseline.md`.
+  recorded in `docs/decisionbaseline.md`. Milestone 9 preserves that baseline
+  while representing score, eligibility, entity target, and location target in
+  one candidate result whose winner is copied without domain-specific branches.
 
 ### 4.2 Interaction & Discovery System
 

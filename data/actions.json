@@ -179,7 +179,11 @@
         "attribute": "stress",
         "perMinute": 0.03
       }
-    ]
+    ],
+    "target": {
+      "kind": "location",
+      "value": "agent.location.work"
+    }
   },
   {
     "id": "rest",
@@ -320,7 +324,11 @@
         "attribute": "stress",
         "perMinute": -0.08
       }
-    ]
+    ],
+    "target": {
+      "kind": "location",
+      "value": "agent.location.home"
+    }
   },
   {
     "id": "socialize",
@@ -442,6 +450,35 @@
         "attribute": "fatigue",
         "perMinute": 0.03
       }
-    ]
+    ],
+    "target": {
+      "kind": "entity",
+      "query": {
+        "relation": "social",
+        "requirements": [
+          {
+            "op": "equal",
+            "left": {
+              "op": "fact",
+              "fact": "target.location.current"
+            },
+            "right": {
+              "op": "fact",
+              "fact": "agent.location.current"
+            }
+          }
+        ],
+        "rankBy": [
+          {
+            "value": {
+              "op": "fact",
+              "fact": "target.affinity"
+            },
+            "order": "descending"
+          }
+        ],
+        "limit": 1
+      }
+    }
   }
 ]
