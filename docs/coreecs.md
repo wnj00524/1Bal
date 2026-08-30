@@ -25,6 +25,10 @@
   applies data-defined attribute rates using elapsed simulation minutes.
 * `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
   covert state remains independent of public intentions and activities.
+* Milestone 6 locks these semantics with deterministic Ground Truth fixtures and
+  a test-only immutable decision trace. The measured 1,000-agent Release
+  baseline, allocation method, and current intent-ID architectural debt are
+  recorded in `docs/decisionbaseline.md`.
 
 ### 4.2 Interaction & Discovery System
 
