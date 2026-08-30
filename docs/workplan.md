@@ -110,9 +110,9 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 6: Baseline and Behavioural Lock](https://github.com/wnj00524/proxystate/milestone/7)
 
-- [ ] [M6.1 — Add deterministic decision fixtures](https://github.com/wnj00524/proxystate/issues/39)
-- [ ] [M6.2 — Add decision trace test helper](https://github.com/wnj00524/proxystate/issues/40)
-- [ ] [M6.3 — Record decision performance baseline](https://github.com/wnj00524/proxystate/issues/41)
+- [x] [M6.1 — Add deterministic decision fixtures](https://github.com/wnj00524/proxystate/issues/39)
+- [x] [M6.2 — Add decision trace test helper](https://github.com/wnj00524/proxystate/issues/40)
+- [x] [M6.3 — Record decision performance baseline](https://github.com/wnj00524/proxystate/issues/41)
 
 ## [Milestone 7: Fact and Numeric Expression IR](https://github.com/wnj00524/proxystate/milestone/8)
 
