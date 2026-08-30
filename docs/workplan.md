@@ -145,9 +145,9 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 11: Data-Defined Activity Identity](https://github.com/wnj00524/proxystate/milestone/12)
 
-- [ ] [M11.1 — Introduce `ActivityPhase`](https://github.com/wnj00524/proxystate/issues/59)
-- [ ] [M11.2 — Add data-defined activity identity](https://github.com/wnj00524/proxystate/issues/60)
-- [ ] [M11.3 — Migrate existing consumers](https://github.com/wnj00524/proxystate/issues/61)
+- [x] [M11.1 — Introduce `ActivityPhase`](https://github.com/wnj00524/proxystate/issues/59)
+- [x] [M11.2 — Add data-defined activity identity](https://github.com/wnj00524/proxystate/issues/60)
+- [x] [M11.3 — Migrate existing consumers](https://github.com/wnj00524/proxystate/issues/61)
 
 ## [Milestone 12: Intent Compiler and Structural Validation](https://github.com/wnj00524/proxystate/milestone/13)
 

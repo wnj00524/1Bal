@@ -207,14 +207,14 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
 {
     private readonly Entity _clock;
     private readonly AgentAttributeSchema _schema;
-    private readonly Dictionary<int, (int Index, float Rate)[]> _effects;
+    private readonly Dictionary<(int ActionHash, int ActivityTypeHash), (int Index, float Rate)[]> _effects;
 
     public ActivityEffectsSystem(ContentCatalog catalog, Entity clock)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _clock = clock;
         _schema = catalog.AgentAttributes;
-        _effects = catalog.Actions.ToDictionary(action => action.Hash, action => action.Effects
+        _effects = catalog.Actions.ToDictionary(action => (action.Hash, action.Activity.Hash), action => action.Effects
             .Select(effect => (_schema.GetIndex(effect.Attribute), effect.PerMinute)).ToArray());
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
@@ -225,8 +225,8 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
         if (minutes <= 0f) return;
         Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, Entity _) =>
         {
-            if (activity.Kind is ActivityKind.Idle or ActivityKind.Travelling) return;
-            if (!_effects.TryGetValue(activity.CurrentActionHash, out var effects)) return;
+            if (activity.Phase != ActivityPhase.Performing) return;
+            if (!_effects.TryGetValue((activity.ActionHash, activity.ActivityTypeHash), out var effects)) return;
             foreach (var (index, rate) in effects)
             {
                 var definition = _schema.Definitions[index];

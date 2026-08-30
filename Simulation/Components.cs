@@ -72,19 +72,23 @@ public struct IntentionState : IComponent
     public float Utility;
 }
 
-public enum ActivityKind : byte
+// Phases describe execution mechanics only. The activity's domain meaning is
+// supplied by ActivityTypeHash from the content catalog.
+public enum ActivityPhase : byte
 {
     Idle,
+    Moving,
     Performing,
-    Travelling
+    Blocked
 }
 
 public struct ActivityState : IComponent
 {
     // This public action moved out of AgentState. SecretStateHash therefore
     // remains an independent covert/public boundary.
-    public int CurrentActionHash;
-    public ActivityKind Kind;
+    public int ActionHash;
+    public int ActivityTypeHash;
+    public ActivityPhase Phase;
     public long StartedAtMinute;
 }
 

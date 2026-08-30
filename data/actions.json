@@ -3,6 +3,11 @@
     "id": "work",
     "name": "Work",
     "hash": 1001,
+    "activity": {
+      "id": "work",
+      "name": "Work",
+      "hash": 4001
+    },
     "baseUtility": 10,
     "eligibility": {
       "op": "and",
@@ -193,6 +198,11 @@
     "id": "rest",
     "name": "Rest",
     "hash": 1002,
+    "activity": {
+      "id": "rest",
+      "name": "Rest",
+      "hash": 4002
+    },
     "baseUtility": 5,
     "eligibility": {
       "op": "or",
@@ -342,6 +352,11 @@
     "id": "socialize",
     "name": "Socialize",
     "hash": 1003,
+    "activity": {
+      "id": "socialize",
+      "name": "Socialize",
+      "hash": 4003
+    },
     "baseUtility": 4,
     "eligibility": {
       "op": "notEqual",

@@ -13,8 +13,9 @@ public sealed record DecisionTrace(
     float Utility,
     long SelectedAtMinute,
     AgentTravelMode TravelMode,
-    ActivityKind ActivityKind,
+    ActivityPhase ActivityPhase,
     int ActivityActionHash,
+    int ActivityTypeHash,
     IReadOnlyDictionary<int, long> Cooldowns)
 {
     public static DecisionTrace Capture(Entity entity)
@@ -29,7 +30,7 @@ public sealed record DecisionTrace(
             .ToDictionary(item => item.hash, item => item.until);
         return new DecisionTrace(intention.ActionHash, intention.TargetEntityId,
             intention.TargetLocationId, intention.Utility, intention.SelectedAtMinute,
-            travel.Mode, activity.Kind, activity.CurrentActionHash,
+            travel.Mode, activity.Phase, activity.ActionHash, activity.ActivityTypeHash,
             new ReadOnlyDictionary<int, long>(cooldowns));
     }
 }

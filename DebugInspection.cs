@@ -64,6 +64,9 @@ public sealed record DebugAgentSnapshot(
     long TraitMask,
     int CurrentActionHash,
     string CurrentActionName,
+    int ActivityTypeHash,
+    string ActivityTypeName,
+    ActivityPhase ActivityPhase,
     int SecretStateHash,
     string SecretStateName,
     DebugLocationSnapshot Home,
@@ -139,9 +142,12 @@ public static class DebugSnapshotBuilder
             var factionName = factionsById.TryGetValue(faction.FactionId, out var factionDefinition)
                 ? factionDefinition.Name
                 : $"Unknown ({faction.FactionId})";
-            var actionName = actionsByHash.TryGetValue(activity.CurrentActionHash, out var action)
+            var actionName = actionsByHash.TryGetValue(activity.ActionHash, out var action)
                 ? action.Name
-                : $"Unknown ({activity.CurrentActionHash})";
+                : $"Unknown ({activity.ActionHash})";
+            string activityName;
+            try { activityName = catalog.GetActivity(activity.ActivityTypeHash).Name; }
+            catch (KeyNotFoundException) { activityName = $"Unknown ({activity.ActivityTypeHash})"; }
             var secretStateName = secretStatesByHash.TryGetValue(state.SecretStateHash, out var secretState)
                 ? secretState.Name
                 : $"Unknown ({state.SecretStateHash})";
@@ -157,8 +163,11 @@ public static class DebugSnapshotBuilder
                 CopyAttributes(attributes, catalog.AgentAttributes),
                 CopyTraits(psychology.TraitMask, catalog.Traits),
                 psychology.TraitMask,
-                activity.CurrentActionHash,
+                activity.ActionHash,
                 actionName,
+                activity.ActivityTypeHash,
+                activityName,
+                activity.Phase,
                 state.SecretStateHash,
                 secretStateName,
                 DescribeLocation(location.HomeLocationId, catalog.World),
@@ -319,6 +328,8 @@ public sealed class DebugWindow
         ImGui.Separator();
         ImGui.Text("State");
         ImGui.BulletText($"Current action: {agent.CurrentActionName} ({agent.CurrentActionHash})");
+        ImGui.BulletText($"Activity: {agent.ActivityTypeName} ({agent.ActivityTypeHash})");
+        ImGui.BulletText($"Activity phase: {agent.ActivityPhase}");
         ImGui.BulletText($"Secret state: {agent.SecretStateName} ({agent.SecretStateHash})");
         ImGui.BulletText($"Home: {FormatLocation(agent.Home)}");
         ImGui.BulletText($"Workplace: {FormatLocation(agent.Workplace)}");

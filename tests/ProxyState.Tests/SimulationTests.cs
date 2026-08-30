@@ -200,7 +200,12 @@ public sealed class SimulationTests
             new AgentAttributes { Values = catalog.AgentAttributes.Definitions.Select(definition => definition.Average).ToArray() },
             new Psychology(),
             new AgentState { SecretStateHash = 1 },
-            new ActivityState { CurrentActionHash = catalog.Actions[0].Hash },
+            new ActivityState
+            {
+                ActionHash = catalog.Actions[0].Hash,
+                ActivityTypeHash = catalog.Actions[0].Activity.Hash,
+                Phase = ActivityPhase.Performing
+            },
             new AgentLocation(),
             new AgentTravel { RouteLocationIds = Array.Empty<int>() });
 
@@ -209,6 +214,9 @@ public sealed class SimulationTests
 
         Assert.Equal(1, snapshot.SecretStateHash);
         Assert.Equal("Surveillance", snapshot.SecretStateName);
+        Assert.Equal(catalog.Actions[0].Activity.Hash, snapshot.ActivityTypeHash);
+        Assert.Equal(catalog.Actions[0].Activity.Name, snapshot.ActivityTypeName);
+        Assert.Equal(ActivityPhase.Performing, snapshot.ActivityPhase);
         Assert.DoesNotContain("SecretState", typeof(PlayerIntelligenceAgentSnapshot)
             .GetProperties()
             .Select(property => property.Name));
@@ -551,7 +559,7 @@ public sealed class SimulationTests
             },
             new AgentState(),
             new IntentionState { ActionHash = 1001, TargetLocationId = 3004 },
-            new ActivityState { CurrentActionHash = 1002 },
+            new ActivityState { ActionHash = 1002 },
             new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var commuting = new IntentExecutionSystem(store, catalog, clock.ClockEntity);
@@ -563,7 +571,7 @@ public sealed class SimulationTests
         AdvanceMinutes(clock, root, 25);
         Assert.Equal(AgentTravelMode.Stationary, entity.GetComponent<AgentTravel>().Mode);
         Assert.Equal(3004, entity.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(1001, entity.GetComponent<ActivityState>().CurrentActionHash);
+        Assert.Equal(1001, entity.GetComponent<ActivityState>().ActionHash);
 
         entity.GetComponent<IntentionState>().ActionHash = 1002;
         entity.GetComponent<IntentionState>().TargetLocationId = 3001;
@@ -573,7 +581,7 @@ public sealed class SimulationTests
         AdvanceMinutes(clock, root, 25);
         Assert.Equal(AgentTravelMode.Stationary, entity.GetComponent<AgentTravel>().Mode);
         Assert.Equal(3001, entity.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(1002, entity.GetComponent<ActivityState>().CurrentActionHash);
+        Assert.Equal(1002, entity.GetComponent<ActivityState>().ActionHash);
     }
 
     [Fact]
@@ -593,7 +601,7 @@ public sealed class SimulationTests
             },
             new AgentState(),
         new IntentionState { ActionHash = 1002, TargetLocationId = 3001 },
-            new ActivityState { CurrentActionHash = 1002 },
+            new ActivityState { ActionHash = 1002 },
             new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var root = new SystemRoot(store) { clock, new IntentExecutionSystem(store, catalog, clock.ClockEntity) };
@@ -602,7 +610,7 @@ public sealed class SimulationTests
 
         Assert.Equal(AgentTravelMode.Stationary, entity.GetComponent<AgentTravel>().Mode);
         Assert.Equal(3001, entity.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(ActivityKind.Performing, entity.GetComponent<ActivityState>().Kind);
+        Assert.Equal(ActivityPhase.Performing, entity.GetComponent<ActivityState>().Phase);
     }
 
     [Fact]
@@ -625,13 +633,13 @@ public sealed class SimulationTests
         Assert.Equal(AgentTravelMode.Travelling, actor.GetComponent<AgentTravel>().Mode);
         AdvanceMinutes(clock, root, 25);
         Assert.Equal(3004, actor.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(ActivityKind.Performing, actor.GetComponent<ActivityState>().Kind);
+        Assert.Equal(ActivityPhase.Performing, actor.GetComponent<ActivityState>().Phase);
 
         actor.GetComponent<IntentionState>().TargetEntityId = int.MaxValue;
         actor.GetComponent<DecisionState>().Dirty = false;
         AdvanceMinutes(clock, root, 1);
         Assert.True(actor.GetComponent<DecisionState>().Dirty);
-        Assert.Equal(ActivityKind.Idle, actor.GetComponent<ActivityState>().Kind);
+        Assert.Equal(ActivityPhase.Blocked, actor.GetComponent<ActivityState>().Phase);
     }
 
     [Fact]
@@ -647,6 +655,21 @@ public sealed class SimulationTests
 
         var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
         Assert.Contains("requires an entity target", exception.Message);
+    }
+
+    [Fact]
+    public void CatalogRejectsDuplicateDataDefinedActivityIdentity()
+    {
+        using var directory = TestContent.CreateDirectory();
+        TestContent.CopyCatalogFiles(directory.RootPath);
+        var path = Path.Combine(directory.RootPath, "actions.json");
+        var json = File.ReadAllText(path).Replace(
+            "\"hash\": 4002",
+            "\"hash\": 4001", StringComparison.Ordinal);
+        File.WriteAllText(path, json);
+
+        var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
+        Assert.Contains("unique, non-zero activity ID and hash", exception.Message);
     }
 
     [Fact]
@@ -666,7 +689,7 @@ public sealed class SimulationTests
             },
             new AgentState { SecretStateHash = 1 },
             new IntentionState { ActionHash = 1001, TargetLocationId = 3004 },
-            new ActivityState { CurrentActionHash = 1002 },
+            new ActivityState { ActionHash = 1002 },
             new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var root = new SystemRoot(store) { clock, new IntentExecutionSystem(store, catalog, clock.ClockEntity) };
@@ -674,7 +697,7 @@ public sealed class SimulationTests
         AdvanceMinutes(clock, root, 455);
         AdvanceMinutes(clock, root, 25);
 
-        Assert.Equal(1001, entity.GetComponent<ActivityState>().CurrentActionHash);
+        Assert.Equal(1001, entity.GetComponent<ActivityState>().ActionHash);
         Assert.Equal(1, entity.GetComponent<AgentState>().SecretStateHash);
     }
 
@@ -718,7 +741,7 @@ public sealed class SimulationTests
 
             var psychology = entity.GetComponent<Psychology>();
             Assert.Equal(0L, psychology.TraitMask & ~catalog.AllTraitBits);
-            Assert.Contains(entity.GetComponent<ActivityState>().CurrentActionHash,
+            Assert.Contains(entity.GetComponent<ActivityState>().ActionHash,
                 catalog.Actions.Select(action => action.Hash));
         }
     }
