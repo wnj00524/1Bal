@@ -9,10 +9,6 @@ public sealed record UtilityInputDefinition(NumericExpressionDefinition Expressi
     public CompiledNumericExpression? CompiledExpression { get; internal set; }
 }
 public sealed record TraitUtilityModifier(string Trait, float Modifier);
-public sealed record ActionEligibilityDefinition(
-    string Gate,
-    int ScheduleStartOffsetMinutes = 0,
-    int ScheduleEndOffsetMinutes = 0);
 public sealed record ActionControlDefinition(
     int MinimumCommitmentMinutes,
     float SwitchingThreshold,
@@ -25,7 +21,7 @@ public sealed record ActionDefinition(
     string Name,
     int Hash,
     float BaseUtility,
-    ActionEligibilityDefinition Eligibility,
+    PredicateDefinition Eligibility,
     List<UtilityInputDefinition> UtilityInputs,
     List<TraitUtilityModifier> TraitModifiers,
     ActionControlDefinition Controls,
@@ -238,14 +234,23 @@ public sealed class ContentCatalog
         var schema = new AgentAttributeSchema(attributeDefinitions);
         _ = schema.GetIndex("fatigue");
         _ = schema.GetIndex("stress");
-        CompileUtilityExpressions(actions, schema);
+        CompileDecisionExpressions(actions, schema);
         return schema;
     }
 
-    private static void CompileUtilityExpressions(IReadOnlyList<ActionDefinition> actions, AgentAttributeSchema schema)
+    private static void CompileDecisionExpressions(IReadOnlyList<ActionDefinition> actions, AgentAttributeSchema schema)
     {
         var facts = new FactRegistry(schema);
         foreach (var action in actions)
+        {
+            try
+            {
+                action.Eligibility.CompiledPredicate = CompiledPredicate.Compile(action.Eligibility, facts);
+            }
+            catch (InvalidDataException exception)
+            {
+                throw new InvalidDataException($"Action '{action.Id}' has an invalid eligibility predicate: {exception.Message}", exception);
+            }
             foreach (var input in action.UtilityInputs)
                 try
                 {
@@ -255,6 +260,7 @@ public sealed class ContentCatalog
                 {
                     throw new InvalidDataException($"Action '{action.Id}' has an invalid numeric expression: {exception.Message}", exception);
                 }
+        }
     }
 
     private static void ValidateActions(
@@ -268,11 +274,10 @@ public sealed class ContentCatalog
 
         var attributeIds = attributes.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var traitIds = traits.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var gates = new HashSet<string>(new[] { "workSchedule", "homeReachable", "availablePeer" }, StringComparer.OrdinalIgnoreCase);
         foreach (var action in actions)
         {
             if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
-                !float.IsFinite(action.BaseUtility) || action.Eligibility is null || !gates.Contains(action.Eligibility.Gate) ||
+                !float.IsFinite(action.BaseUtility) || action.Eligibility is null ||
                 action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null)
                 throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
             if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||

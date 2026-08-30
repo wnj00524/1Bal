@@ -7,14 +7,15 @@
 * Content loading compiles every utility expression in `actions.json` to a
   bounded postfix opcode program. Fact strings are resolved once to typed
   `FactId` handles, including direct schema indexes for agent attributes.
-  `AgentDecisionSystem` receives only these compiled candidate evaluators. Hard gates reject candidates before
-  scoring: Work requires its configurable job-schedule window, Rest requires
-  home or a route home, and Socialize requires a co-located social peer.
+  Eligibility predicates are likewise compiled from boolean facts, boolean
+  combinators, and numeric comparisons. `AgentDecisionSystem` evaluates only
+  these pre-resolved programs; it contains no named eligibility-gate switch.
+  Current data preserves schedule/workday, home-route, and co-located-peer rules.
 * Eligible utility is weighted-additive: base utility plus each compiled numeric
   expression passed through its piecewise-linear response curve, plus applicable
   trait modifiers. Low wealth, schedule pressure, night time, and peer affinity
   are compositions in data rather than semantic source cases in runtime code.
-  Evaluation uses a fixed stack span and direct fact access with no runtime
+  Numeric and predicate evaluation use fixed stack spans and direct fact access with no runtime
   parsing, casing, string comparison, or expression allocation.
 * The highest score wins. Exact ties use ascending stable action hash, never
   JSON or query order. A switch additionally pays the configured switching

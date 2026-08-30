@@ -116,14 +116,16 @@ public sealed class DecisionBaselineTests
     }
 
     [Fact]
-    public void RuntimeIntentIdComparisonsRemainAnExplicitMigrationBaseline()
+    public void EligibilityNoLongerUsesNamedRuntimeGates()
     {
         var repository = FindRepositoryRoot();
         var runtimeFiles = Directory.GetFiles(Path.Combine(repository, "Simulation"), "*.cs");
         var source = string.Join('\n', runtimeFiles.Select(File.ReadAllText));
 
-        foreach (var id in new[] { "work", "rest", "socialize" })
-            Assert.Contains($"action.Id, \"{id}\"", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Eligibility.Gate", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("workSchedule", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("homeReachable", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("availablePeer", source, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("winner.Action.Id.Equals(\"socialize\"", source);
         Assert.Contains("winner.Action.Id.Equals(\"work\"", source);
     }

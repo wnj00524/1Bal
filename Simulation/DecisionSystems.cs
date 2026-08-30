@@ -139,25 +139,17 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
         public DecisionResult Evaluate(DecisionContext context, IReadOnlyDictionary<string, long> traits)
         {
-            if (!Eligible(context)) return new DecisionResult(Definition, false, float.NegativeInfinity);
             var score = Definition.BaseUtility;
-            var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.PeerAffinity);
+            var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes,
+                context.Location, context.Travel, context.PeerId, context.PeerAffinity);
+            if (!Definition.Eligibility.CompiledPredicate!.Evaluate(facts))
+                return new DecisionResult(Definition, false, float.NegativeInfinity);
             foreach (var input in Definition.UtilityInputs)
                 score += input.Weight * Curve(input.Curve, input.CompiledExpression!.Evaluate(facts));
             foreach (var modifier in Definition.TraitModifiers)
                 if ((context.TraitMask & traits[modifier.Trait]) != 0) score += modifier.Modifier;
             return new DecisionResult(Definition, true, score);
         }
-
-        private bool Eligible(DecisionContext context) => Definition.Eligibility.Gate.ToLowerInvariant() switch
-        {
-            "workschedule" => context.Job.WorkDays.Contains(context.Time.DayOfWeek) &&
-                context.Time.MinuteOfDay >= context.Job.WorkStartMinute + Definition.Eligibility.ScheduleStartOffsetMinutes &&
-                context.Time.MinuteOfDay < context.Job.WorkEndMinute + Definition.Eligibility.ScheduleEndOffsetMinutes,
-            "homereachable" => context.Location.CurrentLocationId == context.Location.HomeLocationId || context.Travel.RouteLocationIds.Length > 0,
-            "availablepeer" => context.PeerId != 0,
-            _ => false
-        };
 
         private static float Curve(IReadOnlyList<ResponsePoint> points, float value)
         {

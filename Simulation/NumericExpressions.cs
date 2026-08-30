@@ -9,8 +9,16 @@ public enum FactKind : byte
     TimeDayOfWeek,
     JobWorkStartMinute,
     JobWorkEndMinute,
-    TargetAffinity
+    TargetAffinity,
+    AgentLocationCurrent,
+    AgentLocationHome,
+    AgentLocationWork,
+    TargetEntity,
+    TravelReachable,
+    JobIsWorkDay
 }
+
+public enum FactValueKind : byte { Number, Boolean }
 
 public readonly record struct FactId(FactKind Kind, int Index = 0);
 
@@ -23,17 +31,23 @@ public sealed class FactRegistry
         ArgumentNullException.ThrowIfNull(attributes);
         _facts = new Dictionary<string, RegisteredFact>(StringComparer.OrdinalIgnoreCase)
         {
-            ["time.minuteOfDay"] = new(new FactId(FactKind.TimeMinuteOfDay), 0, SimulationDefaults.SimulationMinutesPerDay),
-            ["time.dayOfWeek"] = new(new FactId(FactKind.TimeDayOfWeek), 1, SimulationDefaults.DaysPerWeek),
-            ["job.workStartMinute"] = new(new FactId(FactKind.JobWorkStartMinute), 0, SimulationDefaults.SimulationMinutesPerDay),
-            ["job.workEndMinute"] = new(new FactId(FactKind.JobWorkEndMinute), 0, SimulationDefaults.SimulationMinutesPerDay),
-            ["target.affinity"] = new(new FactId(FactKind.TargetAffinity), 0, 1)
+            ["time.minuteOfDay"] = new(new FactId(FactKind.TimeMinuteOfDay), FactValueKind.Number, 0, SimulationDefaults.SimulationMinutesPerDay),
+            ["time.dayOfWeek"] = new(new FactId(FactKind.TimeDayOfWeek), FactValueKind.Number, 1, SimulationDefaults.DaysPerWeek),
+            ["job.workStartMinute"] = new(new FactId(FactKind.JobWorkStartMinute), FactValueKind.Number, 0, SimulationDefaults.SimulationMinutesPerDay),
+            ["job.workEndMinute"] = new(new FactId(FactKind.JobWorkEndMinute), FactValueKind.Number, 0, SimulationDefaults.SimulationMinutesPerDay),
+            ["target.affinity"] = new(new FactId(FactKind.TargetAffinity), FactValueKind.Number, 0, 1),
+            ["agent.location.current"] = new(new FactId(FactKind.AgentLocationCurrent), FactValueKind.Number),
+            ["agent.location.home"] = new(new FactId(FactKind.AgentLocationHome), FactValueKind.Number),
+            ["agent.location.work"] = new(new FactId(FactKind.AgentLocationWork), FactValueKind.Number),
+            ["target.entity"] = new(new FactId(FactKind.TargetEntity), FactValueKind.Number),
+            ["travel.reachable"] = new(new FactId(FactKind.TravelReachable), FactValueKind.Boolean),
+            ["job.isWorkDay"] = new(new FactId(FactKind.JobIsWorkDay), FactValueKind.Boolean)
         };
         for (var index = 0; index < attributes.Count; index++)
         {
             var definition = attributes.Definitions[index];
             _facts.Add($"agent.attribute.{definition.Id}", new RegisteredFact(
-                new FactId(FactKind.AgentAttribute, index), definition.Min, definition.Max));
+                new FactId(FactKind.AgentAttribute, index), FactValueKind.Number, definition.Min, definition.Max));
         }
     }
 
@@ -46,7 +60,7 @@ public sealed class FactRegistry
         return fact;
     }
 
-    internal readonly record struct RegisteredFact(FactId Id, float Min, float Max);
+    internal readonly record struct RegisteredFact(FactId Id, FactValueKind ValueKind = FactValueKind.Number, float Min = 0, float Max = 0);
 }
 
 // Deliberately small authoring tree. Only fields required by the selected op
@@ -141,6 +155,8 @@ public sealed class CompiledNumericExpression
         {
             case "fact":
                 var fact = facts.ResolveDefinition(node.Fact ?? string.Empty);
+                if (fact.ValueKind != FactValueKind.Number)
+                    throw new InvalidDataException($"Fact '{node.Fact}' is boolean and cannot be used in a numeric expression.");
                 output.Add(new NumericInstruction(NumericOpcode.Fact, fact.Id));
                 return 1;
             case "constant":
@@ -205,7 +221,8 @@ public sealed class CompiledNumericExpression
 }
 
 internal readonly record struct DecisionFactContext(
-    WorldTime Time, JobDefinition Job, float[] Attributes, float TargetAffinity)
+    WorldTime Time, JobDefinition Job, float[] Attributes, AgentLocation Location,
+    AgentTravel Travel, int TargetEntityId, float TargetAffinity)
 {
     public float Read(FactId fact) => fact.Kind switch
     {
@@ -215,6 +232,17 @@ internal readonly record struct DecisionFactContext(
         FactKind.JobWorkStartMinute => Job.WorkStartMinute,
         FactKind.JobWorkEndMinute => Job.WorkEndMinute,
         FactKind.TargetAffinity => TargetAffinity,
+        FactKind.AgentLocationCurrent => Location.CurrentLocationId,
+        FactKind.AgentLocationHome => Location.HomeLocationId,
+        FactKind.AgentLocationWork => Location.WorkLocationId,
+        FactKind.TargetEntity => TargetEntityId,
         _ => throw new InvalidOperationException($"Unsupported fact kind '{fact.Kind}'.")
+    };
+
+    public bool ReadBoolean(FactId fact) => fact.Kind switch
+    {
+        FactKind.TravelReachable => Location.CurrentLocationId == Location.HomeLocationId || Travel.RouteLocationIds.Length > 0,
+        FactKind.JobIsWorkDay => Job.WorkDays.Contains(Time.DayOfWeek),
+        _ => throw new InvalidOperationException($"Unsupported boolean fact kind '{fact.Kind}'.")
     };
 }
