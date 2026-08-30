@@ -27,7 +27,7 @@ public static class Program
         {
             clock,
             new AgentDecisionSystem(store, catalog, clock.ClockEntity),
-            new CommutingSystem(catalog, clock.ClockEntity),
+            new IntentExecutionSystem(store, catalog, clock.ClockEntity),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
             new InteractionSystem(catalog, new Random())
         };

@@ -137,11 +137,11 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 10: Generic Execution](https://github.com/wnj00524/proxystate/milestone/11)
 
-- [ ] [M10.1 — Introduce executor definition](https://github.com/wnj00524/proxystate/issues/54)
-- [ ] [M10.2 — Extract generic movement execution](https://github.com/wnj00524/proxystate/issues/55)
-- [ ] [M10.3 — Implement `performAtLocation`](https://github.com/wnj00524/proxystate/issues/56)
-- [ ] [M10.4 — Implement `performWithEntity`](https://github.com/wnj00524/proxystate/issues/57)
-- [ ] [M10.5 — Replace or rename `CommutingSystem`](https://github.com/wnj00524/proxystate/issues/58)
+- [x] [M10.1 — Introduce executor definition](https://github.com/wnj00524/proxystate/issues/54)
+- [x] [M10.2 — Extract generic movement execution](https://github.com/wnj00524/proxystate/issues/55)
+- [x] [M10.3 — Implement `performAtLocation`](https://github.com/wnj00524/proxystate/issues/56)
+- [x] [M10.4 — Implement `performWithEntity`](https://github.com/wnj00524/proxystate/issues/57)
+- [x] [M10.5 — Replace or rename `CommutingSystem`](https://github.com/wnj00524/proxystate/issues/58)
 
 ## [Milestone 11: Data-Defined Activity Identity](https://github.com/wnj00524/proxystate/milestone/12)
 

@@ -225,7 +225,7 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
         if (minutes <= 0f) return;
         Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, Entity _) =>
         {
-            if (activity.Kind is ActivityKind.Idle or ActivityKind.Commuting) return;
+            if (activity.Kind is ActivityKind.Idle or ActivityKind.Travelling) return;
             if (!_effects.TryGetValue(activity.CurrentActionHash, out var effects)) return;
             foreach (var (index, rate) in effects)
             {

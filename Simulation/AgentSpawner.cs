@@ -88,7 +88,7 @@ public sealed class AgentSpawner
                     SecretStateHash = 0
                 },
                 new IntentionState { ActionHash = restActionHash },
-                new ActivityState { CurrentActionHash = restActionHash, Kind = ActivityKind.Resting },
+                new ActivityState { CurrentActionHash = restActionHash, Kind = ActivityKind.Performing },
                 new DecisionState
                 {
                     LastConsideredMinute = -1,
@@ -108,7 +108,7 @@ public sealed class AgentSpawner
                     TotalTravelMinutes = assignment.Route.TravelMinutes,
                     RoutePosition = 0,
                     RemainingTravelMinutes = 0f,
-                    Mode = AgentTravelMode.AtHome
+                    Mode = AgentTravelMode.Stationary
                 },
                 Tags.Get<Tier1LodTag>());
 
