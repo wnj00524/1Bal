@@ -100,3 +100,78 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 - [ ] Generated company hierarchies are deterministic, bounded, connected, and acyclic, with exactly one root.
 - [ ] Network generation does not alter population assignments, operative selection, or social edges for the same root seed.
 - [ ] Debug inspection uses copied snapshots, while player-facing intelligence remains isolated and unchanged.
+
+## Milestones 6–15: Data-Defined Intent Roadmap
+
+The detailed architecture, sequencing, constraints, and acceptance criteria for
+Milestones 6–15 are maintained in [`docs/datadrivenintents.md`](datadrivenintents.md).
+The linked GitHub milestones and issues below are the canonical delivery records;
+each issue also records its dependencies and verification expectations.
+
+## [Milestone 6: Baseline and Behavioural Lock](https://github.com/wnj00524/proxystate/milestone/7)
+
+- [ ] [M6.1 — Add deterministic decision fixtures](https://github.com/wnj00524/proxystate/issues/39)
+- [ ] [M6.2 — Add decision trace test helper](https://github.com/wnj00524/proxystate/issues/40)
+- [ ] [M6.3 — Record decision performance baseline](https://github.com/wnj00524/proxystate/issues/41)
+
+## [Milestone 7: Fact and Numeric Expression IR](https://github.com/wnj00524/proxystate/milestone/8)
+
+- [ ] [M7.1 — Introduce `FactId` and fact registry](https://github.com/wnj00524/proxystate/issues/42)
+- [ ] [M7.2 — Introduce numeric expression model](https://github.com/wnj00524/proxystate/issues/43)
+- [ ] [M7.3 — Add compiled numeric evaluator](https://github.com/wnj00524/proxystate/issues/44)
+- [ ] [M7.4 — Migrate `actions.json`](https://github.com/wnj00524/proxystate/issues/45)
+
+## [Milestone 8: Predicate IR](https://github.com/wnj00524/proxystate/milestone/9)
+
+- [ ] [M8.1 — Define predicate authoring schema](https://github.com/wnj00524/proxystate/issues/46)
+- [ ] [M8.2 — Add compiled predicate evaluator](https://github.com/wnj00524/proxystate/issues/47)
+- [ ] [M8.3 — Remove `ActionEligibilityDefinition.Gate`](https://github.com/wnj00524/proxystate/issues/48)
+- [ ] [M8.4 — Migrate existing action eligibility](https://github.com/wnj00524/proxystate/issues/49)
+
+## [Milestone 9: Data-Defined Targeting](https://github.com/wnj00524/proxystate/milestone/10)
+
+- [ ] [M9.1 — Introduce target definition model](https://github.com/wnj00524/proxystate/issues/50)
+- [ ] [M9.2 — Build generic social-relation target query](https://github.com/wnj00524/proxystate/issues/51)
+- [ ] [M9.3 — Move destination resolution into intent data](https://github.com/wnj00524/proxystate/issues/52)
+- [ ] [M9.4 — Generalise decision result structure](https://github.com/wnj00524/proxystate/issues/53)
+
+## [Milestone 10: Generic Execution](https://github.com/wnj00524/proxystate/milestone/11)
+
+- [ ] [M10.1 — Introduce executor definition](https://github.com/wnj00524/proxystate/issues/54)
+- [ ] [M10.2 — Extract generic movement execution](https://github.com/wnj00524/proxystate/issues/55)
+- [ ] [M10.3 — Implement `performAtLocation`](https://github.com/wnj00524/proxystate/issues/56)
+- [ ] [M10.4 — Implement `performWithEntity`](https://github.com/wnj00524/proxystate/issues/57)
+- [ ] [M10.5 — Replace or rename `CommutingSystem`](https://github.com/wnj00524/proxystate/issues/58)
+
+## [Milestone 11: Data-Defined Activity Identity](https://github.com/wnj00524/proxystate/milestone/12)
+
+- [ ] [M11.1 — Introduce `ActivityPhase`](https://github.com/wnj00524/proxystate/issues/59)
+- [ ] [M11.2 — Add data-defined activity identity](https://github.com/wnj00524/proxystate/issues/60)
+- [ ] [M11.3 — Migrate existing consumers](https://github.com/wnj00524/proxystate/issues/61)
+
+## [Milestone 12: Intent Compiler and Structural Validation](https://github.com/wnj00524/proxystate/milestone/13)
+
+- [ ] [M12.1 — Introduce `IntentCompiler`](https://github.com/wnj00524/proxystate/issues/62)
+- [ ] [M12.2 — Add dense runtime indexes](https://github.com/wnj00524/proxystate/issues/63)
+- [ ] [M12.3 — Replace semantic validation](https://github.com/wnj00524/proxystate/issues/64)
+- [ ] [M12.4 — Introduce fallback intent](https://github.com/wnj00524/proxystate/issues/65)
+
+## [Milestone 13: Dependency-Driven Reevaluation](https://github.com/wnj00524/proxystate/milestone/14)
+
+- [ ] [M13.1 — Introduce `FactDependencyMask`](https://github.com/wnj00524/proxystate/issues/66)
+- [ ] [M13.2 — Track changed fact categories](https://github.com/wnj00524/proxystate/issues/67)
+- [ ] [M13.3 — Selective intent reevaluation](https://github.com/wnj00524/proxystate/issues/68)
+- [ ] [M13.4 — Benchmark dependency-driven decisions](https://github.com/wnj00524/proxystate/issues/69)
+
+## [Milestone 14: Candidate Indexing](https://github.com/wnj00524/proxystate/milestone/15)
+
+- [ ] [M14.1 — Add intent candidate bitsets](https://github.com/wnj00524/proxystate/issues/70)
+- [ ] [M14.2 — Build static intent indexes](https://github.com/wnj00524/proxystate/issues/71)
+- [ ] [M14.3 — Add scaling benchmark](https://github.com/wnj00524/proxystate/issues/72)
+
+## [Milestone 15: Tooling, Diagnostics, and Content Safety](https://github.com/wnj00524/proxystate/milestone/16)
+
+- [ ] [M15.1 — Add decision inspector](https://github.com/wnj00524/proxystate/issues/73)
+- [ ] [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
+- [ ] [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
+- [ ] [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)

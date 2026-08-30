@@ -141,7 +141,7 @@ The work is complete when all of the following are true:
 
 ---
 
-# 4. Milestone M6 — Baseline and Behavioural Lock
+# 4. [Milestone M6 — Baseline and Behavioural Lock](https://github.com/wnj00524/proxystate/milestone/7)
 
 ## Goal
 
@@ -168,7 +168,7 @@ Establish a safe refactoring baseline before changing decision semantics.
 
 ## Issues
 
-### Issue M6.1 — Add deterministic decision fixtures
+### [M6.1 — Add deterministic decision fixtures](https://github.com/wnj00524/proxystate/issues/39)
 
 **Description**
 
@@ -186,7 +186,7 @@ Create deterministic tests for representative agent/world states.
 
 ---
 
-### Issue M6.2 — Add decision trace test helper
+### [M6.2 — Add decision trace test helper](https://github.com/wnj00524/proxystate/issues/40)
 
 **Description**
 
@@ -210,7 +210,7 @@ public sealed record DecisionTrace(
 
 ---
 
-### Issue M6.3 — Record decision performance baseline
+### [M6.3 — Record decision performance baseline](https://github.com/wnj00524/proxystate/issues/41)
 
 **Description**
 
@@ -224,7 +224,7 @@ Measure current decision-system runtime for 1,000 agents.
 
 ---
 
-# 5. Milestone M7 — Fact and Numeric Expression IR
+# 5. [Milestone M7 — Fact and Numeric Expression IR](https://github.com/wnj00524/proxystate/milestone/8)
 
 ## Goal
 
@@ -286,7 +286,7 @@ Do not interpret string expression names during each decision tick.
 
 ## Issues
 
-### Issue M7.1 — Introduce `FactId` and fact registry
+### [M7.1 — Introduce `FactId` and fact registry](https://github.com/wnj00524/proxystate/issues/42)
 
 **Description**
 
@@ -300,7 +300,7 @@ Define stable runtime fact identifiers and a registry that resolves data referen
 
 ---
 
-### Issue M7.2 — Introduce numeric expression model
+### [M7.2 — Introduce numeric expression model](https://github.com/wnj00524/proxystate/issues/43)
 
 **Description**
 
@@ -316,7 +316,7 @@ Replace `UtilityInputDefinition.Source` with an expression definition.
 
 ---
 
-### Issue M7.3 — Add compiled numeric evaluator
+### [M7.3 — Add compiled numeric evaluator](https://github.com/wnj00524/proxystate/issues/44)
 
 **Description**
 
@@ -337,7 +337,7 @@ Possible implementation choices:
 
 ---
 
-### Issue M7.4 — Migrate `actions.json`
+### [M7.4 — Migrate `actions.json`](https://github.com/wnj00524/proxystate/issues/45)
 
 **Description**
 
@@ -350,7 +350,7 @@ Rewrite current utility inputs using the expression model.
 
 ---
 
-# 6. Milestone M8 — Predicate IR
+# 6. [Milestone M8 — Predicate IR](https://github.com/wnj00524/proxystate/milestone/9)
 
 ## Goal
 
@@ -414,7 +414,7 @@ Example:
 
 ## Issues
 
-### Issue M8.1 — Define predicate authoring schema
+### [M8.1 — Define predicate authoring schema](https://github.com/wnj00524/proxystate/issues/46)
 
 **Acceptance criteria**
 
@@ -425,7 +425,7 @@ Example:
 
 ---
 
-### Issue M8.2 — Add compiled predicate evaluator
+### [M8.2 — Add compiled predicate evaluator](https://github.com/wnj00524/proxystate/issues/47)
 
 **Acceptance criteria**
 
@@ -435,7 +435,7 @@ Example:
 
 ---
 
-### Issue M8.3 — Remove `ActionEligibilityDefinition.Gate`
+### [M8.3 — Remove `ActionEligibilityDefinition.Gate`](https://github.com/wnj00524/proxystate/issues/48)
 
 **Acceptance criteria**
 
@@ -444,7 +444,7 @@ Example:
 
 ---
 
-### Issue M8.4 — Migrate existing action eligibility
+### [M8.4 — Migrate existing action eligibility](https://github.com/wnj00524/proxystate/issues/49)
 
 **Acceptance criteria**
 
@@ -453,7 +453,7 @@ Example:
 
 ---
 
-# 7. Milestone M9 — Data-Defined Targeting
+# 7. [Milestone M9 — Data-Defined Targeting](https://github.com/wnj00524/proxystate/milestone/10)
 
 ## Goal
 
@@ -520,7 +520,7 @@ Example work target:
 
 ## Issues
 
-### Issue M9.1 — Introduce target definition model
+### [M9.1 — Introduce target definition model](https://github.com/wnj00524/proxystate/issues/50)
 
 **Acceptance criteria**
 
@@ -529,7 +529,7 @@ Example work target:
 
 ---
 
-### Issue M9.2 — Build generic social-relation target query
+### [M9.2 — Build generic social-relation target query](https://github.com/wnj00524/proxystate/issues/51)
 
 **Acceptance criteria**
 
@@ -539,7 +539,7 @@ Example work target:
 
 ---
 
-### Issue M9.3 — Move destination resolution into intent data
+### [M9.3 — Move destination resolution into intent data](https://github.com/wnj00524/proxystate/issues/52)
 
 **Acceptance criteria**
 
@@ -549,7 +549,7 @@ Example work target:
 
 ---
 
-### Issue M9.4 — Generalise decision result structure
+### [M9.4 — Generalise decision result structure](https://github.com/wnj00524/proxystate/issues/53)
 
 Suggested runtime result:
 
@@ -569,7 +569,7 @@ public readonly record struct DecisionResult(
 
 ---
 
-# 8. Milestone M10 — Generic Execution
+# 8. [Milestone M10 — Generic Execution](https://github.com/wnj00524/proxystate/milestone/11)
 
 ## Goal
 
@@ -613,7 +613,7 @@ Example:
 
 ## Issues
 
-### Issue M10.1 — Introduce executor definition
+### [M10.1 — Introduce executor definition](https://github.com/wnj00524/proxystate/issues/54)
 
 **Acceptance criteria**
 
@@ -622,7 +622,7 @@ Example:
 
 ---
 
-### Issue M10.2 — Extract generic movement execution
+### [M10.2 — Extract generic movement execution](https://github.com/wnj00524/proxystate/issues/55)
 
 **Description**
 
@@ -636,7 +636,7 @@ Move current travel-to-work/home behaviour into generic travel-to-target-locatio
 
 ---
 
-### Issue M10.3 — Implement `performAtLocation`
+### [M10.3 — Implement `performAtLocation`](https://github.com/wnj00524/proxystate/issues/56)
 
 **Acceptance criteria**
 
@@ -646,7 +646,7 @@ Move current travel-to-work/home behaviour into generic travel-to-target-locatio
 
 ---
 
-### Issue M10.4 — Implement `performWithEntity`
+### [M10.4 — Implement `performWithEntity`](https://github.com/wnj00524/proxystate/issues/57)
 
 **Acceptance criteria**
 
@@ -656,7 +656,7 @@ Move current travel-to-work/home behaviour into generic travel-to-target-locatio
 
 ---
 
-### Issue M10.5 — Replace or rename `CommutingSystem`
+### [M10.5 — Replace or rename `CommutingSystem`](https://github.com/wnj00524/proxystate/issues/58)
 
 Recommended direction:
 
@@ -674,7 +674,7 @@ MovementExecutionSystem
 
 ---
 
-# 9. Milestone M11 — Data-Defined Activity Identity
+# 9. [Milestone M11 — Data-Defined Activity Identity](https://github.com/wnj00524/proxystate/milestone/12)
 
 ## Goal
 
@@ -721,7 +721,7 @@ public enum ActivityPhase : byte
 
 ## Issues
 
-### Issue M11.1 — Introduce `ActivityPhase`
+### [M11.1 — Introduce `ActivityPhase`](https://github.com/wnj00524/proxystate/issues/59)
 
 **Acceptance criteria**
 
@@ -730,7 +730,7 @@ public enum ActivityPhase : byte
 
 ---
 
-### Issue M11.2 — Add data-defined activity identity
+### [M11.2 — Add data-defined activity identity](https://github.com/wnj00524/proxystate/issues/60)
 
 **Acceptance criteria**
 
@@ -739,7 +739,7 @@ public enum ActivityPhase : byte
 
 ---
 
-### Issue M11.3 — Migrate existing consumers
+### [M11.3 — Migrate existing consumers](https://github.com/wnj00524/proxystate/issues/61)
 
 **Acceptance criteria**
 
@@ -748,7 +748,7 @@ public enum ActivityPhase : byte
 
 ---
 
-# 10. Milestone M12 — Intent Compiler and Structural Validation
+# 10. [Milestone M12 — Intent Compiler and Structural Validation](https://github.com/wnj00524/proxystate/milestone/13)
 
 ## Goal
 
@@ -802,7 +802,7 @@ public sealed class CompiledIntent
 
 ## Issues
 
-### Issue M12.1 — Introduce `IntentCompiler`
+### [M12.1 — Introduce `IntentCompiler`](https://github.com/wnj00524/proxystate/issues/62)
 
 **Acceptance criteria**
 
@@ -812,7 +812,7 @@ public sealed class CompiledIntent
 
 ---
 
-### Issue M12.2 — Add dense runtime indexes
+### [M12.2 — Add dense runtime indexes](https://github.com/wnj00524/proxystate/issues/63)
 
 **Description**
 
@@ -825,7 +825,7 @@ Retain stable content hash for persistence/content identity, and add dense runti
 
 ---
 
-### Issue M12.3 — Replace semantic validation
+### [M12.3 — Replace semantic validation](https://github.com/wnj00524/proxystate/issues/64)
 
 Remove rules such as:
 
@@ -856,7 +856,7 @@ Replace with structural rules:
 
 ---
 
-### Issue M12.4 — Introduce fallback intent
+### [M12.4 — Introduce fallback intent](https://github.com/wnj00524/proxystate/issues/65)
 
 Suggested definition:
 
@@ -874,7 +874,7 @@ Suggested definition:
 
 ---
 
-# 11. Milestone M13 — Dependency-Driven Reevaluation
+# 11. [Milestone M13 — Dependency-Driven Reevaluation](https://github.com/wnj00524/proxystate/milestone/14)
 
 ## Goal
 
@@ -921,7 +921,7 @@ evaluate affected intents only
 
 ## Issues
 
-### Issue M13.1 — Introduce `FactDependencyMask`
+### [M13.1 — Introduce `FactDependencyMask`](https://github.com/wnj00524/proxystate/issues/66)
 
 **Acceptance criteria**
 
@@ -930,7 +930,7 @@ evaluate affected intents only
 
 ---
 
-### Issue M13.2 — Track changed fact categories
+### [M13.2 — Track changed fact categories](https://github.com/wnj00524/proxystate/issues/67)
 
 **Acceptance criteria**
 
@@ -940,7 +940,7 @@ evaluate affected intents only
 
 ---
 
-### Issue M13.3 — Selective intent reevaluation
+### [M13.3 — Selective intent reevaluation](https://github.com/wnj00524/proxystate/issues/68)
 
 **Acceptance criteria**
 
@@ -950,7 +950,7 @@ evaluate affected intents only
 
 ---
 
-### Issue M13.4 — Benchmark dependency-driven decisions
+### [M13.4 — Benchmark dependency-driven decisions](https://github.com/wnj00524/proxystate/issues/69)
 
 **Acceptance criteria**
 
@@ -960,7 +960,7 @@ evaluate affected intents only
 
 ---
 
-# 12. Milestone M14 — Candidate Indexing
+# 12. [Milestone M14 — Candidate Indexing](https://github.com/wnj00524/proxystate/milestone/15)
 
 ## Goal
 
@@ -987,7 +987,7 @@ Represent candidate groups using dense bitsets.
 
 ## Issues
 
-### Issue M14.1 — Add intent candidate bitsets
+### [M14.1 — Add intent candidate bitsets](https://github.com/wnj00524/proxystate/issues/70)
 
 **Acceptance criteria**
 
@@ -996,7 +996,7 @@ Represent candidate groups using dense bitsets.
 
 ---
 
-### Issue M14.2 — Build static intent indexes
+### [M14.2 — Build static intent indexes](https://github.com/wnj00524/proxystate/issues/71)
 
 **Acceptance criteria**
 
@@ -1005,7 +1005,7 @@ Represent candidate groups using dense bitsets.
 
 ---
 
-### Issue M14.3 — Add scaling benchmark
+### [M14.3 — Add scaling benchmark](https://github.com/wnj00524/proxystate/issues/72)
 
 Benchmark at minimum:
 
@@ -1023,7 +1023,7 @@ with 1,000 agents.
 
 ---
 
-# 13. Milestone M15 — Tooling, Diagnostics, and Content Safety
+# 13. [Milestone M15 — Tooling, Diagnostics, and Content Safety](https://github.com/wnj00524/proxystate/milestone/16)
 
 ## Goal
 
@@ -1033,7 +1033,7 @@ A declarative system without diagnostics becomes expensive to tune.
 
 ## Issues
 
-### Issue M15.1 — Add decision inspector
+### [M15.1 — Add decision inspector](https://github.com/wnj00524/proxystate/issues/73)
 
 Display for a selected agent:
 
@@ -1056,7 +1056,7 @@ Display for a selected agent:
 
 ---
 
-### Issue M15.2 — Add content validation command/test
+### [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
 
 **Acceptance criteria**
 
@@ -1065,7 +1065,7 @@ Display for a selected agent:
 
 ---
 
-### Issue M15.3 — Add intent authoring documentation
+### [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
 
 Document:
 
@@ -1080,7 +1080,7 @@ Document:
 
 ---
 
-### Issue M15.4 — Add data-only extensibility test
+### [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)
 
 Create a test fixture with a new intent, for example `eat`.
 
