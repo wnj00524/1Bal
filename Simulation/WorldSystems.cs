@@ -49,25 +49,22 @@ public sealed class WorldClockSystem : QuerySystem<WorldTime>
     }
 }
 
-public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, IntentionState, ActivityState, DecisionState>
+// Intent execution owns generic movement and performance mechanics. It never
+// identifies an action by name or hash; executor definitions supply all semantics.
+public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTravel, IntentionState, ActivityState, DecisionState>
 {
+    private readonly EntityStore _store;
     private readonly WorldTopology _world;
     private readonly Entity _clockEntity;
-    private readonly int _workActionHash;
-    private readonly int _restActionHash;
-    private readonly int _socializeActionHash;
+    private readonly Dictionary<int, ExecutorKind> _executors;
 
-    public CommutingSystem(ContentCatalog catalog, Entity clockEntity)
+    public IntentExecutionSystem(EntityStore store, ContentCatalog catalog, Entity clockEntity)
     {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(catalog);
         _world = catalog.World;
         _clockEntity = clockEntity;
-        _workActionHash = catalog.Actions.First(action =>
-            string.Equals(action.Id, "work", StringComparison.OrdinalIgnoreCase)).Hash;
-        _restActionHash = catalog.Actions.First(action =>
-            string.Equals(action.Id, "rest", StringComparison.OrdinalIgnoreCase)).Hash;
-        _socializeActionHash = catalog.Actions.First(action =>
-            string.Equals(action.Id, "socialize", StringComparison.OrdinalIgnoreCase)).Hash;
+        _executors = catalog.Actions.ToDictionary(action => action.Hash, action => action.Execution.Kind);
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -75,147 +72,141 @@ public sealed class CommutingSystem : QuerySystem<AgentLocation, AgentTravel, In
     {
         var time = _clockEntity.GetComponent<WorldTime>();
         var elapsedMinutes = time.DeltaSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute;
-        if (elapsedMinutes <= 0d)
-        {
-            return;
-        }
+        if (elapsedMinutes <= 0d) return;
 
-        Query.ForEachEntity((
-            ref AgentLocation location,
-            ref AgentTravel travel,
-            ref IntentionState intention,
-            ref ActivityState activity,
-            ref DecisionState decision,
-            Entity _) =>
+        // A snapshot avoids repeated ECS lookups and remains stable throughout
+        // this execution tick when several agents target one another.
+        var entityLocations = _store.Query<AgentLocation>().Entities.ToDictionary(
+            entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
+        var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
+
+        Query.ForEachEntity((ref AgentLocation location, ref AgentTravel travel,
+            ref IntentionState intention, ref ActivityState activity,
+            ref DecisionState decision, Entity _) =>
         {
-            UpdateAgent(
-                ref location,
-                ref travel,
-                ref intention,
-                ref activity,
-                ref decision,
-                (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute),
-                elapsedMinutes);
+            if (!_executors.TryGetValue(intention.ActionHash, out var executor))
+            {
+                decision.Dirty = true;
+                SetActivity(ref activity, ActivityKind.Idle, 0, minute);
+                return;
+            }
+
+            var destination = ResolveDestination(executor, intention, location, entityLocations, ref decision);
+            if (destination is null)
+            {
+                CancelTravel(ref travel);
+                SetActivity(ref activity, ActivityKind.Idle, intention.ActionHash, minute);
+                return;
+            }
+
+            if (travel.Mode == AgentTravelMode.Travelling)
+            {
+                // Moving entity targets can invalidate the old route. Rebuild it
+                // deterministically from the actor's current graph node.
+                if (travel.DestinationLocationId != destination.Value)
+                    BeginTravel(location.CurrentLocationId, destination.Value, ref travel, ref decision);
+                if (travel.Mode == AgentTravelMode.Travelling &&
+                    AdvanceTravel(ref location, ref travel, elapsedMinutes))
+                    decision.Dirty = true;
+            }
+
+            if (location.CurrentLocationId != destination.Value)
+            {
+                if (travel.Mode != AgentTravelMode.Travelling)
+                    BeginTravel(location.CurrentLocationId, destination.Value, ref travel, ref decision);
+                SetActivity(ref activity, travel.Mode == AgentTravelMode.Travelling
+                    ? ActivityKind.Travelling : ActivityKind.Idle, intention.ActionHash, minute);
+                return;
+            }
+
+            CancelTravel(ref travel);
+            SetActivity(ref activity,
+                executor == ExecutorKind.Wait ? ActivityKind.Idle : ActivityKind.Performing,
+                intention.ActionHash, minute);
         });
     }
 
-    private void UpdateAgent(
-        ref AgentLocation location,
-        ref AgentTravel travel,
-        ref IntentionState intention,
-        ref ActivityState activity,
-        ref DecisionState decision,
-        long minute,
-        double elapsedMinutes)
+    private static int? ResolveDestination(ExecutorKind executor, IntentionState intention,
+        AgentLocation location, IReadOnlyDictionary<int, int> entityLocations, ref DecisionState decision)
     {
-        if (travel.Mode is AgentTravelMode.TravellingToWork or AgentTravelMode.TravellingHome)
+        switch (executor)
         {
-            if (AdvanceTravel(ref location, ref travel, elapsedMinutes)) decision.Dirty = true;
-        }
-
-        if (intention.ActionHash == _restActionHash && travel.Mode == AgentTravelMode.AtWork)
-        {
-            BeginTravelHome(ref location, ref travel);
-        }
-        else if (intention.ActionHash == _workActionHash && travel.Mode == AgentTravelMode.AtHome)
-        {
-            BeginTravelToWork(ref location, ref travel);
-        }
-
-        var kind = travel.Mode is AgentTravelMode.TravellingHome or AgentTravelMode.TravellingToWork
-            ? ActivityKind.Commuting
-            : intention.ActionHash == _workActionHash && travel.Mode == AgentTravelMode.AtWork
-                ? ActivityKind.Working
-                : intention.ActionHash == _socializeActionHash
-                    ? ActivityKind.Socializing
-                    : intention.ActionHash == _restActionHash && travel.Mode == AgentTravelMode.AtHome
-                        ? ActivityKind.Resting
-                        : ActivityKind.Idle;
-        if (activity.Kind != kind || activity.CurrentActionHash != intention.ActionHash)
-        {
-            activity.Kind = kind;
-            activity.CurrentActionHash = intention.ActionHash;
-            activity.StartedAtMinute = minute;
+            case ExecutorKind.PerformHere:
+            case ExecutorKind.Wait:
+                return location.CurrentLocationId;
+            case ExecutorKind.PerformAtLocation:
+                if (intention.TargetLocationId != 0) return intention.TargetLocationId;
+                decision.Dirty = true;
+                return null;
+            case ExecutorKind.PerformWithEntity:
+                if (intention.TargetEntityId != 0 && entityLocations.TryGetValue(intention.TargetEntityId, out var targetLocation))
+                    return targetLocation;
+                decision.Dirty = true;
+                return null;
+            default:
+                decision.Dirty = true;
+                return null;
         }
     }
 
-    private void BeginTravelToWork(ref AgentLocation location, ref AgentTravel travel)
+    private void BeginTravel(int start, int destination, ref AgentTravel travel, ref DecisionState decision)
     {
-        if (travel.RouteLocationIds.Length == 1)
+        var route = _world.FindShortestRoute(start, destination);
+        if (route is null)
         {
-            location.CurrentLocationId = location.WorkLocationId;
-            travel.Mode = AgentTravelMode.AtWork;
-            travel.RemainingTravelMinutes = 0f;
+            decision.Dirty = true;
+            CancelTravel(ref travel);
             return;
         }
-
-        travel.Mode = AgentTravelMode.TravellingToWork;
+        travel.RouteLocationIds = route.LocationIds.ToArray();
+        travel.TotalTravelMinutes = route.TravelMinutes;
         travel.RoutePosition = 0;
-        travel.RemainingTravelMinutes = _world.GetTravelMinutes(
-            travel.RouteLocationIds[0],
-            travel.RouteLocationIds[1]);
-    }
-
-    private void BeginTravelHome(ref AgentLocation location, ref AgentTravel travel)
-    {
+        travel.DestinationLocationId = destination;
         if (travel.RouteLocationIds.Length == 1)
         {
-            location.CurrentLocationId = location.HomeLocationId;
-            travel.Mode = AgentTravelMode.AtHome;
+            travel.Mode = AgentTravelMode.Stationary;
             travel.RemainingTravelMinutes = 0f;
             return;
         }
-
-        travel.Mode = AgentTravelMode.TravellingHome;
-        travel.RoutePosition = travel.RouteLocationIds.Length - 1;
-        travel.RemainingTravelMinutes = _world.GetTravelMinutes(
-            travel.RouteLocationIds[^1],
-            travel.RouteLocationIds[^2]);
+        travel.Mode = AgentTravelMode.Travelling;
+        travel.RemainingTravelMinutes = _world.GetTravelMinutes(travel.RouteLocationIds[0], travel.RouteLocationIds[1]);
     }
 
-    private bool AdvanceTravel(
-        ref AgentLocation location,
-        ref AgentTravel travel,
-        double elapsedMinutes)
+    private bool AdvanceTravel(ref AgentLocation location, ref AgentTravel travel, double elapsedMinutes)
     {
-        var arrivedAtDestination = false;
-        while (elapsedMinutes > 0d &&
-               travel.Mode is AgentTravelMode.TravellingToWork or AgentTravelMode.TravellingHome)
+        while (elapsedMinutes > 0d && travel.Mode == AgentTravelMode.Travelling)
         {
-            var nextPosition = travel.Mode == AgentTravelMode.TravellingToWork
-                ? travel.RoutePosition + 1
-                : travel.RoutePosition - 1;
-
             if (travel.RemainingTravelMinutes > elapsedMinutes)
             {
                 travel.RemainingTravelMinutes -= (float)elapsedMinutes;
-                break;
+                return false;
             }
-
             elapsedMinutes -= travel.RemainingTravelMinutes;
-            travel.RoutePosition = nextPosition;
-            location.CurrentLocationId = travel.RouteLocationIds[nextPosition];
-
-            var arrived = travel.Mode == AgentTravelMode.TravellingToWork
-                ? nextPosition == travel.RouteLocationIds.Length - 1
-                : nextPosition == 0;
-            if (arrived)
+            travel.RoutePosition++;
+            location.CurrentLocationId = travel.RouteLocationIds[travel.RoutePosition];
+            if (travel.RoutePosition == travel.RouteLocationIds.Length - 1)
             {
-                travel.RemainingTravelMinutes = 0f;
-                travel.Mode = travel.Mode == AgentTravelMode.TravellingToWork
-                    ? AgentTravelMode.AtWork
-                    : AgentTravelMode.AtHome;
-                arrivedAtDestination = true;
-                continue;
+                CancelTravel(ref travel);
+                return true;
             }
-
-            var followingPosition = travel.Mode == AgentTravelMode.TravellingToWork
-                ? nextPosition + 1
-                : nextPosition - 1;
             travel.RemainingTravelMinutes = _world.GetTravelMinutes(
-                travel.RouteLocationIds[nextPosition],
-                travel.RouteLocationIds[followingPosition]);
+                travel.RouteLocationIds[travel.RoutePosition], travel.RouteLocationIds[travel.RoutePosition + 1]);
         }
-        return arrivedAtDestination;
+        return false;
+    }
+
+    private static void CancelTravel(ref AgentTravel travel)
+    {
+        travel.Mode = AgentTravelMode.Stationary;
+        travel.RemainingTravelMinutes = 0f;
+        travel.DestinationLocationId = 0;
+    }
+
+    private static void SetActivity(ref ActivityState activity, ActivityKind kind, int actionHash, long minute)
+    {
+        if (activity.Kind == kind && activity.CurrentActionHash == actionHash) return;
+        activity.Kind = kind;
+        activity.CurrentActionHash = actionHash;
+        activity.StartedAtMinute = minute;
     }
 }

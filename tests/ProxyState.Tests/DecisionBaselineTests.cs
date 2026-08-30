@@ -117,17 +117,17 @@ public sealed class DecisionBaselineTests
     }
 
     [Fact]
-    public void DecisionAndCommutingTraceLocksTravelAndActivityTransitions()
+    public void DecisionAndExecutionTraceLocksTravelAndActivityTransitions()
     {
         using var fixture = new DecisionFixture(600);
         fixture.Set(fatigue: 0, stress: 0, wealth: 0);
 
-        var selected = fixture.Decide(runCommuting: true);
+        var selected = fixture.Decide(runExecution: true);
 
         Assert.Equal(Work, selected.IntentHash);
         Assert.Equal(3004, selected.TargetLocationId);
-        Assert.Equal(AgentTravelMode.TravellingToWork, selected.TravelMode);
-        Assert.Equal(ActivityKind.Commuting, selected.ActivityKind);
+        Assert.Equal(AgentTravelMode.Travelling, selected.TravelMode);
+        Assert.Equal(ActivityKind.Travelling, selected.ActivityKind);
         Assert.Equal(Work, selected.ActivityActionHash);
     }
 
@@ -161,9 +161,9 @@ public sealed class DecisionBaselineTests
         private readonly EntityStore _store = new();
         private readonly Entity _clock;
         private readonly AgentDecisionSystem _decisions;
-        private readonly CommutingSystem _commuting;
+        private readonly IntentExecutionSystem _execution;
         private readonly SystemRoot _decisionRoot;
-        private readonly SystemRoot _commutingRoot;
+        private readonly SystemRoot _executionRoot;
 
         public DecisionFixture(long minute, int currentAction = Rest, long selectedAtMinute = 0)
         {
@@ -175,15 +175,15 @@ public sealed class DecisionBaselineTests
                 new AgentAttributes { Values = values },
                 new Psychology(),
                 new AgentLocation { HomeLocationId = 3001, WorkLocationId = 3004, CurrentLocationId = 3001 },
-                new AgentTravel { RouteLocationIds = new[] { 3001, 3003, 3004 }, Mode = AgentTravelMode.AtHome },
+                new AgentTravel { RouteLocationIds = new[] { 3001, 3003, 3004 }, Mode = AgentTravelMode.Stationary },
                 new IntentionState { ActionHash = currentAction, SelectedAtMinute = selectedAtMinute },
-                new ActivityState { CurrentActionHash = currentAction, Kind = ActivityKind.Resting },
+                new ActivityState { CurrentActionHash = currentAction, Kind = ActivityKind.Performing },
                 new DecisionState { Dirty = true, CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
                 Tags.Get<Tier1LodTag>());
             _decisions = new AgentDecisionSystem(_store, _catalog, _clock);
-            _commuting = new CommutingSystem(_catalog, _clock);
+            _execution = new IntentExecutionSystem(_store, _catalog, _clock);
             _decisionRoot = new SystemRoot(_store) { _decisions };
-            _commutingRoot = new SystemRoot(_store) { _commuting };
+            _executionRoot = new SystemRoot(_store) { _execution };
             AdvanceTo(minute);
         }
 
@@ -218,10 +218,10 @@ public sealed class DecisionBaselineTests
             Agent.GetComponent<DecisionState>().Dirty = true;
         }
 
-        public DecisionTrace Decide(bool runCommuting = false)
+        public DecisionTrace Decide(bool runExecution = false)
         {
             _decisionRoot.Update(default);
-            if (runCommuting) _commutingRoot.Update(default);
+            if (runExecution) _executionRoot.Update(default);
             return DecisionTrace.Capture(Agent);
         }
 

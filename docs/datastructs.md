@@ -53,7 +53,7 @@ public struct IntentionState : IComponent {
 
 public struct ActivityState : IComponent {
     public int CurrentActionHash;   // Public action moved out of AgentState.
-    public ActivityKind Kind;       // Idle, Working, Resting, Socializing, Commuting.
+    public ActivityKind Kind;       // Idle, Performing, or Travelling.
     public long StartedAtMinute;
 }
 
@@ -75,15 +75,14 @@ public struct AgentLocation : IComponent {
     public int CurrentLocationId;
 }
 
-public enum AgentTravelMode : byte {
-    AtHome, TravellingToWork, AtWork, TravellingHome
-}
+public enum AgentTravelMode : byte { Stationary, Travelling }
 
 public struct AgentTravel : IComponent {
     public int[] RouteLocationIds;
     public int TotalTravelMinutes;
     public int RoutePosition;
     public float RemainingTravelMinutes;
+    public int DestinationLocationId;
     public AgentTravelMode Mode;
 }
 ```
@@ -111,6 +110,13 @@ compiled predicate requirements, ordered compiled numeric rankings, and an
 optional positive candidate limit; the runtime result carries both entity and
 location IDs alongside eligibility and score. Runtime cooldowns use parallel fixed-size arrays because
 the first slice has exactly three actions and does not need per-agent dictionaries.
+
+Every action also declares an `ExecutorDefinition`. Loading compiles its
+`executor` string to `ExecutorKind` (`performHere`, `performAtLocation`,
+`performWithEntity`, or `wait`) and validates the required target type.
+Target-bound executors use `destination: "intent.target"`. Generic travel stores
+the active destination and shortest route in `AgentTravel`, so execution does
+not branch on work, rest, or socialize identity.
 
 Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
 schema index. `FactRegistry` resolves authoring references such as

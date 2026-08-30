@@ -26,6 +26,19 @@ public sealed record TargetQueryDefinition(
     List<TargetRankDefinition> RankBy,
     int? Limit);
 public sealed record TargetDefinition(string Kind, string? Value, TargetQueryDefinition? Query);
+public enum ExecutorKind : byte
+{
+    PerformHere,
+    PerformAtLocation,
+    PerformWithEntity,
+    Wait
+}
+public sealed record ExecutorDefinition(string Executor, string? Destination)
+{
+    // Content strings are resolved once during loading; the simulation hot path
+    // dispatches on this compact value rather than parsing executor names.
+    public ExecutorKind Kind { get; internal set; }
+}
 public sealed record ActionDefinition(
     string Id,
     string Name,
@@ -36,7 +49,8 @@ public sealed record ActionDefinition(
     List<TraitUtilityModifier> TraitModifiers,
     ActionControlDefinition Controls,
     List<ActionEffectDefinition> Effects,
-    TargetDefinition Target);
+    TargetDefinition Target,
+    ExecutorDefinition Execution);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -312,9 +326,10 @@ public sealed class ContentCatalog
         {
             if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
                 !float.IsFinite(action.BaseUtility) || action.Eligibility is null ||
-                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null)
+                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null || action.Execution is null)
                 throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
             ValidateTarget(action);
+            ValidateExecutor(action);
             if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
                 !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
                 !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
@@ -331,6 +346,32 @@ public sealed class ContentCatalog
             if (action.Effects.Any(effect => !attributeIds.Contains(effect.Attribute) || !float.IsFinite(effect.PerMinute)))
                 throw new InvalidDataException($"Action '{action.Id}' references an invalid effect attribute.");
         }
+    }
+
+    private static void ValidateExecutor(ActionDefinition action)
+    {
+        var targetKind = action.Target.Kind.ToLowerInvariant();
+        action.Execution.Kind = action.Execution.Executor?.ToLowerInvariant() switch
+        {
+            "performhere" => ExecutorKind.PerformHere,
+            "performatlocation" => ExecutorKind.PerformAtLocation,
+            "performwithentity" => ExecutorKind.PerformWithEntity,
+            "wait" => ExecutorKind.Wait,
+            _ => throw new InvalidDataException(
+                $"Action '{action.Id}' has unsupported executor '{action.Execution.Executor}'.")
+        };
+
+        var requiresIntentTarget = action.Execution.Kind is ExecutorKind.PerformAtLocation or ExecutorKind.PerformWithEntity;
+        if (requiresIntentTarget && action.Execution.Destination != "intent.target")
+            throw new InvalidDataException($"Action '{action.Id}' executor must use destination 'intent.target'.");
+        if (!requiresIntentTarget && action.Execution.Destination is not null)
+            throw new InvalidDataException($"Action '{action.Id}' executor cannot define a destination.");
+        if (action.Execution.Kind == ExecutorKind.PerformAtLocation && targetKind != "location")
+            throw new InvalidDataException($"Action '{action.Id}' performAtLocation executor requires a location target.");
+        if (action.Execution.Kind == ExecutorKind.PerformWithEntity && targetKind != "entity")
+            throw new InvalidDataException($"Action '{action.Id}' performWithEntity executor requires an entity target.");
+        if (action.Execution.Kind is ExecutorKind.PerformHere or ExecutorKind.Wait && targetKind != "none")
+            throw new InvalidDataException($"Action '{action.Id}' {action.Execution.Executor} executor requires target kind 'none'.");
     }
 
     private static void ValidateTarget(ActionDefinition action)

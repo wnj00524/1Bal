@@ -75,10 +75,8 @@ public struct IntentionState : IComponent
 public enum ActivityKind : byte
 {
     Idle,
-    Working,
-    Resting,
-    Socializing,
-    Commuting
+    Performing,
+    Travelling
 }
 
 public struct ActivityState : IComponent
@@ -141,10 +139,8 @@ public struct AgentNetworkMembership : ILinkRelation
 
 public enum AgentTravelMode : byte
 {
-    AtHome,
-    TravellingToWork,
-    AtWork,
-    TravellingHome
+    Stationary,
+    Travelling
 }
 
 public struct AgentTravel : IComponent
@@ -155,6 +151,7 @@ public struct AgentTravel : IComponent
     public int TotalTravelMinutes;
     public int RoutePosition;
     public float RemainingTravelMinutes;
+    public int DestinationLocationId;
     public AgentTravelMode Mode;
 }
 
