@@ -116,10 +116,10 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 7: Fact and Numeric Expression IR](https://github.com/wnj00524/proxystate/milestone/8)
 
-- [ ] [M7.1 — Introduce `FactId` and fact registry](https://github.com/wnj00524/proxystate/issues/42)
-- [ ] [M7.2 — Introduce numeric expression model](https://github.com/wnj00524/proxystate/issues/43)
-- [ ] [M7.3 — Add compiled numeric evaluator](https://github.com/wnj00524/proxystate/issues/44)
-- [ ] [M7.4 — Migrate `actions.json`](https://github.com/wnj00524/proxystate/issues/45)
+- [x] [M7.1 — Introduce `FactId` and fact registry](https://github.com/wnj00524/proxystate/issues/42)
+- [x] [M7.2 — Introduce numeric expression model](https://github.com/wnj00524/proxystate/issues/43)
+- [x] [M7.3 — Add compiled numeric evaluator](https://github.com/wnj00524/proxystate/issues/44)
+- [x] [M7.4 — Migrate `actions.json`](https://github.com/wnj00524/proxystate/issues/45)
 
 ## [Milestone 8: Predicate IR](https://github.com/wnj00524/proxystate/milestone/9)
 

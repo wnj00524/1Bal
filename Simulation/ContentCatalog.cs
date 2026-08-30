@@ -4,7 +4,10 @@ namespace ProxyState.Simulation;
 
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
 public sealed record ResponsePoint(float X, float Y);
-public sealed record UtilityInputDefinition(string Source, float Weight, List<ResponsePoint> Curve);
+public sealed record UtilityInputDefinition(NumericExpressionDefinition Expression, float Weight, List<ResponsePoint> Curve)
+{
+    public CompiledNumericExpression? CompiledExpression { get; internal set; }
+}
 public sealed record TraitUtilityModifier(string Trait, float Modifier);
 public sealed record ActionEligibilityDefinition(
     string Gate,
@@ -235,7 +238,23 @@ public sealed class ContentCatalog
         var schema = new AgentAttributeSchema(attributeDefinitions);
         _ = schema.GetIndex("fatigue");
         _ = schema.GetIndex("stress");
+        CompileUtilityExpressions(actions, schema);
         return schema;
+    }
+
+    private static void CompileUtilityExpressions(IReadOnlyList<ActionDefinition> actions, AgentAttributeSchema schema)
+    {
+        var facts = new FactRegistry(schema);
+        foreach (var action in actions)
+            foreach (var input in action.UtilityInputs)
+                try
+                {
+                    input.CompiledExpression = CompiledNumericExpression.Compile(input.Expression, facts);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid numeric expression: {exception.Message}", exception);
+                }
     }
 
     private static void ValidateActions(
@@ -262,10 +281,10 @@ public sealed class ContentCatalog
                 throw new InvalidDataException($"Action '{action.Id}' has invalid controls.");
             foreach (var input in action.UtilityInputs)
             {
-                if (string.IsNullOrWhiteSpace(input.Source) || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                if (input.Expression is null || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
                     input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
                     input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
-                    throw new InvalidDataException($"Action '{action.Id}' has an invalid response curve for '{input.Source}'.");
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid utility input.");
             }
             if (action.TraitModifiers.Any(modifier => !traitIds.Contains(modifier.Trait) || !float.IsFinite(modifier.Modifier)))
                 throw new InvalidDataException($"Action '{action.Id}' references an invalid trait modifier.");
