@@ -123,10 +123,10 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 8: Predicate IR](https://github.com/wnj00524/proxystate/milestone/9)
 
-- [ ] [M8.1 — Define predicate authoring schema](https://github.com/wnj00524/proxystate/issues/46)
-- [ ] [M8.2 — Add compiled predicate evaluator](https://github.com/wnj00524/proxystate/issues/47)
-- [ ] [M8.3 — Remove `ActionEligibilityDefinition.Gate`](https://github.com/wnj00524/proxystate/issues/48)
-- [ ] [M8.4 — Migrate existing action eligibility](https://github.com/wnj00524/proxystate/issues/49)
+- [x] [M8.1 — Define predicate authoring schema](https://github.com/wnj00524/proxystate/issues/46)
+- [x] [M8.2 — Add compiled predicate evaluator](https://github.com/wnj00524/proxystate/issues/47)
+- [x] [M8.3 — Remove `ActionEligibilityDefinition.Gate`](https://github.com/wnj00524/proxystate/issues/48)
+- [x] [M8.4 — Migrate existing action eligibility](https://github.com/wnj00524/proxystate/issues/49)
 
 ## [Milestone 9: Data-Defined Targeting](https://github.com/wnj00524/proxystate/milestone/10)
 

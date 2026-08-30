@@ -75,3 +75,8 @@ expression to postfix opcodes with typed fact handles; decision ticks evaluate
 those handles directly without parsing strings. Existing work, rest, and
 socialize utility formulas—including schedule pressure, low wealth, night time,
 and peer affinity—are now composed in `data/actions.json`.
+
+Milestone 8 similarly replaces named eligibility gates with data-defined
+predicates. Boolean facts, boolean combinators, and numeric comparisons are
+validated and compiled at content load; decision ticks evaluate pre-resolved
+instructions without gate-name parsing or per-agent predicate allocations.

@@ -5,9 +5,42 @@
     "hash": 1001,
     "baseUtility": 10,
     "eligibility": {
-      "gate": "workSchedule",
-      "scheduleStartOffsetMinutes": -60,
-      "scheduleEndOffsetMinutes": 0
+      "op": "and",
+      "inputs": [
+        {
+          "op": "fact",
+          "fact": "job.isWorkDay"
+        },
+        {
+          "op": "greaterOrEqual",
+          "left": {
+            "op": "fact",
+            "fact": "time.minuteOfDay"
+          },
+          "right": {
+            "op": "subtract",
+            "left": {
+              "op": "fact",
+              "fact": "job.workStartMinute"
+            },
+            "right": {
+              "op": "constant",
+              "value": 60
+            }
+          }
+        },
+        {
+          "op": "less",
+          "left": {
+            "op": "fact",
+            "fact": "time.minuteOfDay"
+          },
+          "right": {
+            "op": "fact",
+            "fact": "job.workEndMinute"
+          }
+        }
+      ]
     },
     "utilityInputs": [
       {
@@ -154,7 +187,24 @@
     "hash": 1002,
     "baseUtility": 5,
     "eligibility": {
-      "gate": "homeReachable"
+      "op": "or",
+      "inputs": [
+        {
+          "op": "equal",
+          "left": {
+            "op": "fact",
+            "fact": "agent.location.current"
+          },
+          "right": {
+            "op": "fact",
+            "fact": "agent.location.home"
+          }
+        },
+        {
+          "op": "fact",
+          "fact": "travel.reachable"
+        }
+      ]
     },
     "utilityInputs": [
       {
@@ -278,7 +328,15 @@
     "hash": 1003,
     "baseUtility": 4,
     "eligibility": {
-      "gate": "availablePeer"
+      "op": "notEqual",
+      "left": {
+        "op": "fact",
+        "fact": "target.entity"
+      },
+      "right": {
+        "op": "constant",
+        "value": 0
+      }
     },
     "utilityInputs": [
       {

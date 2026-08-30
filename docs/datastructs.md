@@ -102,7 +102,7 @@ identifies a separate secret activity such as `Surveillance`. Secret states are 
 default-initialized `AgentState` safe. Agents are spawned with `None`, and a
 covert system may change the secret hash without changing intention or activity.
 
-`data/actions.json` owns each candidate's hard eligibility gate, base utility,
+`data/actions.json` owns each candidate's eligibility predicate, base utility,
 weighted numeric expressions, piecewise-linear response curves, trait modifiers,
 minimum commitment, switching margin, cooldown, urgent-preemption threshold,
 and per-minute effects. Runtime cooldowns use parallel fixed-size arrays because
@@ -117,6 +117,14 @@ array containing opcodes, fact handles, and numeric operands. The runtime stack
 evaluator uses `stackalloc`, performs no string lookup, and supports `fact`,
 `constant`, `normalize`, `normalizeRange`, arithmetic, `min`, `max`, `clamp`,
 `oneMinus`, and `abs`. Trees are limited to 16 levels and 64 instructions.
+
+`PredicateDefinition` is the eligibility authoring tree. It composes typed
+boolean facts with `and`, `or`, and `not`, or compares numeric expressions with
+`equal`, `notEqual`, `less`, `lessOrEqual`, `greater`, and `greaterOrEqual`.
+`CompiledPredicate` stores bounded postfix boolean instructions and
+precompiled numeric operands. Boolean/numeric type mismatches and malformed
+arity fail during catalog loading; runtime evaluation uses a stack-allocated
+boolean span and performs no string parsing or per-agent allocation.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
