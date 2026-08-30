@@ -13,6 +13,7 @@ public enum FactKind : byte
     AgentLocationCurrent,
     AgentLocationHome,
     AgentLocationWork,
+    TargetLocationCurrent,
     TargetEntity,
     TravelReachable,
     JobIsWorkDay
@@ -39,6 +40,7 @@ public sealed class FactRegistry
             ["agent.location.current"] = new(new FactId(FactKind.AgentLocationCurrent), FactValueKind.Number),
             ["agent.location.home"] = new(new FactId(FactKind.AgentLocationHome), FactValueKind.Number),
             ["agent.location.work"] = new(new FactId(FactKind.AgentLocationWork), FactValueKind.Number),
+            ["target.location.current"] = new(new FactId(FactKind.TargetLocationCurrent), FactValueKind.Number),
             ["target.entity"] = new(new FactId(FactKind.TargetEntity), FactValueKind.Number),
             ["travel.reachable"] = new(new FactId(FactKind.TravelReachable), FactValueKind.Boolean),
             ["job.isWorkDay"] = new(new FactId(FactKind.JobIsWorkDay), FactValueKind.Boolean)
@@ -222,7 +224,7 @@ public sealed class CompiledNumericExpression
 
 internal readonly record struct DecisionFactContext(
     WorldTime Time, JobDefinition Job, float[] Attributes, AgentLocation Location,
-    AgentTravel Travel, int TargetEntityId, float TargetAffinity)
+    AgentTravel Travel, int TargetEntityId, float TargetAffinity, int TargetLocationId = 0)
 {
     public float Read(FactId fact) => fact.Kind switch
     {
@@ -236,6 +238,7 @@ internal readonly record struct DecisionFactContext(
         FactKind.AgentLocationHome => Location.HomeLocationId,
         FactKind.AgentLocationWork => Location.WorkLocationId,
         FactKind.TargetEntity => TargetEntityId,
+        FactKind.TargetLocationCurrent => TargetLocationId,
         _ => throw new InvalidOperationException($"Unsupported fact kind '{fact.Kind}'.")
     };
 

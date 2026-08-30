@@ -16,6 +16,16 @@ public sealed record ActionControlDefinition(
     float UrgentPreemptionThreshold,
     bool CooldownOnExit = true);
 public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
+public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
+{
+    public CompiledNumericExpression? CompiledValue { get; internal set; }
+}
+public sealed record TargetQueryDefinition(
+    string Relation,
+    List<PredicateDefinition> Requirements,
+    List<TargetRankDefinition> RankBy,
+    int? Limit);
+public sealed record TargetDefinition(string Kind, string? Value, TargetQueryDefinition? Query);
 public sealed record ActionDefinition(
     string Id,
     string Name,
@@ -25,7 +35,8 @@ public sealed record ActionDefinition(
     List<UtilityInputDefinition> UtilityInputs,
     List<TraitUtilityModifier> TraitModifiers,
     ActionControlDefinition Controls,
-    List<ActionEffectDefinition> Effects);
+    List<ActionEffectDefinition> Effects,
+    TargetDefinition Target);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -252,6 +263,7 @@ public sealed class ContentCatalog
                 throw new InvalidDataException($"Action '{action.Id}' has an invalid eligibility predicate: {exception.Message}", exception);
             }
             foreach (var input in action.UtilityInputs)
+            {
                 try
                 {
                     input.CompiledExpression = CompiledNumericExpression.Compile(input.Expression, facts);
@@ -260,6 +272,28 @@ public sealed class ContentCatalog
                 {
                     throw new InvalidDataException($"Action '{action.Id}' has an invalid numeric expression: {exception.Message}", exception);
                 }
+            }
+            if (action.Target.Query is not null)
+            {
+                foreach (var requirement in action.Target.Query.Requirements)
+                    try
+                    {
+                        requirement.CompiledPredicate = CompiledPredicate.Compile(requirement, facts);
+                    }
+                    catch (InvalidDataException exception)
+                    {
+                        throw new InvalidDataException($"Action '{action.Id}' has an invalid target requirement: {exception.Message}", exception);
+                    }
+                foreach (var rank in action.Target.Query.RankBy)
+                    try
+                    {
+                        rank.CompiledValue = CompiledNumericExpression.Compile(rank.Value, facts);
+                    }
+                    catch (InvalidDataException exception)
+                    {
+                        throw new InvalidDataException($"Action '{action.Id}' has an invalid target ranking: {exception.Message}", exception);
+                    }
+            }
         }
     }
 
@@ -278,8 +312,9 @@ public sealed class ContentCatalog
         {
             if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
                 !float.IsFinite(action.BaseUtility) || action.Eligibility is null ||
-                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null)
+                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null)
                 throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
+            ValidateTarget(action);
             if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
                 !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
                 !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
@@ -295,6 +330,34 @@ public sealed class ContentCatalog
                 throw new InvalidDataException($"Action '{action.Id}' references an invalid trait modifier.");
             if (action.Effects.Any(effect => !attributeIds.Contains(effect.Attribute) || !float.IsFinite(effect.PerMinute)))
                 throw new InvalidDataException($"Action '{action.Id}' references an invalid effect attribute.");
+        }
+    }
+
+    private static void ValidateTarget(ActionDefinition action)
+    {
+        var target = action.Target;
+        switch (target.Kind?.ToLowerInvariant())
+        {
+            case "none":
+                if (target.Value is not null || target.Query is not null)
+                    throw new InvalidDataException($"Action '{action.Id}' target kind 'none' cannot define value or query.");
+                break;
+            case "location":
+                if (target.Value is not ("agent.location.home" or "agent.location.work" or "agent.location.current") || target.Query is not null)
+                    throw new InvalidDataException($"Action '{action.Id}' location target must use a supported direct agent location value.");
+                break;
+            case "entity":
+                if (target.Value is not null || target.Query is null ||
+                    !string.Equals(target.Query.Relation, "social", StringComparison.OrdinalIgnoreCase) ||
+                    target.Query.Requirements is null || target.Query.RankBy is null ||
+                    target.Query.RankBy.Count == 0 || target.Query.Limit is <= 0)
+                    throw new InvalidDataException($"Action '{action.Id}' entity target must define a valid social query, ranking, and optional positive limit.");
+                if (target.Query.RankBy.Any(rank => rank.Value is null ||
+                    rank.Order is not ("ascending" or "descending")))
+                    throw new InvalidDataException($"Action '{action.Id}' target ranking must use ascending or descending order.");
+                break;
+            default:
+                throw new InvalidDataException($"Action '{action.Id}' has unsupported target kind '{target.Kind}'.");
         }
     }
 

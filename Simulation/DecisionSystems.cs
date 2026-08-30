@@ -3,8 +3,8 @@ using Friflo.Engine.ECS.Systems;
 
 namespace ProxyState.Simulation;
 
-// Utility decisions are made from Ground Truth, but only the resulting ECS
-// intention is exposed to downstream activity systems.
+// Target resolution and utility scoring operate entirely from compiled content.
+// The winner application consequently copies a generic result into ECS state.
 public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes, Psychology, AgentLocation, AgentTravel>
 {
     private readonly EntityStore _store;
@@ -12,7 +12,6 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CandidateEvaluator[] _candidates;
     private readonly Dictionary<string, long> _traitBits;
-    private readonly int _socializeActionHash;
 
     public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock)
     {
@@ -21,9 +20,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _clock = clock;
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _traitBits = catalog.Traits.ToDictionary(trait => trait.Id, trait => trait.Bit, StringComparer.OrdinalIgnoreCase);
-        _candidates = catalog.Actions.Select(action => new CandidateEvaluator(action)).ToArray();
-        _socializeActionHash = catalog.Actions.Single(action =>
-            string.Equals(action.Id, "socialize", StringComparison.OrdinalIgnoreCase)).Hash;
+        _candidates = catalog.Actions.Select((action, index) => new CandidateEvaluator(index, action)).ToArray();
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -31,82 +28,60 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     {
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
-        var locations = _store.Query<AgentLocation>().Entities.ToDictionary(entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
-        var peers = BuildAvailablePeers(locations);
+        var targets = new TargetResolver(_store);
 
         Query.ForEachEntity((ref Identity identity, ref AgentAttributes attributes, ref Psychology psychology,
             ref AgentLocation location, ref AgentTravel travel, Entity entity) =>
         {
+            if (!_jobs.TryGetValue(identity.OccupationId, out var job)) return;
             ref var intention = ref entity.GetComponent<IntentionState>();
-            ref var activity = ref entity.GetComponent<ActivityState>();
             ref var decision = ref entity.GetComponent<DecisionState>();
-            // Target loss is an event, not a reason to wait for the next minute.
-            if (intention.ActionHash == _socializeActionHash &&
-                (!peers.TryGetValue(entity.Id, out var currentPeer) || currentPeer.TargetId != intention.TargetEntityId))
-                decision.Dirty = true;
-            if (!decision.Dirty && decision.LastConsideredMinute >= minute)
-                return;
+            var currentActionHash = intention.ActionHash;
+            var context = new DecisionContext(time, job, attributes.Values, psychology.TraitMask, location, travel);
+
+            // Re-resolving only the active definition makes target loss an immediate,
+            // data-driven invalidation rather than a special case for an action ID.
+            var active = Array.Find(_candidates, item => item.Definition.Hash == currentActionHash);
+            if (active is not null)
+            {
+                var selected = targets.Resolve(entity.Id, active.Definition.Target, context);
+                if (selected.EntityId != intention.TargetEntityId || selected.LocationId != intention.TargetLocationId)
+                    decision.Dirty = true;
+            }
+            if (!decision.Dirty && decision.LastConsideredMinute >= minute) return;
 
             decision.Dirty = false;
             decision.LastConsideredMinute = minute;
-            if (!_jobs.TryGetValue(identity.OccupationId, out var job))
-                return;
-
-            peers.TryGetValue(entity.Id, out var peer);
-            var context = new DecisionContext(time, job, attributes.Values, psychology.TraitMask,
-                location, travel, peer.TargetId, peer.Affinity);
-            var decisionSnapshot = decision;
-            var currentActionHash = intention.ActionHash;
+            var snapshot = decision;
             var eligible = _candidates
-                .Select(candidate => candidate.Evaluate(context, _traitBits))
-                .Where(result => result.Eligible && !IsCoolingDown(result.Action!.Hash, minute, decisionSnapshot))
+                .Select(candidate => candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context), _traitBits))
+                .Where(result => result.Eligible && !IsCoolingDown(result.Action.Hash, minute, snapshot))
                 .OrderByDescending(result => result.Score)
-                .ThenBy(result => result.Action!.Hash)
+                .ThenBy(result => result.Action.Hash)
                 .ToArray();
-            if (eligible.Length == 0)
-                return;
+            if (eligible.Length == 0) return;
 
             var winner = eligible[0];
-            var current = eligible.FirstOrDefault(result => result.Action!.Hash == currentActionHash);
-            if (currentActionHash != 0 && winner.Action!.Hash != currentActionHash)
+            var current = eligible.FirstOrDefault(result => result.Action.Hash == currentActionHash);
+            if (currentActionHash != 0 && winner.Action.Hash != currentActionHash)
             {
-                var currentDefinition = _candidates.FirstOrDefault(item => item.Definition.Hash == currentActionHash)?.Definition;
+                var currentDefinition = active?.Definition;
                 var committed = currentDefinition is not null && minute - intention.SelectedAtMinute < currentDefinition.Controls.MinimumCommitmentMinutes;
                 var currentScore = current.Action is null ? float.NegativeInfinity : current.Score;
                 var urgent = winner.Score >= winner.Action.Controls.UrgentPreemptionThreshold;
                 var switchingMargin = currentDefinition?.Controls.SwitchingThreshold ?? winner.Action.Controls.SwitchingThreshold;
-                if (!urgent && (committed || winner.Score < currentScore + switchingMargin))
-                    return;
-                if (currentDefinition?.Controls.CooldownOnExit == true)
-                    SetCooldown(currentDefinition, minute, ref decision);
+                if (!urgent && (committed || winner.Score < currentScore + switchingMargin)) return;
+                if (currentDefinition?.Controls.CooldownOnExit == true) SetCooldown(currentDefinition, minute, ref decision);
             }
 
-            if (winner.Action!.Hash == intention.ActionHash)
-                return;
+            if (winner.Action.Hash == intention.ActionHash &&
+                winner.TargetEntityId == intention.TargetEntityId && winner.TargetLocationId == intention.TargetLocationId) return;
             intention.ActionHash = winner.Action.Hash;
-            intention.TargetEntityId = winner.Action.Id.Equals("socialize", StringComparison.OrdinalIgnoreCase) ? peer.TargetId : 0;
-            intention.TargetLocationId = winner.Action.Id.Equals("work", StringComparison.OrdinalIgnoreCase)
-                ? location.WorkLocationId : location.HomeLocationId;
+            intention.TargetEntityId = winner.TargetEntityId;
+            intention.TargetLocationId = winner.TargetLocationId;
             intention.SelectedAtMinute = minute;
             intention.Utility = winner.Score;
         });
-    }
-
-    private Dictionary<int, PeerContext> BuildAvailablePeers(IReadOnlyDictionary<int, int> locations)
-    {
-        var peers = new Dictionary<int, PeerContext>();
-        foreach (var edgeEntity in _store.Query<EdgeData>().Entities)
-        {
-            var edge = edgeEntity.GetComponent<EdgeData>();
-            if (!locations.TryGetValue(edge.Source.Id, out var sourceLocation) ||
-                !locations.TryGetValue(edge.Target.Id, out var targetLocation) || sourceLocation != targetLocation)
-                continue;
-            var candidate = new PeerContext(edge.Target.Id, Math.Clamp((edge.Affinity + 100f) / 200f, 0f, 1f));
-            if (!peers.TryGetValue(edge.Source.Id, out var existing) || candidate.Affinity > existing.Affinity ||
-                (candidate.Affinity == existing.Affinity && candidate.TargetId < existing.TargetId))
-                peers[edge.Source.Id] = candidate;
-        }
-        return peers;
     }
 
     private static bool IsCoolingDown(int hash, long minute, DecisionState state)
@@ -127,28 +102,88 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         state.CooldownUntilMinutes[index] = minute + action.Controls.CooldownMinutes;
     }
 
-    private readonly record struct PeerContext(int TargetId, float Affinity);
-    private readonly record struct DecisionResult(ActionDefinition? Action, bool Eligible, float Score);
-    private readonly record struct DecisionContext(WorldTime Time, JobDefinition Job, float[] Attributes, long TraitMask,
-        AgentLocation Location, AgentTravel Travel, int PeerId, float PeerAffinity);
+    internal readonly record struct DecisionResult(int IntentIndex, ActionDefinition Action, bool Eligible,
+        float Score, int TargetEntityId, int TargetLocationId);
+    private readonly record struct TargetSelection(int EntityId, int LocationId, float Affinity);
+    private readonly record struct DecisionContext(WorldTime Time, JobDefinition Job, float[] Attributes,
+        long TraitMask, AgentLocation Location, AgentTravel Travel);
+
+    private sealed class TargetResolver
+    {
+        private readonly Dictionary<int, int> _locations;
+        private readonly Dictionary<int, List<(int Id, float Affinity)>> _social;
+
+        public TargetResolver(EntityStore store)
+        {
+            _locations = store.Query<AgentLocation>().Entities.ToDictionary(
+                entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
+            _social = new();
+            foreach (var edgeEntity in store.Query<EdgeData>().Entities)
+            {
+                var edge = edgeEntity.GetComponent<EdgeData>();
+                if (!_social.TryGetValue(edge.Source.Id, out var edges)) _social[edge.Source.Id] = edges = new();
+                edges.Add((edge.Target.Id, Math.Clamp((edge.Affinity + 100f) / 200f, 0f, 1f)));
+            }
+        }
+
+        public TargetSelection Resolve(int actorId, TargetDefinition definition, DecisionContext context)
+        {
+            if (definition.Kind.Equals("none", StringComparison.OrdinalIgnoreCase)) return default;
+            if (definition.Kind.Equals("location", StringComparison.OrdinalIgnoreCase))
+                return new TargetSelection(0, definition.Value switch
+                {
+                    "agent.location.home" => context.Location.HomeLocationId,
+                    "agent.location.work" => context.Location.WorkLocationId,
+                    "agent.location.current" => context.Location.CurrentLocationId,
+                    _ => 0
+                }, 0);
+            if (!_social.TryGetValue(actorId, out var edges)) return default;
+
+            var query = definition.Query!;
+            (TargetSelection Target, float[] Ranks)? best = null;
+            foreach (var edge in edges)
+            {
+                if (!_locations.TryGetValue(edge.Id, out var targetLocation)) continue;
+                var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes,
+                    context.Location, context.Travel, edge.Id, edge.Affinity, targetLocation);
+                if (query.Requirements.Any(requirement => !requirement.CompiledPredicate!.Evaluate(facts))) continue;
+                var ranks = query.RankBy.Select(rank => rank.CompiledValue!.Evaluate(facts)).ToArray();
+                var target = new TargetSelection(edge.Id, context.Location.CurrentLocationId, edge.Affinity);
+                if (best is null || Compare(ranks, edge.Id, best.Value.Ranks, best.Value.Target.EntityId, query.RankBy) < 0)
+                    best = (target, ranks);
+            }
+            return best?.Target ?? default;
+        }
+
+        private static int Compare(float[] left, int leftId, float[] right, int rightId, IReadOnlyList<TargetRankDefinition> ranks)
+        {
+            for (var index = 0; index < left.Length; index++)
+            {
+                var comparison = left[index].CompareTo(right[index]);
+                if (comparison != 0) return ranks[index].Order == "descending" ? -comparison : comparison;
+            }
+            return leftId.CompareTo(rightId);
+        }
+    }
 
     private sealed class CandidateEvaluator
     {
-        public CandidateEvaluator(ActionDefinition definition) => Definition = definition;
+        public CandidateEvaluator(int index, ActionDefinition definition) { Index = index; Definition = definition; }
+        public int Index { get; }
         public ActionDefinition Definition { get; }
 
-        public DecisionResult Evaluate(DecisionContext context, IReadOnlyDictionary<string, long> traits)
+        public DecisionResult Evaluate(DecisionContext context, TargetSelection target, IReadOnlyDictionary<string, long> traits)
         {
-            var score = Definition.BaseUtility;
-            var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes,
-                context.Location, context.Travel, context.PeerId, context.PeerAffinity);
+            var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.Location,
+                context.Travel, target.EntityId, target.Affinity, target.LocationId);
             if (!Definition.Eligibility.CompiledPredicate!.Evaluate(facts))
-                return new DecisionResult(Definition, false, float.NegativeInfinity);
+                return new DecisionResult(Index, Definition, false, float.NegativeInfinity, target.EntityId, target.LocationId);
+            var score = Definition.BaseUtility;
             foreach (var input in Definition.UtilityInputs)
                 score += input.Weight * Curve(input.Curve, input.CompiledExpression!.Evaluate(facts));
             foreach (var modifier in Definition.TraitModifiers)
                 if ((context.TraitMask & traits[modifier.Trait]) != 0) score += modifier.Modifier;
-            return new DecisionResult(Definition, true, score);
+            return new DecisionResult(Index, Definition, true, score, target.EntityId, target.LocationId);
         }
 
         private static float Curve(IReadOnlyList<ResponsePoint> points, float value)

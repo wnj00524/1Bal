@@ -55,6 +55,22 @@ public sealed class DecisionBaselineTests
     }
 
     [Fact]
+    public void SocialTargetRequirementsRankingAndTieBreakAreDataDefined()
+    {
+        using var fixture = new DecisionFixture(1_020);
+        fixture.Set(preference: 1, charisma: 100, fatigue: 0, stress: 0);
+        _ = fixture.AddPeer(affinity: 100, location: 3004); // excluded by the JSON requirement
+        var first = fixture.AddPeer(affinity: 50);
+        var second = fixture.AddPeer(affinity: 50);
+
+        var trace = fixture.Decide();
+
+        Assert.Equal(Socialize, trace.IntentHash);
+        Assert.Equal(Math.Min(first.Id, second.Id), trace.TargetEntityId);
+        Assert.Equal(3001, trace.TargetLocationId);
+    }
+
+    [Fact]
     public void MinimumCommitmentBlocksANonUrgentWinner()
     {
         using var fixture = new DecisionFixture(600, Work, selectedAtMinute: 595);
@@ -126,8 +142,9 @@ public sealed class DecisionBaselineTests
         Assert.DoesNotContain("workSchedule", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("homeReachable", source, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("availablePeer", source, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("winner.Action.Id.Equals(\"socialize\"", source);
-        Assert.Contains("winner.Action.Id.Equals(\"work\"", source);
+        Assert.DoesNotContain("Action.Id.Equals(\"socialize\"", source);
+        Assert.DoesNotContain("Action.Id.Equals(\"work\"", source);
+        Assert.Contains("TargetResolver", source);
     }
 
     private static string FindRepositoryRoot()
@@ -185,9 +202,9 @@ public sealed class DecisionBaselineTests
             }
         }
 
-        public Entity AddPeer(float affinity)
+        public Entity AddPeer(float affinity, int location = 3001)
         {
-            var peer = _store.CreateEntity(new AgentLocation { CurrentLocationId = 3001 });
+            var peer = _store.CreateEntity(new AgentLocation { CurrentLocationId = location });
             _store.CreateEntity(new EdgeData { Source = Agent, Target = peer, Affinity = affinity });
             Agent.GetComponent<DecisionState>().Dirty = true;
             return peer;

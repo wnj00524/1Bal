@@ -105,7 +105,11 @@ covert system may change the secret hash without changing intention or activity.
 `data/actions.json` owns each candidate's eligibility predicate, base utility,
 weighted numeric expressions, piecewise-linear response curves, trait modifiers,
 minimum commitment, switching margin, cooldown, urgent-preemption threshold,
-and per-minute effects. Runtime cooldowns use parallel fixed-size arrays because
+per-minute effects, and target definition. `TargetDefinition` selects `none`, a
+direct agent `location`, or an `entity` query. Entity queries contain a relation,
+compiled predicate requirements, ordered compiled numeric rankings, and an
+optional positive candidate limit; the runtime result carries both entity and
+location IDs alongside eligibility and score. Runtime cooldowns use parallel fixed-size arrays because
 the first slice has exactly three actions and does not need per-agent dictionaries.
 
 Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
