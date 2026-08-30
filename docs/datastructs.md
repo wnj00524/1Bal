@@ -103,10 +103,20 @@ default-initialized `AgentState` safe. Agents are spawned with `None`, and a
 covert system may change the secret hash without changing intention or activity.
 
 `data/actions.json` owns each candidate's hard eligibility gate, base utility,
-weighted normalized inputs, piecewise-linear response curves, trait modifiers,
+weighted numeric expressions, piecewise-linear response curves, trait modifiers,
 minimum commitment, switching margin, cooldown, urgent-preemption threshold,
 and per-minute effects. Runtime cooldowns use parallel fixed-size arrays because
 the first slice has exactly three actions and does not need per-agent dictionaries.
+
+Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
+schema index. `FactRegistry` resolves authoring references such as
+`agent.attribute.fatigue`, `time.minuteOfDay`, `job.workStartMinute`, and
+`target.affinity` during catalog loading. `NumericExpressionDefinition` is the
+JSON authoring tree; the loader compiles it to a bounded postfix instruction
+array containing opcodes, fact handles, and numeric operands. The runtime stack
+evaluator uses `stackalloc`, performs no string lookup, and supports `fact`,
+`constant`, `normalize`, `normalizeRange`, arithmetic, `min`, `max`, `clamp`,
+`oneMinus`, and `abs`. Trees are limited to 16 levels and 64 instructions.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
