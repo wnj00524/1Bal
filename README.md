@@ -64,3 +64,7 @@ intelligence dossier.
 ```text
 dotnet test ProxyState.sln
 ```
+
+Milestone 6 also provides deterministic decision-behaviour fixtures and a
+repeatable 1,000-agent performance test. Its recorded Release baseline and
+measurement procedure are documented in `docs/decisionbaseline.md`.
