@@ -199,7 +199,8 @@ public sealed class SimulationTests
             new PoliticalAlignment { FactionId = catalog.Factions[0].FactionId },
             new AgentAttributes { Values = catalog.AgentAttributes.Definitions.Select(definition => definition.Average).ToArray() },
             new Psychology(),
-            new AgentState { CurrentActionHash = catalog.Actions[0].Hash, SecretStateHash = 1 },
+            new AgentState { SecretStateHash = 1 },
+            new ActivityState { CurrentActionHash = catalog.Actions[0].Hash },
             new AgentLocation(),
             new AgentTravel { RouteLocationIds = Array.Empty<int>() });
 
@@ -548,7 +549,10 @@ public sealed class SimulationTests
                 RemainingTravelMinutes = 0,
                 Mode = AgentTravelMode.AtHome
             },
-            new AgentState { CurrentActionHash = 1002 },
+            new AgentState(),
+            new IntentionState { ActionHash = 1001 },
+            new ActivityState { CurrentActionHash = 1002 },
+            new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var commuting = new CommutingSystem(catalog, clock.ClockEntity);
         var root = new SystemRoot(store) { clock, commuting };
@@ -559,15 +563,16 @@ public sealed class SimulationTests
         AdvanceMinutes(clock, root, 25);
         Assert.Equal(AgentTravelMode.AtWork, entity.GetComponent<AgentTravel>().Mode);
         Assert.Equal(3004, entity.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(1001, entity.GetComponent<AgentState>().CurrentActionHash);
+        Assert.Equal(1001, entity.GetComponent<ActivityState>().CurrentActionHash);
 
+        entity.GetComponent<IntentionState>().ActionHash = 1002;
         AdvanceMinutes(clock, root, 480);
         Assert.Equal(AgentTravelMode.TravellingHome, entity.GetComponent<AgentTravel>().Mode);
 
         AdvanceMinutes(clock, root, 25);
         Assert.Equal(AgentTravelMode.AtHome, entity.GetComponent<AgentTravel>().Mode);
         Assert.Equal(3001, entity.GetComponent<AgentLocation>().CurrentLocationId);
-        Assert.Equal(1002, entity.GetComponent<AgentState>().CurrentActionHash);
+        Assert.Equal(1002, entity.GetComponent<ActivityState>().CurrentActionHash);
     }
 
     [Fact]
@@ -585,7 +590,10 @@ public sealed class SimulationTests
                 TotalTravelMinutes = 25,
                 Mode = AgentTravelMode.AtHome
             },
-            new AgentState { CurrentActionHash = 1002 },
+            new AgentState(),
+        new IntentionState { ActionHash = 1002 },
+            new ActivityState { CurrentActionHash = 1002 },
+            new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var root = new SystemRoot(store) { clock, new CommutingSystem(catalog, clock.ClockEntity) };
 
@@ -610,14 +618,17 @@ public sealed class SimulationTests
                 TotalTravelMinutes = 25,
                 Mode = AgentTravelMode.AtHome
             },
-            new AgentState { CurrentActionHash = 1002, SecretStateHash = 1 },
+            new AgentState { SecretStateHash = 1 },
+            new IntentionState { ActionHash = 1001 },
+            new ActivityState { CurrentActionHash = 1002 },
+            new DecisionState { CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
             Tags.Get<Tier1LodTag>());
         var root = new SystemRoot(store) { clock, new CommutingSystem(catalog, clock.ClockEntity) };
 
         AdvanceMinutes(clock, root, 455);
         AdvanceMinutes(clock, root, 25);
 
-        Assert.Equal(1001, entity.GetComponent<AgentState>().CurrentActionHash);
+        Assert.Equal(1001, entity.GetComponent<ActivityState>().CurrentActionHash);
         Assert.Equal(1, entity.GetComponent<AgentState>().SecretStateHash);
     }
 
@@ -661,7 +672,7 @@ public sealed class SimulationTests
 
             var psychology = entity.GetComponent<Psychology>();
             Assert.Equal(0L, psychology.TraitMask & ~catalog.AllTraitBits);
-            Assert.Contains(entity.GetComponent<AgentState>().CurrentActionHash,
+            Assert.Contains(entity.GetComponent<ActivityState>().CurrentActionHash,
                 catalog.Actions.Select(action => action.Hash));
         }
     }
@@ -671,17 +682,19 @@ public sealed class SimulationTests
     {
         using var directory = TestContent.CreateDirectory();
         TestContent.CopyCatalogFiles(directory.RootPath);
-        File.WriteAllText(System.IO.Path.Combine(directory.RootPath, "agent-schema.json"),
-            "{\"attributes\":[{\"id\":\"fatigue\",\"min\":0,\"max\":100,\"average\":20},{\"id\":\"stress\",\"min\":0,\"max\":100,\"average\":20},{\"id\":\"luck\",\"min\":-5,\"max\":5,\"average\":1}]}" );
+        var schemaPath = System.IO.Path.Combine(directory.RootPath, "agent-schema.json");
+        var schemaJson = File.ReadAllText(schemaPath).Replace(
+            "\n  ]", ",\n    { \"id\": \"luck\", \"min\": -5, \"max\": 5, \"average\": 1 }\n  ]");
+        File.WriteAllText(schemaPath, schemaJson);
 
         var catalog = ContentCatalog.Load(directory.RootPath);
         var store = new EntityStore();
         new AgentSpawner(catalog).Spawn(store, 10, new Random(7));
 
-        Assert.Equal(3, catalog.AgentAttributes.Count);
-        Assert.Equal(2, catalog.AgentAttributes.GetIndex("luck"));
+        Assert.Equal(10, catalog.AgentAttributes.Count);
+        Assert.Equal(9, catalog.AgentAttributes.GetIndex("luck"));
         Assert.All(store.Query<AgentAttributes>().Entities,
-            entity => Assert.Equal(3, entity.GetComponent<AgentAttributes>().Values.Length));
+            entity => Assert.Equal(10, entity.GetComponent<AgentAttributes>().Values.Length));
     }
 
     [Fact]
@@ -715,8 +728,10 @@ public sealed class SimulationTests
     {
         using var directory = TestContent.CreateDirectory();
         TestContent.CopyCatalogFiles(directory.RootPath);
-        File.WriteAllText(System.IO.Path.Combine(directory.RootPath, "agent-schema.json"),
-            "{\"attributes\":[{\"id\":\"fixed\",\"min\":7,\"max\":7,\"average\":7},{\"id\":\"fatigue\",\"min\":0,\"max\":100,\"average\":20},{\"id\":\"stress\",\"min\":0,\"max\":100,\"average\":20}]}" );
+        var schemaPath = System.IO.Path.Combine(directory.RootPath, "agent-schema.json");
+        var schemaJson = File.ReadAllText(schemaPath).Replace(
+            "\"attributes\": [", "\"attributes\": [\n    { \"id\": \"fixed\", \"min\": 7, \"max\": 7, \"average\": 7 },");
+        File.WriteAllText(schemaPath, schemaJson);
 
         var catalog = ContentCatalog.Load(directory.RootPath);
         var store = new EntityStore();
@@ -749,7 +764,7 @@ public sealed class SimulationTests
         using var directory = TestContent.CreateDirectory();
         TestContent.CopyCatalogFiles(directory.RootPath);
         File.WriteAllText(System.IO.Path.Combine(directory.RootPath, "traits.json"),
-            "[{\"id\":\"never\",\"name\":\"Never\",\"bit\":1,\"prevalence\":0},{\"id\":\"always\",\"name\":\"Always\",\"bit\":2,\"prevalence\":1}]" );
+            "[{\"id\":\"never\",\"name\":\"Never\",\"bit\":1,\"prevalence\":0},{\"id\":\"always\",\"name\":\"Always\",\"bit\":2,\"prevalence\":1},{\"id\":\"greedy\",\"name\":\"Greedy\",\"bit\":4,\"prevalence\":0},{\"id\":\"paranoid\",\"name\":\"Paranoid\",\"bit\":8,\"prevalence\":0}]" );
 
         var catalog = ContentCatalog.Load(directory.RootPath);
         var store = new EntityStore();

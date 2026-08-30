@@ -2,15 +2,29 @@
 
 ### 4.1 Utility AI System
 
-**Goal:** Determine what an agent does this tick.
+**Goal:** Decide an intention from Ground Truth on simulation time.
 
-* Query all entities with `AgentAttributes` and `Tier1LodTag`.
-* Iterate through available actions (Work, Rest, Socialize) loaded from `actions.json`.
-* Resolve numeric values by name through `AgentAttributeSchema`.
-* Score formula: `BaseScore + (TraitModifiers) - (Fatigue/Stress Penalties)`.
-* Assign highest-scoring action to `AgentState.CurrentActionHash`.
-* Leave `AgentState.SecretStateHash` unchanged; covert activity is independent
-  of the public action and is assigned by a future secret-state system.
+* `AgentDecisionSystem` compiles the Work, Rest, and Socialize definitions from
+  `actions.json` into candidate evaluators. Hard gates reject candidates before
+  scoring: Work requires its configurable job-schedule window, Rest requires
+  home or a route home, and Socialize requires a co-located social peer.
+* Eligible utility is weighted-additive: base utility plus each normalized
+  context value passed through its piecewise-linear response curve, plus
+  applicable trait modifiers. Attribute values use schema min/max bounds;
+  schedule pressure, time of day, low wealth, and peer affinity are built
+  contextual inputs.
+* The highest score wins. Exact ties use ascending stable action hash, never
+  JSON or query order. A switch additionally pays the configured switching
+  threshold unless its score reaches the urgent-preemption threshold.
+* Per-action minimum commitment, cooldown-on-exit, and urgent preemption
+  controls prevent oscillation. Decisions run at most once per simulated
+  minute; `DecisionState.Dirty` permits earlier event-driven reconsideration.
+  Travel arrival marks the decision dirty.
+* Deliberation writes `IntentionState`. `CommutingSystem` translates that goal
+  into `ActivityState` (including Commuting), and `ActivityEffectsSystem`
+  applies data-defined attribute rates using elapsed simulation minutes.
+* `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
+  covert state remains independent of public intentions and activities.
 
 ### 4.2 Interaction & Discovery System
 
@@ -50,12 +64,12 @@ The system is configured with an optional positive per-tick increase so simulati
 
 **Goal:** Move Tier 1 agents between assigned homes and workplaces according to their job schedules.
 
-* Query `AgentLocation`, `AgentTravel`, `Identity`, and `AgentState` together.
-* Use the assigned job hash in `Identity.OccupationId` to resolve workdays and work interval data.
-* Begin travel early enough for the agent to arrive at the scheduled work start.
+* Query location/travel together with intention, activity, and decision state.
+* A Work intention starts the route to work; a Rest intention starts the reverse
+  route home. Socialize is eligible only with a compatible co-located peer.
 * Traverse the precomputed shortest-travel-time route, using each network edge's duration.
-* Begin the reverse route at the scheduled work end and set the agent to rest when home.
-* Agents remain home on non-workdays. Missing routes fail during assignment or raise a clear topology error rather than creating partial agent state.
+* Arrival changes the activity from Commuting and marks decision state dirty.
+  Missing routes fail during assignment rather than creating partial state.
 
 ### 4.6 Debug Agent Inspector
 
