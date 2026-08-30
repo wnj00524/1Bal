@@ -80,3 +80,8 @@ Milestone 8 similarly replaces named eligibility gates with data-defined
 predicates. Boolean facts, boolean combinators, and numeric comparisons are
 validated and compiled at content load; decision ticks evaluate pre-resolved
 instructions without gate-name parsing or per-agent predicate allocations.
+
+Milestone 11 moves public activity identity into action content. Runtime
+`ActivityState` stores stable action and activity hashes plus a domain-neutral
+execution phase, while debug presentation resolves activity names through the
+content catalog and effects require a matching action/activity pair.

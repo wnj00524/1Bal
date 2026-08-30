@@ -57,6 +57,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
     private readonly WorldTopology _world;
     private readonly Entity _clockEntity;
     private readonly Dictionary<int, ExecutorKind> _executors;
+    private readonly Dictionary<int, int> _activityTypes;
 
     public IntentExecutionSystem(EntityStore store, ContentCatalog catalog, Entity clockEntity)
     {
@@ -65,6 +66,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         _world = catalog.World;
         _clockEntity = clockEntity;
         _executors = catalog.Actions.ToDictionary(action => action.Hash, action => action.Execution.Kind);
+        _activityTypes = catalog.Actions.ToDictionary(action => action.Hash, action => action.Activity.Hash);
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -87,7 +89,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
             if (!_executors.TryGetValue(intention.ActionHash, out var executor))
             {
                 decision.Dirty = true;
-                SetActivity(ref activity, ActivityKind.Idle, 0, minute);
+                SetActivity(ref activity, ActivityPhase.Blocked, 0, 0, minute);
                 return;
             }
 
@@ -95,7 +97,8 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
             if (destination is null)
             {
                 CancelTravel(ref travel);
-                SetActivity(ref activity, ActivityKind.Idle, intention.ActionHash, minute);
+                SetActivity(ref activity, ActivityPhase.Blocked, intention.ActionHash,
+                    _activityTypes[intention.ActionHash], minute);
                 return;
             }
 
@@ -115,14 +118,15 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                 if (travel.Mode != AgentTravelMode.Travelling)
                     BeginTravel(location.CurrentLocationId, destination.Value, ref travel, ref decision);
                 SetActivity(ref activity, travel.Mode == AgentTravelMode.Travelling
-                    ? ActivityKind.Travelling : ActivityKind.Idle, intention.ActionHash, minute);
+                    ? ActivityPhase.Moving : ActivityPhase.Blocked, intention.ActionHash,
+                    _activityTypes[intention.ActionHash], minute);
                 return;
             }
 
             CancelTravel(ref travel);
             SetActivity(ref activity,
-                executor == ExecutorKind.Wait ? ActivityKind.Idle : ActivityKind.Performing,
-                intention.ActionHash, minute);
+                executor == ExecutorKind.Wait ? ActivityPhase.Idle : ActivityPhase.Performing,
+                intention.ActionHash, _activityTypes[intention.ActionHash], minute);
         });
     }
 
@@ -202,11 +206,14 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         travel.DestinationLocationId = 0;
     }
 
-    private static void SetActivity(ref ActivityState activity, ActivityKind kind, int actionHash, long minute)
+    private static void SetActivity(ref ActivityState activity, ActivityPhase phase,
+        int actionHash, int activityTypeHash, long minute)
     {
-        if (activity.Kind == kind && activity.CurrentActionHash == actionHash) return;
-        activity.Kind = kind;
-        activity.CurrentActionHash = actionHash;
+        if (activity.Phase == phase && activity.ActionHash == actionHash &&
+            activity.ActivityTypeHash == activityTypeHash) return;
+        activity.Phase = phase;
+        activity.ActionHash = actionHash;
+        activity.ActivityTypeHash = activityTypeHash;
         activity.StartedAtMinute = minute;
     }
 }

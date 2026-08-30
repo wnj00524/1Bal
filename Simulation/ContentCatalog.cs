@@ -16,6 +16,7 @@ public sealed record ActionControlDefinition(
     float UrgentPreemptionThreshold,
     bool CooldownOnExit = true);
 public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
+public sealed record ActivityDefinition(string Id, string Name, int Hash);
 public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
 {
     public CompiledNumericExpression? CompiledValue { get; internal set; }
@@ -43,6 +44,7 @@ public sealed record ActionDefinition(
     string Id,
     string Name,
     int Hash,
+    ActivityDefinition Activity,
     float BaseUtility,
     PredicateDefinition Eligibility,
     List<UtilityInputDefinition> UtilityInputs,
@@ -133,6 +135,11 @@ public sealed class ContentCatalog
     public WorldTopology World { get; }
     public AgentNetworkCatalog Networks { get; }
     public long AllTraitBits { get; }
+
+    public ActivityDefinition GetActivity(int hash) => Actions
+        .Select(action => action.Activity)
+        .FirstOrDefault(activity => activity.Hash == hash)
+        ?? throw new KeyNotFoundException($"Activity type hash '{hash}' is not defined in the content catalog.");
 
     public static ContentCatalog Load(string directory)
     {
@@ -322,12 +329,17 @@ public sealed class ContentCatalog
 
         var attributeIds = attributes.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var traitIds = traits.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var activityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activityHashes = new HashSet<int>();
         foreach (var action in actions)
         {
             if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
-                !float.IsFinite(action.BaseUtility) || action.Eligibility is null ||
+                !float.IsFinite(action.BaseUtility) || action.Activity is null || action.Eligibility is null ||
                 action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null || action.Execution is null)
                 throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
+            if (string.IsNullOrWhiteSpace(action.Activity.Id) || string.IsNullOrWhiteSpace(action.Activity.Name) ||
+                action.Activity.Hash == 0 || !activityIds.Add(action.Activity.Id) || !activityHashes.Add(action.Activity.Hash))
+                throw new InvalidDataException($"Action '{action.Id}' must define a unique, non-zero activity ID and hash with a display name.");
             ValidateTarget(action);
             ValidateExecutor(action);
             if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||

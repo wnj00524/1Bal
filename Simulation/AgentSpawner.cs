@@ -88,7 +88,12 @@ public sealed class AgentSpawner
                     SecretStateHash = 0
                 },
                 new IntentionState { ActionHash = restActionHash },
-                new ActivityState { CurrentActionHash = restActionHash, Kind = ActivityKind.Performing },
+                new ActivityState
+                {
+                    ActionHash = restActionHash,
+                    ActivityTypeHash = _catalog.Actions.Single(action => action.Hash == restActionHash).Activity.Hash,
+                    Phase = ActivityPhase.Performing
+                },
                 new DecisionState
                 {
                     LastConsideredMinute = -1,

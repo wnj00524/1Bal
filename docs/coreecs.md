@@ -77,7 +77,7 @@ The system is configured with an optional positive per-tick increase so simulati
 * Keep the last simulation delta on `WorldTime` so time-based systems consume the same elapsed interval.
 * Job schedules use Monday as day `1`, integer minutes from midnight, and non-overnight intervals.
 
-### 4.5 Intent Execution System (Milestones 2 and 10)
+### 4.5 Intent Execution System (Milestones 2, 10, and 11)
 
 **Goal:** Execute any Tier 1 intention through reusable movement and performance mechanics.
 
@@ -86,9 +86,13 @@ The system is configured with an optional positive per-tick increase so simulati
   its target type and `intent.target` destination are compatible.
 * Location and entity executors share deterministic shortest-route traversal;
   the movement path contains no action IDs.
-* Arrival changes activity from Travelling to Performing and dirties the
-  decision. A missing entity or unreachable destination idles the actor and
-  dirties its decision for reconsideration.
+* Execution copies the action's data-defined activity hash into `ActivityState`.
+  `ActivityPhase` contains only the generic Idle, Moving, Performing, and Blocked
+  engine phases; arrival changes Moving to Performing and dirties the decision.
+  A missing entity or unreachable destination blocks the actor and dirties its
+  decision for reconsideration.
+* `ActivityEffectsSystem` applies effects only for a Performing state whose
+  action/activity hash pair matches the loaded content definition.
 
 ### 4.6 Debug Agent Inspector
 
@@ -96,7 +100,7 @@ The system is configured with an optional positive per-tick increase so simulati
 
 * Debug mode is enabled only when the process receives the `-debug` command-line argument (case-insensitive).
 * `DebugSnapshotBuilder` copies the current agent component values into immutable, UI-facing snapshots once per frame.
-* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, secret state, locations, and travel state.
+* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, catalog-resolved activity identity and execution phase, secret state, locations, and travel state.
 * The ImGui layer consumes snapshots only; it never queries or mutates the Ground Truth ECS store.
 
 ### 4.7 World-Time Status Bar

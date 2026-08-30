@@ -127,8 +127,9 @@ public sealed class DecisionBaselineTests
         Assert.Equal(Work, selected.IntentHash);
         Assert.Equal(3004, selected.TargetLocationId);
         Assert.Equal(AgentTravelMode.Travelling, selected.TravelMode);
-        Assert.Equal(ActivityKind.Travelling, selected.ActivityKind);
+        Assert.Equal(ActivityPhase.Moving, selected.ActivityPhase);
         Assert.Equal(Work, selected.ActivityActionHash);
+        Assert.Equal(4001, selected.ActivityTypeHash);
     }
 
     [Fact]
@@ -177,7 +178,12 @@ public sealed class DecisionBaselineTests
                 new AgentLocation { HomeLocationId = 3001, WorkLocationId = 3004, CurrentLocationId = 3001 },
                 new AgentTravel { RouteLocationIds = new[] { 3001, 3003, 3004 }, Mode = AgentTravelMode.Stationary },
                 new IntentionState { ActionHash = currentAction, SelectedAtMinute = selectedAtMinute },
-                new ActivityState { CurrentActionHash = currentAction, Kind = ActivityKind.Performing },
+                new ActivityState
+                {
+                    ActionHash = currentAction,
+                    ActivityTypeHash = _catalog.Actions.Single(action => action.Hash == currentAction).Activity.Hash,
+                    Phase = ActivityPhase.Performing
+                },
                 new DecisionState { Dirty = true, CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
                 Tags.Get<Tier1LodTag>());
             _decisions = new AgentDecisionSystem(_store, _catalog, _clock);

@@ -52,8 +52,9 @@ public struct IntentionState : IComponent {
 }
 
 public struct ActivityState : IComponent {
-    public int CurrentActionHash;   // Public action moved out of AgentState.
-    public ActivityKind Kind;       // Idle, Performing, or Travelling.
+    public int ActionHash;          // Content action responsible for the activity.
+    public int ActivityTypeHash;    // Data-defined identity from the selected action.
+    public ActivityPhase Phase;     // Idle, Moving, Performing, or Blocked mechanics.
     public long StartedAtMinute;
 }
 
@@ -95,7 +96,11 @@ on the configured average and constrained to the configured range.
 
 Intention, activity, effects, and covert state are distinct. `IntentionState`
 stores what was selected, `ActivityState` stores what is happening now, and
-JSON effect definitions describe attribute changes. `AgentState.SecretStateHash`
+JSON effect definitions describe attribute changes. Each action declares an
+activity ID, display name, and stable hash in `data/actions.json`; execution copies
+that identity into `ActivityState` while `ActivityPhase` contains only generic
+engine states. Debug snapshots resolve the display name through `ContentCatalog`.
+`AgentState.SecretStateHash`
 identifies a separate secret activity such as `Surveillance`. Secret states are loaded from
 `data/secret-states.json`; the required `none` definition uses hash `0`, making a
 default-initialized `AgentState` safe. Agents are spawned with `None`, and a
@@ -104,7 +109,7 @@ covert system may change the secret hash without changing intention or activity.
 `data/actions.json` owns each candidate's eligibility predicate, base utility,
 weighted numeric expressions, piecewise-linear response curves, trait modifiers,
 minimum commitment, switching margin, cooldown, urgent-preemption threshold,
-per-minute effects, and target definition. `TargetDefinition` selects `none`, a
+per-minute effects, activity identity, and target definition. `TargetDefinition` selects `none`, a
 direct agent `location`, or an `entity` query. Entity queries contain a relation,
 compiled predicate requirements, ordered compiled numeric rankings, and an
 optional positive candidate limit; the runtime result carries both entity and
