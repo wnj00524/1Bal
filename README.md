@@ -68,3 +68,10 @@ dotnet test ProxyState.sln
 Milestone 6 also provides deterministic decision-behaviour fixtures and a
 repeatable 1,000-agent performance test. Its recorded Release baseline and
 measurement procedure are documented in `docs/decisionbaseline.md`.
+
+Milestone 7 replaces named utility sources with data-defined numeric
+expressions. Content loading validates fact references and compiles each bounded
+expression to postfix opcodes with typed fact handles; decision ticks evaluate
+those handles directly without parsing strings. Existing work, rest, and
+socialize utility formulas—including schedule pressure, low wealth, night time,
+and peer affinity—are now composed in `data/actions.json`.

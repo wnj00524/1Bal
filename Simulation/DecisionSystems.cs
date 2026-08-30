@@ -9,7 +9,6 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 {
     private readonly EntityStore _store;
     private readonly Entity _clock;
-    private readonly AgentAttributeSchema _schema;
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CandidateEvaluator[] _candidates;
     private readonly Dictionary<string, long> _traitBits;
@@ -20,7 +19,6 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(catalog);
         _clock = clock;
-        _schema = catalog.AgentAttributes;
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _traitBits = catalog.Traits.ToDictionary(trait => trait.Id, trait => trait.Bit, StringComparer.OrdinalIgnoreCase);
         _candidates = catalog.Actions.Select(action => new CandidateEvaluator(action)).ToArray();
@@ -60,7 +58,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             var decisionSnapshot = decision;
             var currentActionHash = intention.ActionHash;
             var eligible = _candidates
-                .Select(candidate => candidate.Evaluate(context, _schema, _traitBits))
+                .Select(candidate => candidate.Evaluate(context, _traitBits))
                 .Where(result => result.Eligible && !IsCoolingDown(result.Action!.Hash, minute, decisionSnapshot))
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Action!.Hash)
@@ -139,12 +137,13 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         public CandidateEvaluator(ActionDefinition definition) => Definition = definition;
         public ActionDefinition Definition { get; }
 
-        public DecisionResult Evaluate(DecisionContext context, AgentAttributeSchema schema, IReadOnlyDictionary<string, long> traits)
+        public DecisionResult Evaluate(DecisionContext context, IReadOnlyDictionary<string, long> traits)
         {
             if (!Eligible(context)) return new DecisionResult(Definition, false, float.NegativeInfinity);
             var score = Definition.BaseUtility;
+            var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.PeerAffinity);
             foreach (var input in Definition.UtilityInputs)
-                score += input.Weight * Curve(input.Curve, Resolve(input.Source, context, schema));
+                score += input.Weight * Curve(input.Curve, input.CompiledExpression!.Evaluate(facts));
             foreach (var modifier in Definition.TraitModifiers)
                 if ((context.TraitMask & traits[modifier.Trait]) != 0) score += modifier.Modifier;
             return new DecisionResult(Definition, true, score);
@@ -159,23 +158,6 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             "availablepeer" => context.PeerId != 0,
             _ => false
         };
-
-        private static float Resolve(string source, DecisionContext context, AgentAttributeSchema schema)
-        {
-            float Attribute(string id)
-            {
-                var definition = schema.Definitions[schema.GetIndex(id)];
-                return Math.Clamp((context.Attributes[schema.GetIndex(id)] - definition.Min) / (definition.Max - definition.Min), 0f, 1f);
-            }
-            return source.ToLowerInvariant() switch
-            {
-                "schedulepressure" => Math.Clamp((context.Time.MinuteOfDay - context.Job.WorkStartMinute + 60f) / 120f, 0f, 1f),
-                "lowwealth" => 1f - Attribute("wealth"),
-                "timeofday" => context.Time.MinuteOfDay >= 20 * 60 || context.Time.MinuteOfDay < 6 * 60 ? 1f : 0f,
-                "peeraffinity" => context.PeerAffinity,
-                _ => Attribute(source)
-            };
-        }
 
         private static float Curve(IReadOnlyList<ResponsePoint> points, float value)
         {

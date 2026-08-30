@@ -4,46 +4,386 @@
     "name": "Work",
     "hash": 1001,
     "baseUtility": 10,
-    "eligibility": { "gate": "workSchedule", "scheduleStartOffsetMinutes": -60, "scheduleEndOffsetMinutes": 0 },
+    "eligibility": {
+      "gate": "workSchedule",
+      "scheduleStartOffsetMinutes": -60,
+      "scheduleEndOffsetMinutes": 0
+    },
     "utilityInputs": [
-      { "source": "schedulePressure", "weight": 45, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "lowWealth", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "stress", "weight": -10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "fatigue", "weight": -25, "curve": [{ "x": 0, "y": 0 }, { "x": 0.6, "y": 0.35 }, { "x": 1, "y": 1 }] }
+      {
+        "weight": 45,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "clamp",
+          "input": {
+            "op": "divide",
+            "left": {
+              "op": "add",
+              "left": {
+                "op": "subtract",
+                "left": {
+                  "op": "fact",
+                  "fact": "time.minuteOfDay"
+                },
+                "right": {
+                  "op": "fact",
+                  "fact": "job.workStartMinute"
+                }
+              },
+              "right": {
+                "op": "constant",
+                "value": 60
+              }
+            },
+            "right": {
+              "op": "constant",
+              "value": 120
+            }
+          },
+          "min": 0,
+          "max": 1
+        }
+      },
+      {
+        "weight": 25,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "oneMinus",
+          "input": {
+            "op": "normalize",
+            "input": {
+              "op": "fact",
+              "fact": "agent.attribute.wealth"
+            }
+          }
+        }
+      },
+      {
+        "weight": -10,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.stress"
+          }
+        }
+      },
+      {
+        "weight": -25,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.6,
+            "y": 0.35
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.fatigue"
+          }
+        }
+      }
     ],
-    "traitModifiers": [{ "trait": "greedy", "modifier": 12 }],
-    "controls": { "minimumCommitmentMinutes": 30, "switchingThreshold": 8, "cooldownMinutes": 15, "urgentPreemptionThreshold": 85 },
-    "effects": [{ "attribute": "wealth", "perMinute": 2 }, { "attribute": "fatigue", "perMinute": 0.08 }, { "attribute": "stress", "perMinute": 0.03 }]
+    "traitModifiers": [
+      {
+        "trait": "greedy",
+        "modifier": 12
+      }
+    ],
+    "controls": {
+      "minimumCommitmentMinutes": 30,
+      "switchingThreshold": 8,
+      "cooldownMinutes": 15,
+      "urgentPreemptionThreshold": 85
+    },
+    "effects": [
+      {
+        "attribute": "wealth",
+        "perMinute": 2
+      },
+      {
+        "attribute": "fatigue",
+        "perMinute": 0.08
+      },
+      {
+        "attribute": "stress",
+        "perMinute": 0.03
+      }
+    ]
   },
   {
     "id": "rest",
     "name": "Rest",
     "hash": 1002,
     "baseUtility": 5,
-    "eligibility": { "gate": "homeReachable" },
+    "eligibility": {
+      "gate": "homeReachable"
+    },
     "utilityInputs": [
-      { "source": "fatigue", "weight": 65, "curve": [{ "x": 0, "y": 0 }, { "x": 0.5, "y": 0.25 }, { "x": 1, "y": 1 }] },
-      { "source": "stress", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "timeOfDay", "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] }
+      {
+        "weight": 65,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.5,
+            "y": 0.25
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.fatigue"
+          }
+        }
+      },
+      {
+        "weight": 25,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.stress"
+          }
+        }
+      },
+      {
+        "weight": 20,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "max",
+          "left": {
+            "op": "clamp",
+            "input": {
+              "op": "subtract",
+              "left": {
+                "op": "fact",
+                "fact": "time.minuteOfDay"
+              },
+              "right": {
+                "op": "constant",
+                "value": 1199
+              }
+            },
+            "min": 0,
+            "max": 1
+          },
+          "right": {
+            "op": "oneMinus",
+            "input": {
+              "op": "clamp",
+              "input": {
+                "op": "subtract",
+                "left": {
+                  "op": "fact",
+                  "fact": "time.minuteOfDay"
+                },
+                "right": {
+                  "op": "constant",
+                  "value": 359
+                }
+              },
+              "min": 0,
+              "max": 1
+            }
+          }
+        }
+      }
     ],
     "traitModifiers": [],
-    "controls": { "minimumCommitmentMinutes": 20, "switchingThreshold": 5, "cooldownMinutes": 0, "urgentPreemptionThreshold": 80, "cooldownOnExit": false },
-    "effects": [{ "attribute": "fatigue", "perMinute": -0.18 }, { "attribute": "stress", "perMinute": -0.08 }]
+    "controls": {
+      "minimumCommitmentMinutes": 20,
+      "switchingThreshold": 5,
+      "cooldownMinutes": 0,
+      "urgentPreemptionThreshold": 80,
+      "cooldownOnExit": false
+    },
+    "effects": [
+      {
+        "attribute": "fatigue",
+        "perMinute": -0.18
+      },
+      {
+        "attribute": "stress",
+        "perMinute": -0.08
+      }
+    ]
   },
   {
     "id": "socialize",
     "name": "Socialize",
     "hash": 1003,
     "baseUtility": 4,
-    "eligibility": { "gate": "availablePeer" },
+    "eligibility": {
+      "gate": "availablePeer"
+    },
     "utilityInputs": [
-      { "source": "preference", "weight": 30, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "charisma", "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
-      { "source": "peerAffinity", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 0.5, "y": 0.3 }, { "x": 1, "y": 1 }] },
-      { "source": "stress", "weight": 12, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] }
+      {
+        "weight": 30,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.preference"
+          }
+        }
+      },
+      {
+        "weight": 20,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.charisma"
+          }
+        }
+      },
+      {
+        "weight": 25,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.5,
+            "y": 0.3
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "fact",
+          "fact": "target.affinity"
+        }
+      },
+      {
+        "weight": 12,
+        "curve": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "expression": {
+          "op": "normalize",
+          "input": {
+            "op": "fact",
+            "fact": "agent.attribute.stress"
+          }
+        }
+      }
     ],
-    "traitModifiers": [{ "trait": "paranoid", "modifier": -24 }],
-    "controls": { "minimumCommitmentMinutes": 15, "switchingThreshold": 7, "cooldownMinutes": 30, "urgentPreemptionThreshold": 90 },
-    "effects": [{ "attribute": "stress", "perMinute": -0.1 }, { "attribute": "fatigue", "perMinute": 0.03 }]
+    "traitModifiers": [
+      {
+        "trait": "paranoid",
+        "modifier": -24
+      }
+    ],
+    "controls": {
+      "minimumCommitmentMinutes": 15,
+      "switchingThreshold": 7,
+      "cooldownMinutes": 30,
+      "urgentPreemptionThreshold": 90
+    },
+    "effects": [
+      {
+        "attribute": "stress",
+        "perMinute": -0.1
+      },
+      {
+        "attribute": "fatigue",
+        "perMinute": 0.03
+      }
+    ]
   }
 ]
