@@ -40,8 +40,28 @@ public struct Psychology : IComponent {
 }
 
 public struct AgentState : IComponent {
-    public int CurrentActionHash;  // Hash supplied by data/actions.json.
     public int SecretStateHash;    // Hash supplied by data/secret-states.json; 0 is None.
+}
+
+public struct IntentionState : IComponent {
+    public int ActionHash;          // Goal selected by utility deliberation.
+    public int TargetEntityId;     // Social target, or 0.
+    public int TargetLocationId;   // Destination for location-bound goals.
+    public long SelectedAtMinute;
+    public float Utility;
+}
+
+public struct ActivityState : IComponent {
+    public int CurrentActionHash;   // Public action moved out of AgentState.
+    public ActivityKind Kind;       // Idle, Working, Resting, Socializing, Commuting.
+    public long StartedAtMinute;
+}
+
+public struct DecisionState : IComponent {
+    public long LastConsideredMinute;
+    public bool Dirty;
+    public int[] CooldownActionHashes;
+    public long[] CooldownUntilMinutes;
 }
 
 public struct WorldTime : IComponent {
@@ -74,12 +94,19 @@ one floating-point value per definition, so adding an attribute requires only a
 data-file change. Values are sampled from a bounded normal distribution centered
 on the configured average and constrained to the configured range.
 
-Public activity and covert activity are independent. `AgentState.CurrentActionHash`
-is the visible action, while `AgentState.SecretStateHash` identifies a separate
-secret activity such as `Surveillance`. Secret states are loaded from
+Intention, activity, effects, and covert state are distinct. `IntentionState`
+stores what was selected, `ActivityState` stores what is happening now, and
+JSON effect definitions describe attribute changes. `AgentState.SecretStateHash`
+identifies a separate secret activity such as `Surveillance`. Secret states are loaded from
 `data/secret-states.json`; the required `none` definition uses hash `0`, making a
-default-initialized `AgentState` safe. Agents are spawned with `None`, and future
-simulation systems may change the secret hash without changing the public action.
+default-initialized `AgentState` safe. Agents are spawned with `None`, and a
+covert system may change the secret hash without changing intention or activity.
+
+`data/actions.json` owns each candidate's hard eligibility gate, base utility,
+weighted normalized inputs, piecewise-linear response curves, trait modifiers,
+minimum commitment, switching margin, cooldown, urgent-preemption threshold,
+and per-minute effects. Runtime cooldowns use parallel fixed-size arrays because
+the first slice has exactly three actions and does not need per-agent dictionaries.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the

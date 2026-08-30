@@ -3,7 +3,30 @@ using System.Text.Json;
 namespace ProxyState.Simulation;
 
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
-public sealed record ActionDefinition(string Id, string Name, int Hash);
+public sealed record ResponsePoint(float X, float Y);
+public sealed record UtilityInputDefinition(string Source, float Weight, List<ResponsePoint> Curve);
+public sealed record TraitUtilityModifier(string Trait, float Modifier);
+public sealed record ActionEligibilityDefinition(
+    string Gate,
+    int ScheduleStartOffsetMinutes = 0,
+    int ScheduleEndOffsetMinutes = 0);
+public sealed record ActionControlDefinition(
+    int MinimumCommitmentMinutes,
+    float SwitchingThreshold,
+    int CooldownMinutes,
+    float UrgentPreemptionThreshold,
+    bool CooldownOnExit = true);
+public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
+public sealed record ActionDefinition(
+    string Id,
+    string Name,
+    int Hash,
+    float BaseUtility,
+    ActionEligibilityDefinition Eligibility,
+    List<UtilityInputDefinition> UtilityInputs,
+    List<TraitUtilityModifier> TraitModifiers,
+    ActionControlDefinition Controls,
+    List<ActionEffectDefinition> Effects);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -188,6 +211,8 @@ public sealed class ContentCatalog
             throw new InvalidDataException("Action hashes must be unique.");
         }
 
+        ValidateActions(actions, traits, attributeDefinitions);
+
         var attributeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributeDefinitions)
         {
@@ -211,6 +236,42 @@ public sealed class ContentCatalog
         _ = schema.GetIndex("fatigue");
         _ = schema.GetIndex("stress");
         return schema;
+    }
+
+    private static void ValidateActions(
+        IReadOnlyList<ActionDefinition> actions,
+        IReadOnlyList<TraitDefinition> traits,
+        IReadOnlyList<AgentAttributeDefinition> attributes)
+    {
+        var required = new[] { "work", "rest", "socialize" };
+        if (required.Any(id => actions.Count(action => string.Equals(action.Id, id, StringComparison.OrdinalIgnoreCase)) != 1))
+            throw new InvalidDataException("Actions must define exactly one work, rest, and socialize candidate.");
+
+        var attributeIds = attributes.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var traitIds = traits.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var gates = new HashSet<string>(new[] { "workSchedule", "homeReachable", "availablePeer" }, StringComparer.OrdinalIgnoreCase);
+        foreach (var action in actions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
+                !float.IsFinite(action.BaseUtility) || action.Eligibility is null || !gates.Contains(action.Eligibility.Gate) ||
+                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null)
+                throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
+            if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
+                !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
+                !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
+                throw new InvalidDataException($"Action '{action.Id}' has invalid controls.");
+            foreach (var input in action.UtilityInputs)
+            {
+                if (string.IsNullOrWhiteSpace(input.Source) || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                    input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
+                    input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid response curve for '{input.Source}'.");
+            }
+            if (action.TraitModifiers.Any(modifier => !traitIds.Contains(modifier.Trait) || !float.IsFinite(modifier.Modifier)))
+                throw new InvalidDataException($"Action '{action.Id}' references an invalid trait modifier.");
+            if (action.Effects.Any(effect => !attributeIds.Contains(effect.Attribute) || !float.IsFinite(effect.PerMinute)))
+                throw new InvalidDataException($"Action '{action.Id}' references an invalid effect attribute.");
+        }
     }
 
     private static void ValidateSecretStates(IReadOnlyList<SecretStateDefinition> secretStates)

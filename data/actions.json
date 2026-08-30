@@ -1,5 +1,49 @@
 [
-  { "id": "work", "name": "Work", "hash": 1001 },
-  { "id": "rest", "name": "Rest", "hash": 1002 },
-  { "id": "socialize", "name": "Socialize", "hash": 1003 }
+  {
+    "id": "work",
+    "name": "Work",
+    "hash": 1001,
+    "baseUtility": 10,
+    "eligibility": { "gate": "workSchedule", "scheduleStartOffsetMinutes": -60, "scheduleEndOffsetMinutes": 0 },
+    "utilityInputs": [
+      { "source": "schedulePressure", "weight": 45, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "lowWealth", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "stress", "weight": -10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "fatigue", "weight": -25, "curve": [{ "x": 0, "y": 0 }, { "x": 0.6, "y": 0.35 }, { "x": 1, "y": 1 }] }
+    ],
+    "traitModifiers": [{ "trait": "greedy", "modifier": 12 }],
+    "controls": { "minimumCommitmentMinutes": 30, "switchingThreshold": 8, "cooldownMinutes": 15, "urgentPreemptionThreshold": 85 },
+    "effects": [{ "attribute": "wealth", "perMinute": 2 }, { "attribute": "fatigue", "perMinute": 0.08 }, { "attribute": "stress", "perMinute": 0.03 }]
+  },
+  {
+    "id": "rest",
+    "name": "Rest",
+    "hash": 1002,
+    "baseUtility": 5,
+    "eligibility": { "gate": "homeReachable" },
+    "utilityInputs": [
+      { "source": "fatigue", "weight": 65, "curve": [{ "x": 0, "y": 0 }, { "x": 0.5, "y": 0.25 }, { "x": 1, "y": 1 }] },
+      { "source": "stress", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "timeOfDay", "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] }
+    ],
+    "traitModifiers": [],
+    "controls": { "minimumCommitmentMinutes": 20, "switchingThreshold": 5, "cooldownMinutes": 0, "urgentPreemptionThreshold": 80, "cooldownOnExit": false },
+    "effects": [{ "attribute": "fatigue", "perMinute": -0.18 }, { "attribute": "stress", "perMinute": -0.08 }]
+  },
+  {
+    "id": "socialize",
+    "name": "Socialize",
+    "hash": 1003,
+    "baseUtility": 4,
+    "eligibility": { "gate": "availablePeer" },
+    "utilityInputs": [
+      { "source": "preference", "weight": 30, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "charisma", "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] },
+      { "source": "peerAffinity", "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 0.5, "y": 0.3 }, { "x": 1, "y": 1 }] },
+      { "source": "stress", "weight": 12, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }] }
+    ],
+    "traitModifiers": [{ "trait": "paranoid", "modifier": -24 }],
+    "controls": { "minimumCommitmentMinutes": 15, "switchingThreshold": 7, "cooldownMinutes": 30, "urgentPreemptionThreshold": 90 },
+    "effects": [{ "attribute": "stress", "perMinute": -0.1 }, { "attribute": "fatigue", "perMinute": 0.03 }]
+  }
 ]
