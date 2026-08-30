@@ -211,4 +211,17 @@ leaking ECS entities into ordinary presentation code.
   anchor names, supervisor display names, and counts are resolved at the
   Ground Truth boundary; `PlayerIntelligenceDB` and dossiers remain unchanged.
 
+### 4.14 Intent Compilation and Fallback (Milestone 12)
+
+* `ContentCatalog.Load` validates authoring data and invokes `IntentCompiler`
+  before constructing the runtime catalog. String references never reach the
+  decision, target-resolution, execution, or effects hot paths.
+* Dense runtime indexes follow deterministic JSON order while stable hashes
+  remain the ECS, persistence, debug, and content identity.
+* Decision evaluation excludes the fallback from normal scoring and selects it
+  only when no ordinary intent is eligible. The fallback is structurally
+  constrained to a target-free `Wait`, so every agent always has a safe result.
+* Spawning initializes intention and activity state from the compiled fallback,
+  eliminating the former dependency on a specifically named domain action.
+
 ---

@@ -5,9 +5,7 @@ namespace ProxyState.Simulation;
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
 public sealed record ResponsePoint(float X, float Y);
 public sealed record UtilityInputDefinition(NumericExpressionDefinition Expression, float Weight, List<ResponsePoint> Curve)
-{
-    public CompiledNumericExpression? CompiledExpression { get; internal set; }
-}
+;
 public sealed record TraitUtilityModifier(string Trait, float Modifier);
 public sealed record ActionControlDefinition(
     int MinimumCommitmentMinutes,
@@ -18,9 +16,7 @@ public sealed record ActionControlDefinition(
 public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
 public sealed record ActivityDefinition(string Id, string Name, int Hash);
 public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
-{
-    public CompiledNumericExpression? CompiledValue { get; internal set; }
-}
+;
 public sealed record TargetQueryDefinition(
     string Relation,
     List<PredicateDefinition> Requirements,
@@ -35,11 +31,7 @@ public enum ExecutorKind : byte
     Wait
 }
 public sealed record ExecutorDefinition(string Executor, string? Destination)
-{
-    // Content strings are resolved once during loading; the simulation hot path
-    // dispatches on this compact value rather than parsing executor names.
-    public ExecutorKind Kind { get; internal set; }
-}
+;
 public sealed record ActionDefinition(
     string Id,
     string Name,
@@ -52,7 +44,8 @@ public sealed record ActionDefinition(
     ActionControlDefinition Controls,
     List<ActionEffectDefinition> Effects,
     TargetDefinition Target,
-    ExecutorDefinition Execution);
+    ExecutorDefinition Execution,
+    bool Fallback = false);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -108,6 +101,7 @@ public sealed class ContentCatalog
     private ContentCatalog(
         IReadOnlyList<TraitDefinition> traits,
         IReadOnlyList<ActionDefinition> actions,
+        CompiledIntentCatalog intents,
         IReadOnlyList<SecretStateDefinition> secretStates,
         IReadOnlyList<FactionDefinition> factions,
         AgentAttributeSchema agentAttributes,
@@ -117,6 +111,7 @@ public sealed class ContentCatalog
     {
         Traits = traits;
         Actions = actions;
+        Intents = intents;
         SecretStates = secretStates;
         Factions = factions;
         AgentAttributes = agentAttributes;
@@ -128,6 +123,7 @@ public sealed class ContentCatalog
 
     public IReadOnlyList<TraitDefinition> Traits { get; }
     public IReadOnlyList<ActionDefinition> Actions { get; }
+    public CompiledIntentCatalog Intents { get; }
     public IReadOnlyList<SecretStateDefinition> SecretStates { get; }
     public IReadOnlyList<FactionDefinition> Factions { get; }
     public AgentAttributeSchema AgentAttributes { get; }
@@ -159,9 +155,10 @@ public sealed class ContentCatalog
 
         ValidateSecretStates(secretStates);
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
+        var intents = IntentCompiler.Compile(actions, traits, agentAttributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
-        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world, networks);
+        return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(
@@ -266,56 +263,7 @@ public sealed class ContentCatalog
         var schema = new AgentAttributeSchema(attributeDefinitions);
         _ = schema.GetIndex("fatigue");
         _ = schema.GetIndex("stress");
-        CompileDecisionExpressions(actions, schema);
         return schema;
-    }
-
-    private static void CompileDecisionExpressions(IReadOnlyList<ActionDefinition> actions, AgentAttributeSchema schema)
-    {
-        var facts = new FactRegistry(schema);
-        foreach (var action in actions)
-        {
-            try
-            {
-                action.Eligibility.CompiledPredicate = CompiledPredicate.Compile(action.Eligibility, facts);
-            }
-            catch (InvalidDataException exception)
-            {
-                throw new InvalidDataException($"Action '{action.Id}' has an invalid eligibility predicate: {exception.Message}", exception);
-            }
-            foreach (var input in action.UtilityInputs)
-            {
-                try
-                {
-                    input.CompiledExpression = CompiledNumericExpression.Compile(input.Expression, facts);
-                }
-                catch (InvalidDataException exception)
-                {
-                    throw new InvalidDataException($"Action '{action.Id}' has an invalid numeric expression: {exception.Message}", exception);
-                }
-            }
-            if (action.Target.Query is not null)
-            {
-                foreach (var requirement in action.Target.Query.Requirements)
-                    try
-                    {
-                        requirement.CompiledPredicate = CompiledPredicate.Compile(requirement, facts);
-                    }
-                    catch (InvalidDataException exception)
-                    {
-                        throw new InvalidDataException($"Action '{action.Id}' has an invalid target requirement: {exception.Message}", exception);
-                    }
-                foreach (var rank in action.Target.Query.RankBy)
-                    try
-                    {
-                        rank.CompiledValue = CompiledNumericExpression.Compile(rank.Value, facts);
-                    }
-                    catch (InvalidDataException exception)
-                    {
-                        throw new InvalidDataException($"Action '{action.Id}' has an invalid target ranking: {exception.Message}", exception);
-                    }
-            }
-        }
     }
 
     private static void ValidateActions(
@@ -323,12 +271,6 @@ public sealed class ContentCatalog
         IReadOnlyList<TraitDefinition> traits,
         IReadOnlyList<AgentAttributeDefinition> attributes)
     {
-        var required = new[] { "work", "rest", "socialize" };
-        if (required.Any(id => actions.Count(action => string.Equals(action.Id, id, StringComparison.OrdinalIgnoreCase)) != 1))
-            throw new InvalidDataException("Actions must define exactly one work, rest, and socialize candidate.");
-
-        var attributeIds = attributes.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var traitIds = traits.Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var activityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var activityHashes = new HashSet<int>();
         foreach (var action in actions)
@@ -340,8 +282,6 @@ public sealed class ContentCatalog
             if (string.IsNullOrWhiteSpace(action.Activity.Id) || string.IsNullOrWhiteSpace(action.Activity.Name) ||
                 action.Activity.Hash == 0 || !activityIds.Add(action.Activity.Id) || !activityHashes.Add(action.Activity.Hash))
                 throw new InvalidDataException($"Action '{action.Id}' must define a unique, non-zero activity ID and hash with a display name.");
-            ValidateTarget(action);
-            ValidateExecutor(action);
             if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
                 !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
                 !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
@@ -353,66 +293,13 @@ public sealed class ContentCatalog
                     input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
                     throw new InvalidDataException($"Action '{action.Id}' has an invalid utility input.");
             }
-            if (action.TraitModifiers.Any(modifier => !traitIds.Contains(modifier.Trait) || !float.IsFinite(modifier.Modifier)))
-                throw new InvalidDataException($"Action '{action.Id}' references an invalid trait modifier.");
-            if (action.Effects.Any(effect => !attributeIds.Contains(effect.Attribute) || !float.IsFinite(effect.PerMinute)))
-                throw new InvalidDataException($"Action '{action.Id}' references an invalid effect attribute.");
+            if (action.TraitModifiers.Any(modifier => !float.IsFinite(modifier.Modifier)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite trait modifier.");
+            if (action.Effects.Any(effect => !float.IsFinite(effect.PerMinute)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite effect rate.");
         }
     }
 
-    private static void ValidateExecutor(ActionDefinition action)
-    {
-        var targetKind = action.Target.Kind.ToLowerInvariant();
-        action.Execution.Kind = action.Execution.Executor?.ToLowerInvariant() switch
-        {
-            "performhere" => ExecutorKind.PerformHere,
-            "performatlocation" => ExecutorKind.PerformAtLocation,
-            "performwithentity" => ExecutorKind.PerformWithEntity,
-            "wait" => ExecutorKind.Wait,
-            _ => throw new InvalidDataException(
-                $"Action '{action.Id}' has unsupported executor '{action.Execution.Executor}'.")
-        };
-
-        var requiresIntentTarget = action.Execution.Kind is ExecutorKind.PerformAtLocation or ExecutorKind.PerformWithEntity;
-        if (requiresIntentTarget && action.Execution.Destination != "intent.target")
-            throw new InvalidDataException($"Action '{action.Id}' executor must use destination 'intent.target'.");
-        if (!requiresIntentTarget && action.Execution.Destination is not null)
-            throw new InvalidDataException($"Action '{action.Id}' executor cannot define a destination.");
-        if (action.Execution.Kind == ExecutorKind.PerformAtLocation && targetKind != "location")
-            throw new InvalidDataException($"Action '{action.Id}' performAtLocation executor requires a location target.");
-        if (action.Execution.Kind == ExecutorKind.PerformWithEntity && targetKind != "entity")
-            throw new InvalidDataException($"Action '{action.Id}' performWithEntity executor requires an entity target.");
-        if (action.Execution.Kind is ExecutorKind.PerformHere or ExecutorKind.Wait && targetKind != "none")
-            throw new InvalidDataException($"Action '{action.Id}' {action.Execution.Executor} executor requires target kind 'none'.");
-    }
-
-    private static void ValidateTarget(ActionDefinition action)
-    {
-        var target = action.Target;
-        switch (target.Kind?.ToLowerInvariant())
-        {
-            case "none":
-                if (target.Value is not null || target.Query is not null)
-                    throw new InvalidDataException($"Action '{action.Id}' target kind 'none' cannot define value or query.");
-                break;
-            case "location":
-                if (target.Value is not ("agent.location.home" or "agent.location.work" or "agent.location.current") || target.Query is not null)
-                    throw new InvalidDataException($"Action '{action.Id}' location target must use a supported direct agent location value.");
-                break;
-            case "entity":
-                if (target.Value is not null || target.Query is null ||
-                    !string.Equals(target.Query.Relation, "social", StringComparison.OrdinalIgnoreCase) ||
-                    target.Query.Requirements is null || target.Query.RankBy is null ||
-                    target.Query.RankBy.Count == 0 || target.Query.Limit is <= 0)
-                    throw new InvalidDataException($"Action '{action.Id}' entity target must define a valid social query, ranking, and optional positive limit.");
-                if (target.Query.RankBy.Any(rank => rank.Value is null ||
-                    rank.Order is not ("ascending" or "descending")))
-                    throw new InvalidDataException($"Action '{action.Id}' target ranking must use ascending or descending order.");
-                break;
-            default:
-                throw new InvalidDataException($"Action '{action.Id}' has unsupported target kind '{target.Kind}'.");
-        }
-    }
 
     private static void ValidateSecretStates(IReadOnlyList<SecretStateDefinition> secretStates)
     {

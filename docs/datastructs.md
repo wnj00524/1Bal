@@ -280,3 +280,19 @@ display strings, member arrays, dictionaries, descendant closures, or redundant
 supervisor indexes: each generated agent contributes approximately one family
 and one company relation. Resolved names and summary collections are transient
 debug projections and are discarded after presentation.
+
+### 2.8 Compiled Intent Catalog
+
+`ActionDefinition` remains the JSON authoring model. `IntentCompiler` resolves
+its fact, trait, attribute, target, and executor strings once at catalog load.
+The resulting `CompiledIntent` stores compiled predicate/numeric programs,
+trait bits, attribute indexes, compact target/executor enums, stable content
+hashes, and a dense `ushort RuntimeIndex`. `CompiledIntentCatalog` owns the
+index-ordered array and a hash-to-index map; simulation systems consume this
+catalog rather than mutable authoring trees.
+
+Exactly one authoring definition must set `fallback: true`. Compilation requires
+that fallback to use target kind `none` and executor `wait`, producing a safe
+no-op decision when ordinary candidates are unavailable. Compiler failures use
+`actions.json:actions[index].field` paths so content authors can locate invalid
+references and incompatible structures directly.

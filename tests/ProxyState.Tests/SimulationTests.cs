@@ -654,7 +654,8 @@ public sealed class SimulationTests
         File.WriteAllText(path, json);
 
         var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(directory.RootPath));
-        Assert.Contains("requires an entity target", exception.Message);
+        Assert.Contains("actions.json:actions[0].execution.executor", exception.Message);
+        Assert.Contains("incompatible with target kind", exception.Message);
     }
 
     [Fact]

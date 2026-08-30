@@ -28,7 +28,7 @@ public sealed class NumericExpressionTests
 
         var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
 
-        Assert.Contains("Action 'work'", exception.Message);
+        Assert.Contains("actions.json:actions[0].utilityInputs[0].expression", exception.Message);
         Assert.Contains("Unknown numeric fact 'agent.attribute.does-not-exist'", exception.Message);
     }
 

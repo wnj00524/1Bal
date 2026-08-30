@@ -507,5 +507,37 @@
       "executor": "performWithEntity",
       "destination": "intent.target"
     }
+  },
+  {
+    "id": "idle",
+    "name": "Idle",
+    "hash": 1004,
+    "activity": {
+      "id": "idle",
+      "name": "Idle",
+      "hash": 4004
+    },
+    "baseUtility": 0,
+    "fallback": true,
+    "eligibility": {
+      "op": "constant",
+      "value": true
+    },
+    "utilityInputs": [],
+    "traitModifiers": [],
+    "controls": {
+      "minimumCommitmentMinutes": 0,
+      "switchingThreshold": 0,
+      "cooldownMinutes": 0,
+      "urgentPreemptionThreshold": 0,
+      "cooldownOnExit": false
+    },
+    "effects": [],
+    "target": {
+      "kind": "none"
+    },
+    "execution": {
+      "executor": "wait"
+    }
   }
 ]
