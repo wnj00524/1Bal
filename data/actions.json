@@ -183,6 +183,10 @@
     "target": {
       "kind": "location",
       "value": "agent.location.work"
+    },
+    "execution": {
+      "executor": "performAtLocation",
+      "destination": "intent.target"
     }
   },
   {
@@ -328,6 +332,10 @@
     "target": {
       "kind": "location",
       "value": "agent.location.home"
+    },
+    "execution": {
+      "executor": "performAtLocation",
+      "destination": "intent.target"
     }
   },
   {
@@ -479,6 +487,10 @@
         ],
         "limit": 1
       }
+    },
+    "execution": {
+      "executor": "performWithEntity",
+      "destination": "intent.target"
     }
   }
 ]

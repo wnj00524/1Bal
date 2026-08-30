@@ -30,8 +30,9 @@
   controls prevent oscillation. Decisions run at most once per simulated
   minute; `DecisionState.Dirty` permits earlier event-driven reconsideration.
   Travel arrival marks the decision dirty.
-* Deliberation writes `IntentionState`. `CommutingSystem` translates that goal
-  into `ActivityState` (including Commuting), and `ActivityEffectsSystem`
+* Deliberation writes `IntentionState`. `IntentExecutionSystem` translates each
+  content-defined executor into generic travelling, performing, or idle state,
+  and `ActivityEffectsSystem`
   applies data-defined attribute rates using elapsed simulation minutes.
 * `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
   covert state remains independent of public intentions and activities.
@@ -76,16 +77,18 @@ The system is configured with an optional positive per-tick increase so simulati
 * Keep the last simulation delta on `WorldTime` so time-based systems consume the same elapsed interval.
 * Job schedules use Monday as day `1`, integer minutes from midnight, and non-overnight intervals.
 
-### 4.5 Commuting System (Milestone 2)
+### 4.5 Intent Execution System (Milestones 2 and 10)
 
-**Goal:** Move Tier 1 agents between assigned homes and workplaces according to their job schedules.
+**Goal:** Execute any Tier 1 intention through reusable movement and performance mechanics.
 
-* Query location/travel together with intention, activity, and decision state.
-* A Work intention starts the route to work; a Rest intention starts the reverse
-  route home. Socialize is eligible only with a compatible co-located peer.
-* Traverse the precomputed shortest-travel-time route, using each network edge's duration.
-* Arrival changes the activity from Commuting and marks decision state dirty.
-  Missing routes fail during assignment rather than creating partial state.
+* Each action declares `performHere`, `performAtLocation`, `performWithEntity`,
+  or `wait`; loading resolves that string to `ExecutorKind` and validates that
+  its target type and `intent.target` destination are compatible.
+* Location and entity executors share deterministic shortest-route traversal;
+  the movement path contains no action IDs.
+* Arrival changes activity from Travelling to Performing and dirties the
+  decision. A missing entity or unreachable destination idles the actor and
+  dirties its decision for reconsideration.
 
 ### 4.6 Debug Agent Inspector
 
