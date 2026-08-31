@@ -90,3 +90,9 @@ Milestone 13 derives compact dependency masks from compiled fact reads and
 tracks attribute, location, travel, and social-target mutations. Same-minute
 updates rescore only affected intents while the minute boundary remains a full
 deterministic safety pass; benchmark results live in `docs/decisionbaseline.md`.
+
+Milestone 14 compiles the dense intent indexes into packed candidate bitsets.
+Decision ticks intersect those static indexes with job, home, workplace, and
+social-relation availability, then visit only the resulting runtime indexes.
+The fallback remains outside the candidate set and is selected safely when the
+intersection produces no eligible intent.

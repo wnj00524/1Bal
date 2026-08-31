@@ -43,10 +43,12 @@ public sealed class CompiledIntentCatalog
         _byIndex = intents;
         Fallback = fallback;
         _indexByHash = intents.ToDictionary(intent => intent.Hash, intent => intent.RuntimeIndex);
+        Candidates = IntentCandidateIndex.Build(intents, fallback.RuntimeIndex);
     }
 
     public IReadOnlyList<CompiledIntent> All => _byIndex;
     public CompiledIntent Fallback { get; }
+    public IntentCandidateIndex Candidates { get; }
     public int Count => _byIndex.Length;
     public CompiledIntent this[int runtimeIndex] => _byIndex[runtimeIndex];
     public bool TryGetByHash(int hash, out CompiledIntent? intent)
