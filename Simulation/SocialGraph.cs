@@ -177,11 +177,17 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
             }
         }
 
+        var previousAffinity = edge.Affinity;
         edge.Affinity = CalculateAffinity(
             targetPsychology.TraitMask,
             edge.KnownTraitMask,
             _allTraitBits,
             _traits.Count);
+        if (edge.Affinity != previousAffinity && edge.Source.HasComponent<DecisionState>())
+        {
+            ref var decision = ref edge.Source.GetComponent<DecisionState>();
+            DecisionInvalidation.SignalTargetAvailability(ref decision);
+        }
     }
 
     private static float CalculateAffinity(long targetTraitMask, long knownTraitMask, long allTraitBits, int traitCount)

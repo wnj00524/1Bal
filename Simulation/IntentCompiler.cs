@@ -30,7 +30,8 @@ public sealed record CompiledIntent(
     CompiledEffect[] Effects,
     CompiledTargetSelector Target,
     ExecutorKind Executor,
-    bool Fallback);
+    bool Fallback,
+    FactDependencyMask Dependencies);
 
 public sealed class CompiledIntentCatalog
 {
@@ -118,8 +119,23 @@ public static class IntentCompiler
         var executor = CompileExecutor(definition.Execution, target.Kind, path);
         if (definition.Fallback && (target.Kind != TargetKind.None || executor != ExecutorKind.Wait))
             throw Error(path, "fallback intent must use target kind 'none' and executor 'wait'");
+        var dependencies = eligibility.Dependencies;
+        foreach (var input in inputs) dependencies |= input.Expression.Dependencies;
+        if (modifiers.Length > 0) dependencies |= new FactDependencyMask(FactDependencyCategory.Traits);
+        dependencies |= TargetDependencies(target);
         return new CompiledIntent(definition.Id, definition.Name, definition.Hash, index, definition.Activity,
-            definition.BaseUtility, eligibility, inputs, modifiers, definition.Controls, effects, target, executor, definition.Fallback);
+            definition.BaseUtility, eligibility, inputs, modifiers, definition.Controls, effects, target, executor,
+            definition.Fallback, dependencies);
+    }
+
+    private static FactDependencyMask TargetDependencies(CompiledTargetSelector target)
+    {
+        if (target.Kind == TargetKind.None) return FactDependencyMask.None;
+        if (target.Kind == TargetKind.Location) return new(FactDependencyCategory.Location);
+        var mask = new FactDependencyMask(FactDependencyCategory.SocialTargets | FactDependencyCategory.TargetLocation);
+        foreach (var requirement in target.Query!.Requirements) mask |= requirement.Dependencies;
+        foreach (var rank in target.Query.RankBy) mask |= rank.Value.Dependencies;
+        return mask;
     }
 
     private static CompiledTargetSelector CompileTarget(TargetDefinition target, string path, FactRegistry facts)

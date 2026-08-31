@@ -96,6 +96,12 @@ public struct DecisionState : IComponent
 {
     public long LastConsideredMinute;
     public bool Dirty;
+    public FactDependencyMask ChangedFacts;
+    public long EvaluationCount;
+    public float[] CachedScores;
+    public bool[] CachedEligibility;
+    public int[] CachedTargetEntityIds;
+    public int[] CachedTargetLocationIds;
     // Parallel arrays avoid a dictionary allocation per agent. There are only
     // three candidates in this first slice.
     public int[] CooldownActionHashes;

@@ -85,3 +85,8 @@ Milestone 11 moves public activity identity into action content. Runtime
 `ActivityState` stores stable action and activity hashes plus a domain-neutral
 execution phase, while debug presentation resolves activity names through the
 content catalog and effects require a matching action/activity pair.
+
+Milestone 13 derives compact dependency masks from compiled fact reads and
+tracks attribute, location, travel, and social-target mutations. Same-minute
+updates rescore only affected intents while the minute boundary remains a full
+deterministic safety pass; benchmark results live in `docs/decisionbaseline.md`.

@@ -133,6 +133,21 @@ public sealed class DecisionBaselineTests
     }
 
     [Fact]
+    public void SameMinuteAttributeInvalidationOnlyRescoresDependentIntents()
+    {
+        using var fixture = new DecisionFixture(600);
+        fixture.Set(fatigue: 0, stress: 0, wealth: 0);
+        fixture.Decide();
+        var fullPassCount = fixture.EvaluationCount;
+
+        fixture.SignalAttribute("fatigue", 100);
+        fixture.Decide();
+
+        var selectiveCount = fixture.EvaluationCount - fullPassCount;
+        Assert.InRange(selectiveCount, 1, 2);
+    }
+
+    [Fact]
     public void EligibilityNoLongerUsesNamedRuntimeGates()
     {
         var repository = FindRepositoryRoot();
@@ -194,6 +209,15 @@ public sealed class DecisionBaselineTests
         }
 
         public Entity Agent { get; }
+        public long EvaluationCount => Agent.GetComponent<DecisionState>().EvaluationCount;
+
+        public void SignalAttribute(string id, float value)
+        {
+            var index = _catalog.AgentAttributes.GetIndex(id);
+            Agent.GetComponent<AgentAttributes>().Values[index] = value;
+            ref var decision = ref Agent.GetComponent<DecisionState>();
+            DecisionInvalidation.SignalAttribute(ref decision, index);
+        }
 
         public void Set(float? fatigue = null, float? stress = null, float? wealth = null,
             float? preference = null, float? charisma = null)

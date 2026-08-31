@@ -224,4 +224,20 @@ leaking ECS entities into ordinary presentation code.
 * Spawning initializes intention and activity state from the compiled fallback,
   eliminating the former dependency on a specifically named domain action.
 
+### 4.15 Dependency-Driven Reevaluation (Milestone 13)
+
+* Compilation unions every fact read by eligibility predicates, utility
+  expressions, trait modifiers, and target queries into each intent's
+  `FactDependencyMask`. Attribute dependencies retain their schema index bits.
+* Mutation boundaries signal categories through `DecisionInvalidation`.
+  Effects report precise attribute indexes, movement reports location/travel,
+  and social affinity changes report target availability.
+* `DecisionState` caches each candidate result. A same-minute dirty update only
+  resolves and scores candidates whose dependency masks overlap changed facts;
+  cached unaffected results still participate in deterministic score/hash
+  ordering. Advancing to a new minute deliberately performs a full safety pass.
+* `EvaluationCount` supplies a deterministic workload measure independent of
+  wall-clock noise. CPU and allocation comparisons are recorded in
+  `docs/decisionbaseline.md`.
+
 ---

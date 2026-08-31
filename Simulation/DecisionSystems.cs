@@ -3,6 +3,24 @@ using Friflo.Engine.ECS.Systems;
 
 namespace ProxyState.Simulation;
 
+// Mutation-owning systems use these helpers instead of duplicating knowledge
+// about which decision facts an ECS field represents.
+public static class DecisionInvalidation
+{
+    public static void Signal(ref DecisionState state, FactDependencyMask changed)
+    {
+        state.ChangedFacts |= changed;
+        state.Dirty = true;
+    }
+
+    public static void SignalAttribute(ref DecisionState state, int attributeIndex) => Signal(ref state,
+        new(FactDependencyCategory.Attributes, attributeIndex is >= 0 and < 64 ? 1UL << attributeIndex : ulong.MaxValue));
+    public static void SignalLocation(ref DecisionState state) => Signal(ref state,
+        new(FactDependencyCategory.Location | FactDependencyCategory.Travel | FactDependencyCategory.TargetLocation));
+    public static void SignalTargetAvailability(ref DecisionState state) => Signal(ref state,
+        new(FactDependencyCategory.SocialTargets | FactDependencyCategory.TargetAffinity | FactDependencyCategory.TargetLocation));
+}
+
 // Target resolution and utility scoring operate entirely from compiled content.
 // The winner application consequently copies a generic result into ECS state.
 public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes, Psychology, AgentLocation, AgentTravel>
@@ -46,15 +64,31 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             {
                 var selected = targets.Resolve(entity.Id, active.Definition.Target, context);
                 if (selected.EntityId != intention.TargetEntityId || selected.LocationId != intention.TargetLocationId)
-                    decision.Dirty = true;
+                    DecisionInvalidation.Signal(ref decision, new(FactDependencyCategory.SocialTargets |
+                        FactDependencyCategory.TargetLocation));
             }
             if (!decision.Dirty && decision.LastConsideredMinute >= minute) return;
 
+            EnsureCache(ref decision);
+            var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
+            var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
             decision.Dirty = false;
+            decision.ChangedFacts = FactDependencyMask.None;
             decision.LastConsideredMinute = minute;
+            foreach (var candidate in _candidates)
+            {
+                if (!fullPass && !candidate.Definition.Dependencies.Intersects(changed)) continue;
+                var result = candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context));
+                var index = candidate.Definition.RuntimeIndex;
+                decision.CachedScores[index] = result.Score;
+                decision.CachedEligibility[index] = result.Eligible;
+                decision.CachedTargetEntityIds[index] = result.TargetEntityId;
+                decision.CachedTargetLocationIds[index] = result.TargetLocationId;
+                decision.EvaluationCount++;
+            }
             var snapshot = decision;
             var eligible = _candidates
-                .Select(candidate => candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context)))
+                .Select(candidate => CachedResult(candidate.Definition, snapshot))
                 .Where(result => result.Eligible && !IsCoolingDown(result.Action.Hash, minute, snapshot))
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Action.Hash)
@@ -83,6 +117,22 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             intention.SelectedAtMinute = minute;
             intention.Utility = winner.Score;
         });
+    }
+
+    private void EnsureCache(ref DecisionState state)
+    {
+        var count = _candidates.Length + 1;
+        if (state.CachedScores?.Length == count && state.CachedEligibility?.Length == count &&
+            state.CachedTargetEntityIds?.Length == count && state.CachedTargetLocationIds?.Length == count) return;
+        state.CachedScores = new float[count]; state.CachedEligibility = new bool[count];
+        state.CachedTargetEntityIds = new int[count]; state.CachedTargetLocationIds = new int[count];
+    }
+
+    private static DecisionResult CachedResult(CompiledIntent intent, DecisionState state)
+    {
+        var index = intent.RuntimeIndex;
+        return new(index, intent, state.CachedEligibility[index], state.CachedScores[index],
+            state.CachedTargetEntityIds[index], state.CachedTargetLocationIds[index]);
     }
 
     private static bool IsCoolingDown(int hash, long minute, DecisionState state)
@@ -203,7 +253,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
 // Effects are rates, not decisions. They consume simulation time and the
 // currently performed public activity, never rendering-frame count.
-public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, ActivityState>
+public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, ActivityState, DecisionState>
 {
     private readonly Entity _clock;
     private readonly AgentAttributeSchema _schema;
@@ -223,14 +273,16 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
     {
         var minutes = (float)(_clock.GetComponent<WorldTime>().DeltaSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
         if (minutes <= 0f) return;
-        Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, Entity _) =>
+        Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, ref DecisionState decision, Entity _) =>
         {
             if (activity.Phase != ActivityPhase.Performing) return;
             if (!_effects.TryGetValue((activity.ActionHash, activity.ActivityTypeHash), out var effects)) return;
             foreach (var (index, rate) in effects)
             {
                 var definition = _schema.Definitions[index];
-                attributes.Values[index] = Math.Clamp(attributes.Values[index] + rate * minutes, definition.Min, definition.Max);
+                var previous = attributes.Values[index];
+                attributes.Values[index] = Math.Clamp(previous + rate * minutes, definition.Min, definition.Max);
+                if (attributes.Values[index] != previous) DecisionInvalidation.SignalAttribute(ref decision, index);
             }
         });
     }

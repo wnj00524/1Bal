@@ -296,3 +296,15 @@ that fallback to use target kind `none` and executor `wait`, producing a safe
 no-op decision when ordinary candidates are unavailable. Compiler failures use
 `actions.json:actions[index].field` paths so content authors can locate invalid
 references and incompatible structures directly.
+
+### 2.9 Decision Dependencies and Cache
+
+`FactDependencyMask` combines a flagged `FactDependencyCategory` with a 64-bit
+schema-attribute bitset. `CompiledNumericExpression` and `CompiledPredicate`
+derive masks from their pre-resolved instructions; `CompiledIntent` adds trait
+and target-query dependencies. No dependency list is authored in JSON.
+
+`DecisionState.ChangedFacts` accumulates mutation signals until consideration.
+Its parallel score, eligibility, and target arrays are indexed by the compiled
+intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
+is diagnostic Ground Truth state and is not copied into player intelligence.
