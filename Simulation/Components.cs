@@ -102,6 +102,11 @@ public struct DecisionState : IComponent
     public bool[] CachedEligibility;
     public int[] CachedTargetEntityIds;
     public int[] CachedTargetLocationIds;
+    // Debug diagnostics are allocated only when the decision system is created
+    // with diagnostics enabled. They never cross into player intelligence.
+    public float[][] CachedUtilityContributions;
+    public float[][] CachedTraitContributions;
+    public string[] CachedRejectedPredicates;
     // Parallel arrays avoid a dictionary allocation per agent. There are only
     // three candidates in this first slice.
     public int[] CooldownActionHashes;

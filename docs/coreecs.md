@@ -257,3 +257,15 @@ leaking ECS entities into ordinary presentation code.
   set must be rescored on a same-minute update.
 
 ---
+
+### 4.17 Decision Diagnostics and Content Safety (Milestone 15)
+
+* `AgentDecisionSystem` allocates contribution and rejection caches only when
+  launched with `-debug`. `DebugSnapshotBuilder` copies them into immutable
+  candidate snapshots; player-facing intelligence remains unchanged.
+* The decision inspector shows every candidate's eligibility, rejection path,
+  target, score contributions, trait modifiers, cooldown, commitment state,
+  final score, and selected-winner status.
+* `--validate-content [directory]` loads and compiles content without Raylib.
+  CI runs the test suite and this command so malformed intent content fails with
+  its file, intent ID, and JSON path.

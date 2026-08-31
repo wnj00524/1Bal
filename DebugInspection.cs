@@ -45,6 +45,23 @@ public sealed record DebugNetworkSnapshot(
     DebugLocationSnapshot? Anchor,
     int MemberCount);
 
+public sealed record DebugDecisionContributionSnapshot(string Label, float Value);
+
+public sealed record DebugDecisionCandidateSnapshot(
+    string IntentId,
+    string IntentName,
+    bool Eligible,
+    string? RejectedPredicate,
+    int TargetEntityId,
+    int TargetLocationId,
+    float BaseUtility,
+    IReadOnlyList<DebugDecisionContributionSnapshot> UtilityContributions,
+    IReadOnlyList<DebugDecisionContributionSnapshot> TraitModifiers,
+    long CooldownUntilMinute,
+    bool CommitmentBlocked,
+    float FinalScore,
+    bool SelectedWinner);
+
 public sealed record DebugInspectionSnapshot(
     IReadOnlyList<DebugAgentSnapshot> Agents,
     IReadOnlyList<DebugNetworkSnapshot> Networks);
@@ -73,6 +90,7 @@ public sealed record DebugAgentSnapshot(
     DebugLocationSnapshot Workplace,
     DebugLocationSnapshot CurrentLocation,
     DebugTravelSnapshot Travel,
+    IReadOnlyList<DebugDecisionCandidateSnapshot> Decisions,
     IReadOnlyList<DebugNetworkMembershipSnapshot> Networks)
 {
     public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
@@ -135,6 +153,10 @@ public static class DebugSnapshotBuilder
             var activity = entity.GetComponent<ActivityState>();
             var location = entity.GetComponent<AgentLocation>();
             var travel = entity.GetComponent<AgentTravel>();
+            var intention = entity.HasComponent<IntentionState>()
+                ? entity.GetComponent<IntentionState>() : default;
+            var decision = entity.HasComponent<DecisionState>()
+                ? entity.GetComponent<DecisionState>() : default;
 
             var jobName = jobsByHash.TryGetValue(identity.OccupationId, out var job)
                 ? job.Name
@@ -182,6 +204,7 @@ public static class DebugSnapshotBuilder
                     travel.RoutePosition,
                     travel.RemainingTravelMinutes,
                     travel.Mode),
+                CopyDecisions(catalog, intention, decision),
                 (networkMembershipsByAgent.TryGetValue(entity.Id, out var memberships)
                     ? memberships.OrderBy(item => item.NetworkEntityId).ToArray()
                     : Array.Empty<DebugNetworkMembershipSnapshot>()).AsReadOnly()));
@@ -190,6 +213,37 @@ public static class DebugSnapshotBuilder
         return new DebugInspectionSnapshot(
             snapshots.AsReadOnly(),
             networkSnapshots.OrderBy(network => network.EntityId).ToArray().AsReadOnly());
+    }
+
+    private static IReadOnlyList<DebugDecisionCandidateSnapshot> CopyDecisions(
+        ContentCatalog catalog, IntentionState intention, DecisionState decision)
+    {
+        if (decision.CachedScores is null) return Array.Empty<DebugDecisionCandidateSnapshot>();
+        var snapshots = new List<DebugDecisionCandidateSnapshot>();
+        foreach (var intent in catalog.Intents.All.Where(intent => !intent.Fallback))
+        {
+            var index = intent.RuntimeIndex;
+            var utility = decision.CachedUtilityContributions?.ElementAtOrDefault(index) ?? Array.Empty<float>();
+            var traits = decision.CachedTraitContributions?.ElementAtOrDefault(index) ?? Array.Empty<float>();
+            var cooldownUntil = 0L;
+            if (decision.CooldownActionHashes is not null && decision.CooldownUntilMinutes is not null)
+            {
+                var cooldownIndex = Array.IndexOf(decision.CooldownActionHashes, intent.Hash);
+                if (cooldownIndex >= 0) cooldownUntil = decision.CooldownUntilMinutes[cooldownIndex];
+            }
+            snapshots.Add(new DebugDecisionCandidateSnapshot(
+                intent.Id, intent.Name, decision.CachedEligibility[index],
+                string.IsNullOrEmpty(decision.CachedRejectedPredicates?.ElementAtOrDefault(index))
+                    ? null : decision.CachedRejectedPredicates[index],
+                decision.CachedTargetEntityIds[index], decision.CachedTargetLocationIds[index], intent.BaseUtility,
+                utility.Select((value, i) => new DebugDecisionContributionSnapshot($"utilityInputs[{i}]", value)).ToArray(),
+                traits.Select((value, i) => new DebugDecisionContributionSnapshot(
+                    catalog.Traits.FirstOrDefault(trait => trait.Bit == intent.TraitModifiers[i].TraitBit)?.Id ?? $"traitModifiers[{i}]", value)).ToArray(),
+                cooldownUntil,
+                intention.ActionHash == intent.Hash && decision.LastConsideredMinute - intention.SelectedAtMinute < intent.Controls.MinimumCommitmentMinutes,
+                decision.CachedScores[index], intention.ActionHash == intent.Hash));
+        }
+        return snapshots.AsReadOnly();
     }
 
     private static IReadOnlyList<DebugAttributeSnapshot> CopyAttributes(
@@ -334,6 +388,25 @@ public sealed class DebugWindow
         ImGui.BulletText($"Home: {FormatLocation(agent.Home)}");
         ImGui.BulletText($"Workplace: {FormatLocation(agent.Workplace)}");
         ImGui.BulletText($"Current location: {FormatLocation(agent.CurrentLocation)}");
+
+        ImGui.Separator();
+        ImGui.Text("Decision inspector");
+        if (agent.Decisions.Count == 0) ImGui.BulletText("No diagnostic evaluation captured.");
+        foreach (var candidate in agent.Decisions)
+        {
+            if (!ImGui.TreeNode($"{candidate.IntentName}##decision-{candidate.IntentId}")) continue;
+            ImGui.BulletText($"Eligible: {candidate.Eligible}");
+            if (candidate.RejectedPredicate is not null) ImGui.BulletText($"Rejected: {candidate.RejectedPredicate}");
+            ImGui.BulletText($"Target: entity {candidate.TargetEntityId}, location {candidate.TargetLocationId}");
+            ImGui.BulletText($"Base utility: {candidate.BaseUtility:0.###}");
+            foreach (var item in candidate.UtilityContributions) ImGui.BulletText($"{item.Label}: {item.Value:+0.###;-0.###;0}");
+            foreach (var item in candidate.TraitModifiers) ImGui.BulletText($"Trait {item.Label}: {item.Value:+0.###;-0.###;0}");
+            ImGui.BulletText($"Cooldown until minute: {candidate.CooldownUntilMinute}");
+            ImGui.BulletText($"Commitment block: {candidate.CommitmentBlocked}");
+            ImGui.BulletText($"Final score: {candidate.FinalScore:0.###}");
+            ImGui.BulletText($"Selected winner: {candidate.SelectedWinner}");
+            ImGui.TreePop();
+        }
 
         ImGui.Separator();
         ImGui.Text("Travel");

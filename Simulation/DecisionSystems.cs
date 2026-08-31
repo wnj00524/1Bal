@@ -32,14 +32,16 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly Dictionary<int, CandidateEvaluator> _candidatesByHash;
     private readonly IntentCandidateIndex _candidateIndex;
     private readonly CompiledIntent _fallback;
+    private readonly bool _captureDiagnostics;
 
-    public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock)
+    public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock, bool captureDiagnostics = false)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(catalog);
         _clock = clock;
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
+        _captureDiagnostics = captureDiagnostics;
         _candidateIndex = catalog.Intents.Candidates;
         _candidatesByIndex = new CandidateEvaluator?[catalog.Intents.Count];
         _candidatesByHash = new();
@@ -80,6 +82,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             if (!decision.Dirty && decision.LastConsideredMinute >= minute) return;
 
             EnsureCache(ref decision);
+            if (_captureDiagnostics) EnsureDiagnosticCache(ref decision);
             var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
             var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
             var candidateContext = new IntentCandidateContext(true, location.HomeLocationId != 0,
@@ -91,12 +94,17 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             {
                 var candidate = _candidatesByIndex[runtimeIndex]!;
                 if (!fullPass && !candidate.Definition.Dependencies.Intersects(changed)) continue;
-                var result = candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context));
+                var result = candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context),
+                    _captureDiagnostics ? decision.CachedUtilityContributions[candidate.Definition.RuntimeIndex] : null,
+                    _captureDiagnostics ? decision.CachedTraitContributions[candidate.Definition.RuntimeIndex] : null);
                 var index = candidate.Definition.RuntimeIndex;
                 decision.CachedScores[index] = result.Score;
                 decision.CachedEligibility[index] = result.Eligible;
                 decision.CachedTargetEntityIds[index] = result.TargetEntityId;
                 decision.CachedTargetLocationIds[index] = result.TargetLocationId;
+                if (_captureDiagnostics)
+                    decision.CachedRejectedPredicates[index] = result.Eligible
+                        ? string.Empty : $"actions.json:intent '{candidate.Definition.Id}':eligibility";
                 decision.EvaluationCount++;
             }
             var winner = new DecisionResult(_fallback.RuntimeIndex, _fallback, true, _fallback.BaseUtility, 0, 0);
@@ -137,6 +145,23 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             state.CachedTargetEntityIds?.Length == count && state.CachedTargetLocationIds?.Length == count) return;
         state.CachedScores = new float[count]; state.CachedEligibility = new bool[count];
         state.CachedTargetEntityIds = new int[count]; state.CachedTargetLocationIds = new int[count];
+    }
+
+    private void EnsureDiagnosticCache(ref DecisionState state)
+    {
+        var count = _candidatesByIndex.Length;
+        if (state.CachedUtilityContributions?.Length == count &&
+            state.CachedTraitContributions?.Length == count && state.CachedRejectedPredicates?.Length == count) return;
+        state.CachedUtilityContributions = new float[count][];
+        state.CachedTraitContributions = new float[count][];
+        state.CachedRejectedPredicates = new string[count];
+        foreach (var candidate in _candidatesByIndex)
+        {
+            if (candidate is null) continue;
+            var index = candidate.Definition.RuntimeIndex;
+            state.CachedUtilityContributions[index] = new float[candidate.Definition.UtilityInputs.Length];
+            state.CachedTraitContributions[index] = new float[candidate.Definition.TraitModifiers.Length];
+        }
     }
 
     private static DecisionResult CachedResult(CompiledIntent intent, DecisionState state)
@@ -235,17 +260,32 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         public CandidateEvaluator(CompiledIntent definition) { Definition = definition; }
         public CompiledIntent Definition { get; }
 
-        public DecisionResult Evaluate(DecisionContext context, TargetSelection target)
+        public DecisionResult Evaluate(DecisionContext context, TargetSelection target,
+            float[]? utilityDiagnostics = null, float[]? traitDiagnostics = null)
         {
             var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.Location,
                 context.Travel, target.EntityId, target.Affinity, target.LocationId);
             if (!Definition.Eligibility.Evaluate(facts))
+            {
+                if (utilityDiagnostics is not null) Array.Clear(utilityDiagnostics);
+                if (traitDiagnostics is not null) Array.Clear(traitDiagnostics);
                 return new DecisionResult(Definition.RuntimeIndex, Definition, false, float.NegativeInfinity, target.EntityId, target.LocationId);
+            }
             var score = Definition.BaseUtility;
-            foreach (var input in Definition.UtilityInputs)
-                score += input.Weight * Curve(input.Curve, input.Expression.Evaluate(facts));
-            foreach (var modifier in Definition.TraitModifiers)
-                if ((context.TraitMask & modifier.TraitBit) != 0) score += modifier.Modifier;
+            for (var index = 0; index < Definition.UtilityInputs.Length; index++)
+            {
+                var input = Definition.UtilityInputs[index];
+                var contribution = input.Weight * Curve(input.Curve, input.Expression.Evaluate(facts));
+                score += contribution;
+                if (utilityDiagnostics is not null) utilityDiagnostics[index] = contribution;
+            }
+            for (var index = 0; index < Definition.TraitModifiers.Length; index++)
+            {
+                var modifier = Definition.TraitModifiers[index];
+                var contribution = (context.TraitMask & modifier.TraitBit) != 0 ? modifier.Modifier : 0;
+                score += contribution;
+                if (traitDiagnostics is not null) traitDiagnostics[index] = contribution;
+            }
             return new DecisionResult(Definition.RuntimeIndex, Definition, true, score, target.EntityId, target.LocationId);
         }
 
