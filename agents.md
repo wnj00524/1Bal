@@ -18,7 +18,7 @@
 * **Paradigm:** 100% Code-First, Data-Oriented Design. No visual editor is used.
 * **UI Aesthetic:** Windows 3.1 style GUI and a terminal with Raylib 2D canvas.
 * **ECS Usage:** Utilize `Friflo.Engine.ECS` native features. Use pure `struct` implementations for `IComponent` and `ITag`.
-* **Data-Driven:** Content (traits, actions, factions) must be serialized via JSON.
+* **Data-Driven:** ALL Content (traits, actions, factions) MUST be serialized via JSON. Avoid hard coding anything that could be data driven. 
 * **The Intelligence Isolation Layer:** The ImGui UI must NEVER query the Ground Truth ECS data. It only queries the `PlayerIntelligenceDB` or the specific `KnowledgeMask` of an active player-controlled entity.
 
 
