@@ -171,7 +171,7 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 15: Tooling, Diagnostics, and Content Safety](https://github.com/wnj00524/proxystate/milestone/16)
 
-- [ ] [M15.1 — Add decision inspector](https://github.com/wnj00524/proxystate/issues/73)
-- [ ] [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
-- [ ] [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
-- [ ] [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)
+- [x] [M15.1 — Add decision inspector](https://github.com/wnj00524/proxystate/issues/73)
+- [x] [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
+- [x] [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
+- [x] [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)

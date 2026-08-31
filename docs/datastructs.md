@@ -63,6 +63,9 @@ public struct DecisionState : IComponent {
     public bool Dirty;
     public int[] CooldownActionHashes;
     public long[] CooldownUntilMinutes;
+    public float[][] CachedUtilityContributions; // Allocated in debug mode only.
+    public float[][] CachedTraitContributions;   // Allocated in debug mode only.
+    public string[] CachedRejectedPredicates;    // Allocated in debug mode only.
 }
 
 public struct WorldTime : IComponent {
@@ -194,6 +197,11 @@ source's known mask.
 ### 2.3 Debug Inspection Snapshots
 
 Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, and resolved network memberships. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+
+`DebugDecisionCandidateSnapshot` copies candidate eligibility, rejection path,
+target IDs, utility and trait contributions, cooldown, commitment state, final
+score, and winner status. These ground-truth diagnostics exist only in debug
+inspection snapshots and are not fields of `PlayerIntelligenceDB`.
 
 ### 2.4 World-Time Presentation Snapshot
 

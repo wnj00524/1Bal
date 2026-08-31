@@ -84,7 +84,11 @@ public static class IntentCompiler
             if (definition.Hash == 0 || !hashes.Add(definition.Hash))
                 throw Error($"{path}.hash", "must be non-zero and unique");
 
-            compiled[index] = CompileOne(definition, (ushort)index, path, traitBits, facts, attributes);
+            try { compiled[index] = CompileOne(definition, (ushort)index, path, traitBits, facts, attributes); }
+            catch (InvalidDataException exception)
+            {
+                throw new InvalidDataException($"actions.json:intent '{definition.Id ?? "<missing>"}': {exception.Message}", exception);
+            }
         }
 
         var fallbacks = compiled.Where(intent => intent.Fallback).ToArray();
