@@ -2,15 +2,46 @@
 
 ### 4.1 Utility AI System
 
-**Goal:** Determine what an agent does this tick.
+**Goal:** Decide an intention from Ground Truth on simulation time.
 
-* Query all entities with `AgentAttributes` and `Tier1LodTag`.
-* Iterate through available actions (Work, Rest, Socialize) loaded from `actions.json`.
-* Resolve numeric values by name through `AgentAttributeSchema`.
-* Score formula: `BaseScore + (TraitModifiers) - (Fatigue/Stress Penalties)`.
-* Assign highest-scoring action to `AgentState.CurrentActionHash`.
-* Leave `AgentState.SecretStateHash` unchanged; covert activity is independent
-  of the public action and is assigned by a future secret-state system.
+* Content loading compiles every utility expression in `actions.json` to a
+  bounded postfix opcode program. Fact strings are resolved once to typed
+  `FactId` handles, including direct schema indexes for agent attributes.
+  Eligibility predicates are likewise compiled from boolean facts, boolean
+  combinators, and numeric comparisons. `AgentDecisionSystem` evaluates only
+  these pre-resolved programs; it contains no named eligibility-gate switch.
+  Current data preserves schedule/workday, home-route, and co-located-peer rules.
+* Eligible utility is weighted-additive: base utility plus each compiled numeric
+  expression passed through its piecewise-linear response curve, plus applicable
+  trait modifiers. Low wealth, schedule pressure, night time, and peer affinity
+  are compositions in data rather than semantic source cases in runtime code.
+  Numeric and predicate evaluation use fixed stack spans and direct fact access with no runtime
+  parsing, casing, string comparison, or expression allocation.
+* Every action declares a `none`, `location`, or `entity` target. Direct location
+  values resolve home, work, or current location without action-ID branches.
+  Entity queries traverse the declared social relation, evaluate compiled target
+  requirements, rank candidates lexicographically, and break exact ties by
+  ascending entity ID. Losing or changing the selected target dirties the
+  decision immediately through the same generic resolver.
+* The highest score wins. Exact ties use ascending stable action hash, never
+  JSON or query order. A switch additionally pays the configured switching
+  threshold unless its score reaches the urgent-preemption threshold.
+* Per-action minimum commitment, cooldown-on-exit, and urgent preemption
+  controls prevent oscillation. Decisions run at most once per simulated
+  minute; `DecisionState.Dirty` permits earlier event-driven reconsideration.
+  Travel arrival marks the decision dirty.
+* Deliberation writes `IntentionState`. `IntentExecutionSystem` translates each
+  content-defined executor into generic travelling, performing, or idle state,
+  and `ActivityEffectsSystem`
+  applies data-defined attribute rates using elapsed simulation minutes.
+* `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
+  covert state remains independent of public intentions and activities.
+* Milestone 6 locks the original semantics with deterministic Ground Truth fixtures and
+  a test-only immutable decision trace. The measured 1,000-agent Release
+  baseline, allocation method, and current intent-ID architectural debt are
+  recorded in `docs/decisionbaseline.md`. Milestone 9 preserves that baseline
+  while representing score, eligibility, entity target, and location target in
+  one candidate result whose winner is copied without domain-specific branches.
 
 ### 4.2 Interaction & Discovery System
 
@@ -46,16 +77,22 @@ The system is configured with an optional positive per-tick increase so simulati
 * Keep the last simulation delta on `WorldTime` so time-based systems consume the same elapsed interval.
 * Job schedules use Monday as day `1`, integer minutes from midnight, and non-overnight intervals.
 
-### 4.5 Commuting System (Milestone 2)
+### 4.5 Intent Execution System (Milestones 2, 10, and 11)
 
-**Goal:** Move Tier 1 agents between assigned homes and workplaces according to their job schedules.
+**Goal:** Execute any Tier 1 intention through reusable movement and performance mechanics.
 
-* Query `AgentLocation`, `AgentTravel`, `Identity`, and `AgentState` together.
-* Use the assigned job hash in `Identity.OccupationId` to resolve workdays and work interval data.
-* Begin travel early enough for the agent to arrive at the scheduled work start.
-* Traverse the precomputed shortest-travel-time route, using each network edge's duration.
-* Begin the reverse route at the scheduled work end and set the agent to rest when home.
-* Agents remain home on non-workdays. Missing routes fail during assignment or raise a clear topology error rather than creating partial agent state.
+* Each action declares `performHere`, `performAtLocation`, `performWithEntity`,
+  or `wait`; loading resolves that string to `ExecutorKind` and validates that
+  its target type and `intent.target` destination are compatible.
+* Location and entity executors share deterministic shortest-route traversal;
+  the movement path contains no action IDs.
+* Execution copies the action's data-defined activity hash into `ActivityState`.
+  `ActivityPhase` contains only the generic Idle, Moving, Performing, and Blocked
+  engine phases; arrival changes Moving to Performing and dirties the decision.
+  A missing entity or unreachable destination blocks the actor and dirties its
+  decision for reconsideration.
+* `ActivityEffectsSystem` applies effects only for a Performing state whose
+  action/activity hash pair matches the loaded content definition.
 
 ### 4.6 Debug Agent Inspector
 
@@ -63,7 +100,7 @@ The system is configured with an optional positive per-tick increase so simulati
 
 * Debug mode is enabled only when the process receives the `-debug` command-line argument (case-insensitive).
 * `DebugSnapshotBuilder` copies the current agent component values into immutable, UI-facing snapshots once per frame.
-* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, secret state, locations, and travel state.
+* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, catalog-resolved activity identity and execution phase, secret state, locations, and travel state.
 * The ImGui layer consumes snapshots only; it never queries or mutates the Ground Truth ECS store.
 
 ### 4.7 World-Time Status Bar
@@ -174,4 +211,61 @@ leaking ECS entities into ordinary presentation code.
   anchor names, supervisor display names, and counts are resolved at the
   Ground Truth boundary; `PlayerIntelligenceDB` and dossiers remain unchanged.
 
+### 4.14 Intent Compilation and Fallback (Milestone 12)
+
+* `ContentCatalog.Load` validates authoring data and invokes `IntentCompiler`
+  before constructing the runtime catalog. String references never reach the
+  decision, target-resolution, execution, or effects hot paths.
+* Dense runtime indexes follow deterministic JSON order while stable hashes
+  remain the ECS, persistence, debug, and content identity.
+* Decision evaluation excludes the fallback from normal scoring and selects it
+  only when no ordinary intent is eligible. The fallback is structurally
+  constrained to a target-free `Wait`, so every agent always has a safe result.
+* Spawning initializes intention and activity state from the compiled fallback,
+  eliminating the former dependency on a specifically named domain action.
+
+### 4.15 Dependency-Driven Reevaluation (Milestone 13)
+
+* Compilation unions every fact read by eligibility predicates, utility
+  expressions, trait modifiers, and target queries into each intent's
+  `FactDependencyMask`. Attribute dependencies retain their schema index bits.
+* Mutation boundaries signal categories through `DecisionInvalidation`.
+  Effects report precise attribute indexes, movement reports location/travel,
+  and social affinity changes report target availability.
+* `DecisionState` caches each candidate result. A same-minute dirty update only
+  resolves and scores candidates whose dependency masks overlap changed facts;
+  cached unaffected results still participate in deterministic score/hash
+  ordering. Advancing to a new minute deliberately performs a full safety pass.
+* `EvaluationCount` supplies a deterministic workload measure independent of
+  wall-clock noise. CPU and allocation comparisons are recorded in
+  `docs/decisionbaseline.md`.
+
+### 4.16 Candidate Indexing (Milestone 14)
+
+* `IntentCompiler` assigns the bit position as part of its existing dense
+  runtime indexing. `CompiledIntentCatalog` constructs candidate bitsets once
+  during content loading and excludes the fallback from ordinary candidates.
+* Static indexes conservatively remove intents whose required home, workplace,
+  social relation, or universal job context is absent. Runtime context is
+  reduced to booleans before bitset intersection; no authored strings are read.
+* `AgentDecisionSystem` enumerates the intersected set bits for reevaluation and
+  cached winner selection. Its struct enumerator avoids catalogue scans,
+  per-agent candidate arrays, LINQ sorting, and hot-path iterator allocation.
+  Final ordering remains score descending then stable action hash ascending.
+* The safe fallback is applied only when no indexed ordinary candidate remains
+  eligible. Dependency masks continue to decide which members of that candidate
+  set must be rescored on a same-minute update.
+
 ---
+
+### 4.17 Decision Diagnostics and Content Safety (Milestone 15)
+
+* `AgentDecisionSystem` allocates contribution and rejection caches only when
+  launched with `-debug`. `DebugSnapshotBuilder` copies them into immutable
+  candidate snapshots; player-facing intelligence remains unchanged.
+* The decision inspector shows every candidate's eligibility, rejection path,
+  target, score contributions, trait modifiers, cooldown, commitment state,
+  final score, and selected-winner status.
+* `--validate-content [directory]` loads and compiles content without Raylib.
+  CI runs the test suite and this command so malformed intent content fails with
+  its file, intent ID, and JSON path.

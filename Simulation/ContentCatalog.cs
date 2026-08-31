@@ -3,7 +3,49 @@ using System.Text.Json;
 namespace ProxyState.Simulation;
 
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
-public sealed record ActionDefinition(string Id, string Name, int Hash);
+public sealed record ResponsePoint(float X, float Y);
+public sealed record UtilityInputDefinition(NumericExpressionDefinition Expression, float Weight, List<ResponsePoint> Curve)
+;
+public sealed record TraitUtilityModifier(string Trait, float Modifier);
+public sealed record ActionControlDefinition(
+    int MinimumCommitmentMinutes,
+    float SwitchingThreshold,
+    int CooldownMinutes,
+    float UrgentPreemptionThreshold,
+    bool CooldownOnExit = true);
+public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
+public sealed record ActivityDefinition(string Id, string Name, int Hash);
+public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
+;
+public sealed record TargetQueryDefinition(
+    string Relation,
+    List<PredicateDefinition> Requirements,
+    List<TargetRankDefinition> RankBy,
+    int? Limit);
+public sealed record TargetDefinition(string Kind, string? Value, TargetQueryDefinition? Query);
+public enum ExecutorKind : byte
+{
+    PerformHere,
+    PerformAtLocation,
+    PerformWithEntity,
+    Wait
+}
+public sealed record ExecutorDefinition(string Executor, string? Destination)
+;
+public sealed record ActionDefinition(
+    string Id,
+    string Name,
+    int Hash,
+    ActivityDefinition Activity,
+    float BaseUtility,
+    PredicateDefinition Eligibility,
+    List<UtilityInputDefinition> UtilityInputs,
+    List<TraitUtilityModifier> TraitModifiers,
+    ActionControlDefinition Controls,
+    List<ActionEffectDefinition> Effects,
+    TargetDefinition Target,
+    ExecutorDefinition Execution,
+    bool Fallback = false);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -59,6 +101,7 @@ public sealed class ContentCatalog
     private ContentCatalog(
         IReadOnlyList<TraitDefinition> traits,
         IReadOnlyList<ActionDefinition> actions,
+        CompiledIntentCatalog intents,
         IReadOnlyList<SecretStateDefinition> secretStates,
         IReadOnlyList<FactionDefinition> factions,
         AgentAttributeSchema agentAttributes,
@@ -68,6 +111,7 @@ public sealed class ContentCatalog
     {
         Traits = traits;
         Actions = actions;
+        Intents = intents;
         SecretStates = secretStates;
         Factions = factions;
         AgentAttributes = agentAttributes;
@@ -79,6 +123,7 @@ public sealed class ContentCatalog
 
     public IReadOnlyList<TraitDefinition> Traits { get; }
     public IReadOnlyList<ActionDefinition> Actions { get; }
+    public CompiledIntentCatalog Intents { get; }
     public IReadOnlyList<SecretStateDefinition> SecretStates { get; }
     public IReadOnlyList<FactionDefinition> Factions { get; }
     public AgentAttributeSchema AgentAttributes { get; }
@@ -86,6 +131,11 @@ public sealed class ContentCatalog
     public WorldTopology World { get; }
     public AgentNetworkCatalog Networks { get; }
     public long AllTraitBits { get; }
+
+    public ActivityDefinition GetActivity(int hash) => Actions
+        .Select(action => action.Activity)
+        .FirstOrDefault(activity => activity.Hash == hash)
+        ?? throw new KeyNotFoundException($"Activity type hash '{hash}' is not defined in the content catalog.");
 
     public static ContentCatalog Load(string directory)
     {
@@ -105,9 +155,10 @@ public sealed class ContentCatalog
 
         ValidateSecretStates(secretStates);
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
+        var intents = IntentCompiler.Compile(actions, traits, agentAttributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
-        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world, networks);
+        return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(
@@ -188,6 +239,8 @@ public sealed class ContentCatalog
             throw new InvalidDataException("Action hashes must be unique.");
         }
 
+        ValidateActions(actions, traits, attributeDefinitions);
+
         var attributeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributeDefinitions)
         {
@@ -212,6 +265,41 @@ public sealed class ContentCatalog
         _ = schema.GetIndex("stress");
         return schema;
     }
+
+    private static void ValidateActions(
+        IReadOnlyList<ActionDefinition> actions,
+        IReadOnlyList<TraitDefinition> traits,
+        IReadOnlyList<AgentAttributeDefinition> attributes)
+    {
+        var activityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activityHashes = new HashSet<int>();
+        foreach (var action in actions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
+                !float.IsFinite(action.BaseUtility) || action.Activity is null || action.Eligibility is null ||
+                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null || action.Execution is null)
+                throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
+            if (string.IsNullOrWhiteSpace(action.Activity.Id) || string.IsNullOrWhiteSpace(action.Activity.Name) ||
+                action.Activity.Hash == 0 || !activityIds.Add(action.Activity.Id) || !activityHashes.Add(action.Activity.Hash))
+                throw new InvalidDataException($"Action '{action.Id}' must define a unique, non-zero activity ID and hash with a display name.");
+            if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
+                !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
+                !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
+                throw new InvalidDataException($"Action '{action.Id}' has invalid controls.");
+            foreach (var input in action.UtilityInputs)
+            {
+                if (input.Expression is null || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                    input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
+                    input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid utility input.");
+            }
+            if (action.TraitModifiers.Any(modifier => !float.IsFinite(modifier.Modifier)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite trait modifier.");
+            if (action.Effects.Any(effect => !float.IsFinite(effect.PerMinute)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite effect rate.");
+        }
+    }
+
 
     private static void ValidateSecretStates(IReadOnlyList<SecretStateDefinition> secretStates)
     {

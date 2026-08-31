@@ -40,8 +40,32 @@ public struct Psychology : IComponent {
 }
 
 public struct AgentState : IComponent {
-    public int CurrentActionHash;  // Hash supplied by data/actions.json.
     public int SecretStateHash;    // Hash supplied by data/secret-states.json; 0 is None.
+}
+
+public struct IntentionState : IComponent {
+    public int ActionHash;          // Goal selected by utility deliberation.
+    public int TargetEntityId;     // Social target, or 0.
+    public int TargetLocationId;   // Destination for location-bound goals.
+    public long SelectedAtMinute;
+    public float Utility;
+}
+
+public struct ActivityState : IComponent {
+    public int ActionHash;          // Content action responsible for the activity.
+    public int ActivityTypeHash;    // Data-defined identity from the selected action.
+    public ActivityPhase Phase;     // Idle, Moving, Performing, or Blocked mechanics.
+    public long StartedAtMinute;
+}
+
+public struct DecisionState : IComponent {
+    public long LastConsideredMinute;
+    public bool Dirty;
+    public int[] CooldownActionHashes;
+    public long[] CooldownUntilMinutes;
+    public float[][] CachedUtilityContributions; // Allocated in debug mode only.
+    public float[][] CachedTraitContributions;   // Allocated in debug mode only.
+    public string[] CachedRejectedPredicates;    // Allocated in debug mode only.
 }
 
 public struct WorldTime : IComponent {
@@ -55,15 +79,14 @@ public struct AgentLocation : IComponent {
     public int CurrentLocationId;
 }
 
-public enum AgentTravelMode : byte {
-    AtHome, TravellingToWork, AtWork, TravellingHome
-}
+public enum AgentTravelMode : byte { Stationary, Travelling }
 
 public struct AgentTravel : IComponent {
     public int[] RouteLocationIds;
     public int TotalTravelMinutes;
     public int RoutePosition;
     public float RemainingTravelMinutes;
+    public int DestinationLocationId;
     public AgentTravelMode Mode;
 }
 ```
@@ -74,12 +97,52 @@ one floating-point value per definition, so adding an attribute requires only a
 data-file change. Values are sampled from a bounded normal distribution centered
 on the configured average and constrained to the configured range.
 
-Public activity and covert activity are independent. `AgentState.CurrentActionHash`
-is the visible action, while `AgentState.SecretStateHash` identifies a separate
-secret activity such as `Surveillance`. Secret states are loaded from
+Intention, activity, effects, and covert state are distinct. `IntentionState`
+stores what was selected, `ActivityState` stores what is happening now, and
+JSON effect definitions describe attribute changes. Each action declares an
+activity ID, display name, and stable hash in `data/actions.json`; execution copies
+that identity into `ActivityState` while `ActivityPhase` contains only generic
+engine states. Debug snapshots resolve the display name through `ContentCatalog`.
+`AgentState.SecretStateHash`
+identifies a separate secret activity such as `Surveillance`. Secret states are loaded from
 `data/secret-states.json`; the required `none` definition uses hash `0`, making a
-default-initialized `AgentState` safe. Agents are spawned with `None`, and future
-simulation systems may change the secret hash without changing the public action.
+default-initialized `AgentState` safe. Agents are spawned with `None`, and a
+covert system may change the secret hash without changing intention or activity.
+
+`data/actions.json` owns each candidate's eligibility predicate, base utility,
+weighted numeric expressions, piecewise-linear response curves, trait modifiers,
+minimum commitment, switching margin, cooldown, urgent-preemption threshold,
+per-minute effects, activity identity, and target definition. `TargetDefinition` selects `none`, a
+direct agent `location`, or an `entity` query. Entity queries contain a relation,
+compiled predicate requirements, ordered compiled numeric rankings, and an
+optional positive candidate limit; the runtime result carries both entity and
+location IDs alongside eligibility and score. Runtime cooldowns use parallel fixed-size arrays because
+the first slice has exactly three actions and does not need per-agent dictionaries.
+
+Every action also declares an `ExecutorDefinition`. Loading compiles its
+`executor` string to `ExecutorKind` (`performHere`, `performAtLocation`,
+`performWithEntity`, or `wait`) and validates the required target type.
+Target-bound executors use `destination: "intent.target"`. Generic travel stores
+the active destination and shortest route in `AgentTravel`, so execution does
+not branch on work, rest, or socialize identity.
+
+Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
+schema index. `FactRegistry` resolves authoring references such as
+`agent.attribute.fatigue`, `time.minuteOfDay`, `job.workStartMinute`, and
+`target.affinity` during catalog loading. `NumericExpressionDefinition` is the
+JSON authoring tree; the loader compiles it to a bounded postfix instruction
+array containing opcodes, fact handles, and numeric operands. The runtime stack
+evaluator uses `stackalloc`, performs no string lookup, and supports `fact`,
+`constant`, `normalize`, `normalizeRange`, arithmetic, `min`, `max`, `clamp`,
+`oneMinus`, and `abs`. Trees are limited to 16 levels and 64 instructions.
+
+`PredicateDefinition` is the eligibility authoring tree. It composes typed
+boolean facts with `and`, `or`, and `not`, or compares numeric expressions with
+`equal`, `notEqual`, `less`, `lessOrEqual`, `greater`, and `greaterOrEqual`.
+`CompiledPredicate` stores bounded postfix boolean instructions and
+precompiled numeric operands. Boolean/numeric type mismatches and malformed
+arity fail during catalog loading; runtime evaluation uses a stack-allocated
+boolean span and performs no string parsing or per-agent allocation.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
@@ -134,6 +197,11 @@ source's known mask.
 ### 2.3 Debug Inspection Snapshots
 
 Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, and resolved network memberships. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+
+`DebugDecisionCandidateSnapshot` copies candidate eligibility, rejection path,
+target IDs, utility and trait contributions, cooldown, commitment state, final
+score, and winner status. These ground-truth diagnostics exist only in debug
+inspection snapshots and are not fields of `PlayerIntelligenceDB`.
 
 ### 2.4 World-Time Presentation Snapshot
 
@@ -220,3 +288,40 @@ display strings, member arrays, dictionaries, descendant closures, or redundant
 supervisor indexes: each generated agent contributes approximately one family
 and one company relation. Resolved names and summary collections are transient
 debug projections and are discarded after presentation.
+
+### 2.8 Compiled Intent Catalog
+
+`ActionDefinition` remains the JSON authoring model. `IntentCompiler` resolves
+its fact, trait, attribute, target, and executor strings once at catalog load.
+The resulting `CompiledIntent` stores compiled predicate/numeric programs,
+trait bits, attribute indexes, compact target/executor enums, stable content
+hashes, and a dense `ushort RuntimeIndex`. `CompiledIntentCatalog` owns the
+index-ordered array and a hash-to-index map; simulation systems consume this
+catalog rather than mutable authoring trees.
+
+`IntentBitSet` maps the same dense runtime index to one bit in a packed
+`ulong[]`. `IntentCandidateIndex`, built by `CompiledIntentCatalog`, owns the
+global non-fallback set and the sets that remain available without a job, home,
+workplace, or social relation. Public immutable intersections support tooling
+and tests. The decision hot path instead intersects words through a struct
+enumerator, visiting set bits without allocating or scanning the compiled
+intent array. Target/executor contracts are the source of these conservative
+prerequisites; content authors do not maintain a second set of flags.
+
+Exactly one authoring definition must set `fallback: true`. Compilation requires
+that fallback to use target kind `none` and executor `wait`, producing a safe
+no-op decision when ordinary candidates are unavailable. Compiler failures use
+`actions.json:actions[index].field` paths so content authors can locate invalid
+references and incompatible structures directly.
+
+### 2.9 Decision Dependencies and Cache
+
+`FactDependencyMask` combines a flagged `FactDependencyCategory` with a 64-bit
+schema-attribute bitset. `CompiledNumericExpression` and `CompiledPredicate`
+derive masks from their pre-resolved instructions; `CompiledIntent` adds trait
+and target-query dependencies. No dependency list is authored in JSON.
+
+`DecisionState.ChangedFacts` accumulates mutation signals until consideration.
+Its parallel score, eligibility, and target arrays are indexed by the compiled
+intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
+is diagnostic Ground Truth state and is not copied into player intelligence.

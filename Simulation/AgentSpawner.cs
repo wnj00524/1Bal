@@ -55,6 +55,7 @@ public sealed class AgentSpawner
         }
 
         var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
+        var fallback = _catalog.Intents.Fallback;
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -83,8 +84,26 @@ public sealed class AgentSpawner
                 },
                 new AgentState
                 {
-                    CurrentActionHash = _catalog.Actions[populationRandom.Next(_catalog.Actions.Count)].Hash,
                     SecretStateHash = 0
+                },
+                new IntentionState { ActionHash = fallback.Hash },
+                new ActivityState
+                {
+                    ActionHash = fallback.Hash,
+                    ActivityTypeHash = fallback.Activity.Hash,
+                    Phase = ActivityPhase.Performing
+                },
+                new DecisionState
+                {
+                    LastConsideredMinute = -1,
+                    Dirty = true,
+                    ChangedFacts = FactDependencyMask.All,
+                    CachedScores = new float[_catalog.Intents.Count],
+                    CachedEligibility = new bool[_catalog.Intents.Count],
+                    CachedTargetEntityIds = new int[_catalog.Intents.Count],
+                    CachedTargetLocationIds = new int[_catalog.Intents.Count],
+                    CooldownActionHashes = new int[_catalog.Intents.Count],
+                    CooldownUntilMinutes = new long[_catalog.Intents.Count]
                 },
                 new AgentLocation
                 {
@@ -98,7 +117,7 @@ public sealed class AgentSpawner
                     TotalTravelMinutes = assignment.Route.TravelMinutes,
                     RoutePosition = 0,
                     RemainingTravelMinutes = 0f,
-                    Mode = AgentTravelMode.AtHome
+                    Mode = AgentTravelMode.Stationary
                 },
                 Tags.Get<Tier1LodTag>());
 

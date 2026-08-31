@@ -10,8 +10,10 @@ namespace ProxyState;
 public static class Program
 {
     [STAThread]
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
+        if (ContentValidation.IsRequested(args))
+            return ContentValidation.Run(args, Console.Out, Console.Error);
         var debugMode = DebugMode.IsEnabled(args);
         var contentDirectory = Path.Combine(AppContext.BaseDirectory, "data");
         var catalog = ContentCatalog.Load(contentDirectory);
@@ -26,8 +28,9 @@ public static class Program
         var systems = new SystemRoot(store)
         {
             clock,
-            new CommutingSystem(catalog, clock.ClockEntity),
-            new FatigueStressSystem(catalog.AgentAttributes),
+            new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode),
+            new IntentExecutionSystem(store, catalog, clock.ClockEntity),
+            new ActivityEffectsSystem(catalog, clock.ClockEntity),
             new InteractionSystem(catalog, new Random())
         };
 
@@ -74,5 +77,6 @@ public static class Program
             rlImGui.Shutdown();
             Raylib.CloseWindow();
         }
+        return 0;
     }
 }

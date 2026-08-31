@@ -55,11 +55,62 @@ public struct EdgeData : IComponent
 
 public struct AgentState : IComponent
 {
-    public int CurrentActionHash;
     // A secret state is independent from the public action so an agent can
     // appear to be working while covertly performing another activity.
     // Hash zero is reserved for the content-defined None state.
     public int SecretStateHash;
+}
+
+// An intention is the outcome of deliberation. It is deliberately separate
+// from both the activity currently being performed and its state effects.
+public struct IntentionState : IComponent
+{
+    public int ActionHash;
+    public int TargetEntityId;
+    public int TargetLocationId;
+    public long SelectedAtMinute;
+    public float Utility;
+}
+
+// Phases describe execution mechanics only. The activity's domain meaning is
+// supplied by ActivityTypeHash from the content catalog.
+public enum ActivityPhase : byte
+{
+    Idle,
+    Moving,
+    Performing,
+    Blocked
+}
+
+public struct ActivityState : IComponent
+{
+    // This public action moved out of AgentState. SecretStateHash therefore
+    // remains an independent covert/public boundary.
+    public int ActionHash;
+    public int ActivityTypeHash;
+    public ActivityPhase Phase;
+    public long StartedAtMinute;
+}
+
+public struct DecisionState : IComponent
+{
+    public long LastConsideredMinute;
+    public bool Dirty;
+    public FactDependencyMask ChangedFacts;
+    public long EvaluationCount;
+    public float[] CachedScores;
+    public bool[] CachedEligibility;
+    public int[] CachedTargetEntityIds;
+    public int[] CachedTargetLocationIds;
+    // Debug diagnostics are allocated only when the decision system is created
+    // with diagnostics enabled. They never cross into player intelligence.
+    public float[][] CachedUtilityContributions;
+    public float[][] CachedTraitContributions;
+    public string[] CachedRejectedPredicates;
+    // Parallel arrays avoid a dictionary allocation per agent. There are only
+    // three candidates in this first slice.
+    public int[] CooldownActionHashes;
+    public long[] CooldownUntilMinutes;
 }
 
 public struct WorldTime : IComponent
@@ -103,10 +154,8 @@ public struct AgentNetworkMembership : ILinkRelation
 
 public enum AgentTravelMode : byte
 {
-    AtHome,
-    TravellingToWork,
-    AtWork,
-    TravellingHome
+    Stationary,
+    Travelling
 }
 
 public struct AgentTravel : IComponent
@@ -117,6 +166,7 @@ public struct AgentTravel : IComponent
     public int TotalTravelMinutes;
     public int RoutePosition;
     public float RemainingTravelMinutes;
+    public int DestinationLocationId;
     public AgentTravelMode Mode;
 }
 
