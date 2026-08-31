@@ -46,6 +46,36 @@ public sealed class IntentCompilerTests
     }
 
     [Fact]
+    public void CatalogBuildsDenseCandidateIndexesAtStartup()
+    {
+        var intents = LoadCatalog().Intents;
+        var work = intents.All.Single(intent => intent.Id == "work");
+        var rest = intents.All.Single(intent => intent.Id == "rest");
+        var socialize = intents.All.Single(intent => intent.Id == "socialize");
+
+        Assert.Equal(3, intents.Candidates.Global.Count);
+        Assert.False(intents.Candidates.Global.Contains(intents.Fallback.RuntimeIndex));
+        var noSocial = intents.Candidates.GetCandidates(new(true, true, true, false));
+        Assert.True(noSocial.Contains(work.RuntimeIndex));
+        Assert.True(noSocial.Contains(rest.RuntimeIndex));
+        Assert.False(noSocial.Contains(socialize.RuntimeIndex));
+        var noWorkplace = intents.Candidates.GetCandidates(new(true, true, false, true));
+        Assert.False(noWorkplace.Contains(work.RuntimeIndex));
+    }
+
+    [Fact]
+    public void CandidateBitsetsCanBeIntersectedWithoutStringOrHashLookups()
+    {
+        var candidates = LoadCatalog().Intents.Candidates;
+        var intersection = candidates.Global.Intersect(candidates.AvailableWithoutSocialRelations);
+
+        Assert.Equal(candidates.GetCandidates(new(true, true, true, false)).EnumerateSetBits(),
+            intersection.EnumerateSetBits());
+        Assert.Throws<ArgumentException>(() => intersection.Intersect(
+            IntentBitSet.FromIndexes(intersection.Capacity + 1, Array.Empty<int>())));
+    }
+
+    [Fact]
     public void MissingFallbackFailsWithAPathAwareMessage()
     {
         using var content = MutableContent.Create();

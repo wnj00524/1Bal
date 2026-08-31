@@ -291,6 +291,15 @@ hashes, and a dense `ushort RuntimeIndex`. `CompiledIntentCatalog` owns the
 index-ordered array and a hash-to-index map; simulation systems consume this
 catalog rather than mutable authoring trees.
 
+`IntentBitSet` maps the same dense runtime index to one bit in a packed
+`ulong[]`. `IntentCandidateIndex`, built by `CompiledIntentCatalog`, owns the
+global non-fallback set and the sets that remain available without a job, home,
+workplace, or social relation. Public immutable intersections support tooling
+and tests. The decision hot path instead intersects words through a struct
+enumerator, visiting set bits without allocating or scanning the compiled
+intent array. Target/executor contracts are the source of these conservative
+prerequisites; content authors do not maintain a second set of flags.
+
 Exactly one authoring definition must set `fallback: true`. Compilation requires
 that fallback to use target kind `none` and executor `wait`, producing a safe
 no-op decision when ordinary candidates are unavailable. Compiler failures use

@@ -70,3 +70,40 @@ regression from retaining per-agent candidate results while the minute fallback
 remains enabled. The selective path already more than offsets CPU cost for the
 measured mutation; M14 candidate indexing should address the remaining target
 resolution and catalogue-scan allocation before the fallback is retired.
+
+## Milestone 14 candidate-index scaling
+
+Measured on 2026-08-31 in the same Linux x64 container class with the Release
+build and .NET 10 major roll-forward. The focused benchmark models 1,000 agent
+contexts and repeats candidate enumeration 100 times. One in four dense runtime
+indexes is present, spread through every packed word, so visits grow with the
+intersected candidate population rather than requiring an intent-object scan.
+
+```text
+DOTNET_ROLL_FORWARD=Major /root/.dotnet/dotnet test ProxyState.sln -c Release \
+  --filter 'FullyQualifiedName~CandidateIndexScalingTests|FullyQualifiedName~DecisionPerformanceBaselineTests' \
+  --logger 'console;verbosity=detailed'
+```
+
+| Catalogue intents | Indexed candidates | Candidate visits | Elapsed |
+|---:|---:|---:|---:|
+| 3 | 1 | 100,000 | 35.596 ms |
+| 32 | 8 | 800,000 | 65.104 ms |
+| 128 | 32 | 3,200,000 | 54.383 ms |
+| 256 | 64 | 6,400,000 | 115.732 ms |
+
+Elapsed results are intentionally treated as noisy microbenchmark observations;
+the deterministic visit counts are the scaling assertion. Increasing the
+catalogue from 128 to 256 doubles both selected candidates and visits rather
+than evaluating all 256 definitions for every agent.
+
+The production 1,000-agent, sixty-minute benchmark on the same run measured a
+442.403 ms full pass with 101,124,056 B allocated (7,373.4 ns and 1,685.40 B per
+agent decision), and a 197.295 ms fatigue-selective pass with 22,046,968 B
+allocated. Compared with the recorded M13 run, full-pass elapsed time improved
+55.5% and allocation improved 43.2%; the selective path improved 52.9% and
+77.7%, respectively. The current three ordinary intents all have their required
+agent context in the generated population, so evaluation counts do not fall in
+that production fixture yet. The improvement comes from word-indexed traversal
+and removing per-agent candidate LINQ arrays/sorts. Larger sparse catalogues are
+where candidate rejection reduces evaluations as well.

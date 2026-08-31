@@ -28,7 +28,9 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly EntityStore _store;
     private readonly Entity _clock;
     private readonly Dictionary<int, JobDefinition> _jobs;
-    private readonly CandidateEvaluator[] _candidates;
+    private readonly CandidateEvaluator?[] _candidatesByIndex;
+    private readonly Dictionary<int, CandidateEvaluator> _candidatesByHash;
+    private readonly IntentCandidateIndex _candidateIndex;
     private readonly CompiledIntent _fallback;
 
     public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock)
@@ -38,7 +40,15 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _clock = clock;
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
-        _candidates = catalog.Intents.All.Where(intent => !intent.Fallback).Select(intent => new CandidateEvaluator(intent)).ToArray();
+        _candidateIndex = catalog.Intents.Candidates;
+        _candidatesByIndex = new CandidateEvaluator?[catalog.Intents.Count];
+        _candidatesByHash = new();
+        foreach (var intent in catalog.Intents.All.Where(intent => !intent.Fallback))
+        {
+            var evaluator = new CandidateEvaluator(intent);
+            _candidatesByIndex[intent.RuntimeIndex] = evaluator;
+            _candidatesByHash.Add(intent.Hash, evaluator);
+        }
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -59,7 +69,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
             // Re-resolving only the active definition makes target loss an immediate,
             // data-driven invalidation rather than a special case for an action ID.
-            var active = Array.Find(_candidates, item => item.Definition.Hash == currentActionHash);
+            _candidatesByHash.TryGetValue(currentActionHash, out var active);
             if (active is not null)
             {
                 var selected = targets.Resolve(entity.Id, active.Definition.Target, context);
@@ -72,11 +82,14 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             EnsureCache(ref decision);
             var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
             var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
+            var candidateContext = new IntentCandidateContext(true, location.HomeLocationId != 0,
+                location.WorkLocationId != 0, targets.HasSocialRelations(entity.Id));
             decision.Dirty = false;
             decision.ChangedFacts = FactDependencyMask.None;
             decision.LastConsideredMinute = minute;
-            foreach (var candidate in _candidates)
+            foreach (var runtimeIndex in _candidateIndex.EnumerateCandidates(candidateContext))
             {
+                var candidate = _candidatesByIndex[runtimeIndex]!;
                 if (!fullPass && !candidate.Definition.Dependencies.Intersects(changed)) continue;
                 var result = candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context));
                 var index = candidate.Definition.RuntimeIndex;
@@ -86,18 +99,16 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                 decision.CachedTargetLocationIds[index] = result.TargetLocationId;
                 decision.EvaluationCount++;
             }
-            var snapshot = decision;
-            var eligible = _candidates
-                .Select(candidate => CachedResult(candidate.Definition, snapshot))
-                .Where(result => result.Eligible && !IsCoolingDown(result.Action.Hash, minute, snapshot))
-                .OrderByDescending(result => result.Score)
-                .ThenBy(result => result.Action.Hash)
-                .ToArray();
-            if (eligible.Length == 0)
-                eligible = new[] { new DecisionResult(_fallback.RuntimeIndex, _fallback, true, _fallback.BaseUtility, 0, 0) };
-
-            var winner = eligible[0];
-            var current = eligible.FirstOrDefault(result => result.Action.Hash == currentActionHash);
+            var winner = new DecisionResult(_fallback.RuntimeIndex, _fallback, true, _fallback.BaseUtility, 0, 0);
+            DecisionResult current = default;
+            foreach (var runtimeIndex in _candidateIndex.EnumerateCandidates(candidateContext))
+            {
+                var result = CachedResult(_candidatesByIndex[runtimeIndex]!.Definition, decision);
+                if (!result.Eligible || IsCoolingDown(result.Action.Hash, minute, decision)) continue;
+                if (result.Action.Hash == currentActionHash) current = result;
+                if (winner.Action.Fallback || result.Score > winner.Score ||
+                    result.Score == winner.Score && result.Action.Hash < winner.Action.Hash) winner = result;
+            }
             if (currentActionHash != 0 && winner.Action.Hash != currentActionHash)
             {
                 var currentDefinition = active?.Definition;
@@ -121,7 +132,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
     private void EnsureCache(ref DecisionState state)
     {
-        var count = _candidates.Length + 1;
+        var count = _candidatesByIndex.Length;
         if (state.CachedScores?.Length == count && state.CachedEligibility?.Length == count &&
             state.CachedTargetEntityIds?.Length == count && state.CachedTargetLocationIds?.Length == count) return;
         state.CachedScores = new float[count]; state.CachedEligibility = new bool[count];
@@ -205,6 +216,8 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             }
             return best?.Target ?? default;
         }
+
+        public bool HasSocialRelations(int actorId) => _social.ContainsKey(actorId);
 
         private static int Compare(float[] left, int leftId, float[] right, int rightId, IReadOnlyList<CompiledTargetRank> ranks)
         {
