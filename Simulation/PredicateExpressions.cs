@@ -11,7 +11,6 @@ public sealed record PredicateDefinition
     public List<PredicateDefinition>? Inputs { get; init; }
     public NumericExpressionDefinition? Left { get; init; }
     public NumericExpressionDefinition? Right { get; init; }
-    public CompiledPredicate? CompiledPredicate { get; internal set; }
 }
 
 internal enum PredicateOpcode : byte { BooleanFact, Constant, And, Or, Not, Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual }

@@ -151,10 +151,10 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 12: Intent Compiler and Structural Validation](https://github.com/wnj00524/proxystate/milestone/13)
 
-- [ ] [M12.1 — Introduce `IntentCompiler`](https://github.com/wnj00524/proxystate/issues/62)
-- [ ] [M12.2 — Add dense runtime indexes](https://github.com/wnj00524/proxystate/issues/63)
-- [ ] [M12.3 — Replace semantic validation](https://github.com/wnj00524/proxystate/issues/64)
-- [ ] [M12.4 — Introduce fallback intent](https://github.com/wnj00524/proxystate/issues/65)
+- [x] [M12.1 — Introduce `IntentCompiler`](https://github.com/wnj00524/proxystate/issues/62)
+- [x] [M12.2 — Add dense runtime indexes](https://github.com/wnj00524/proxystate/issues/63)
+- [x] [M12.3 — Replace semantic validation](https://github.com/wnj00524/proxystate/issues/64)
+- [x] [M12.4 — Introduce fallback intent](https://github.com/wnj00524/proxystate/issues/65)
 
 ## [Milestone 13: Dependency-Driven Reevaluation](https://github.com/wnj00524/proxystate/milestone/14)
 

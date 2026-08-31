@@ -12,7 +12,7 @@ public sealed class PredicateExpressionTests
     {
         var catalog = ContentCatalog.Load(Path.Combine(AppContext.BaseDirectory, "data"));
 
-        Assert.All(catalog.Actions, action => Assert.NotNull(action.Eligibility.CompiledPredicate));
+        Assert.All(catalog.Intents.All, intent => Assert.NotNull(intent.Eligibility));
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public sealed class PredicateExpressionTests
 
         var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
 
-        Assert.Contains("Action 'work'", exception.Message);
+        Assert.Contains("actions.json:actions[0].eligibility", exception.Message);
         Assert.Contains("numeric and cannot be used as a boolean", exception.Message);
     }
 

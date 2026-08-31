@@ -65,8 +65,8 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         ArgumentNullException.ThrowIfNull(catalog);
         _world = catalog.World;
         _clockEntity = clockEntity;
-        _executors = catalog.Actions.ToDictionary(action => action.Hash, action => action.Execution.Kind);
-        _activityTypes = catalog.Actions.ToDictionary(action => action.Hash, action => action.Activity.Hash);
+        _executors = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Executor);
+        _activityTypes = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Activity.Hash);
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 

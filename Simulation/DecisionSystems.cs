@@ -11,7 +11,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly Entity _clock;
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CandidateEvaluator[] _candidates;
-    private readonly Dictionary<string, long> _traitBits;
+    private readonly CompiledIntent _fallback;
 
     public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock)
     {
@@ -19,8 +19,8 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         ArgumentNullException.ThrowIfNull(catalog);
         _clock = clock;
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
-        _traitBits = catalog.Traits.ToDictionary(trait => trait.Id, trait => trait.Bit, StringComparer.OrdinalIgnoreCase);
-        _candidates = catalog.Actions.Select((action, index) => new CandidateEvaluator(index, action)).ToArray();
+        _fallback = catalog.Intents.Fallback;
+        _candidates = catalog.Intents.All.Where(intent => !intent.Fallback).Select(intent => new CandidateEvaluator(intent)).ToArray();
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -54,12 +54,13 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             decision.LastConsideredMinute = minute;
             var snapshot = decision;
             var eligible = _candidates
-                .Select(candidate => candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context), _traitBits))
+                .Select(candidate => candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context)))
                 .Where(result => result.Eligible && !IsCoolingDown(result.Action.Hash, minute, snapshot))
                 .OrderByDescending(result => result.Score)
                 .ThenBy(result => result.Action.Hash)
                 .ToArray();
-            if (eligible.Length == 0) return;
+            if (eligible.Length == 0)
+                eligible = new[] { new DecisionResult(_fallback.RuntimeIndex, _fallback, true, _fallback.BaseUtility, 0, 0) };
 
             var winner = eligible[0];
             var current = eligible.FirstOrDefault(result => result.Action.Hash == currentActionHash);
@@ -92,7 +93,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         return false;
     }
 
-    private static void SetCooldown(ActionDefinition action, long minute, ref DecisionState state)
+    private static void SetCooldown(CompiledIntent action, long minute, ref DecisionState state)
     {
         if (action.Controls.CooldownMinutes == 0) return;
         var index = Array.IndexOf(state.CooldownActionHashes, action.Hash);
@@ -102,7 +103,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         state.CooldownUntilMinutes[index] = minute + action.Controls.CooldownMinutes;
     }
 
-    internal readonly record struct DecisionResult(int IntentIndex, ActionDefinition Action, bool Eligible,
+    internal readonly record struct DecisionResult(int IntentIndex, CompiledIntent Action, bool Eligible,
         float Score, int TargetEntityId, int TargetLocationId);
     private readonly record struct TargetSelection(int EntityId, int LocationId, float Affinity);
     private readonly record struct DecisionContext(WorldTime Time, JobDefinition Job, float[] Attributes,
@@ -126,15 +127,15 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             }
         }
 
-        public TargetSelection Resolve(int actorId, TargetDefinition definition, DecisionContext context)
+        public TargetSelection Resolve(int actorId, CompiledTargetSelector definition, DecisionContext context)
         {
-            if (definition.Kind.Equals("none", StringComparison.OrdinalIgnoreCase)) return default;
-            if (definition.Kind.Equals("location", StringComparison.OrdinalIgnoreCase))
-                return new TargetSelection(0, definition.Value switch
+            if (definition.Kind == TargetKind.None) return default;
+            if (definition.Kind == TargetKind.Location)
+                return new TargetSelection(0, definition.Location switch
                 {
-                    "agent.location.home" => context.Location.HomeLocationId,
-                    "agent.location.work" => context.Location.WorkLocationId,
-                    "agent.location.current" => context.Location.CurrentLocationId,
+                    LocationValue.Home => context.Location.HomeLocationId,
+                    LocationValue.Work => context.Location.WorkLocationId,
+                    LocationValue.Current => context.Location.CurrentLocationId,
                     _ => 0
                 }, 0);
             if (!_social.TryGetValue(actorId, out var edges)) return default;
@@ -146,8 +147,8 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                 if (!_locations.TryGetValue(edge.Id, out var targetLocation)) continue;
                 var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes,
                     context.Location, context.Travel, edge.Id, edge.Affinity, targetLocation);
-                if (query.Requirements.Any(requirement => !requirement.CompiledPredicate!.Evaluate(facts))) continue;
-                var ranks = query.RankBy.Select(rank => rank.CompiledValue!.Evaluate(facts)).ToArray();
+                if (query.Requirements.Any(requirement => !requirement.Evaluate(facts))) continue;
+                var ranks = query.RankBy.Select(rank => rank.Value.Evaluate(facts)).ToArray();
                 var target = new TargetSelection(edge.Id, context.Location.CurrentLocationId, edge.Affinity);
                 if (best is null || Compare(ranks, edge.Id, best.Value.Ranks, best.Value.Target.EntityId, query.RankBy) < 0)
                     best = (target, ranks);
@@ -155,12 +156,12 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             return best?.Target ?? default;
         }
 
-        private static int Compare(float[] left, int leftId, float[] right, int rightId, IReadOnlyList<TargetRankDefinition> ranks)
+        private static int Compare(float[] left, int leftId, float[] right, int rightId, IReadOnlyList<CompiledTargetRank> ranks)
         {
             for (var index = 0; index < left.Length; index++)
             {
                 var comparison = left[index].CompareTo(right[index]);
-                if (comparison != 0) return ranks[index].Order == "descending" ? -comparison : comparison;
+                if (comparison != 0) return ranks[index].Order == SortOrder.Descending ? -comparison : comparison;
             }
             return leftId.CompareTo(rightId);
         }
@@ -168,22 +169,21 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
     private sealed class CandidateEvaluator
     {
-        public CandidateEvaluator(int index, ActionDefinition definition) { Index = index; Definition = definition; }
-        public int Index { get; }
-        public ActionDefinition Definition { get; }
+        public CandidateEvaluator(CompiledIntent definition) { Definition = definition; }
+        public CompiledIntent Definition { get; }
 
-        public DecisionResult Evaluate(DecisionContext context, TargetSelection target, IReadOnlyDictionary<string, long> traits)
+        public DecisionResult Evaluate(DecisionContext context, TargetSelection target)
         {
             var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.Location,
                 context.Travel, target.EntityId, target.Affinity, target.LocationId);
-            if (!Definition.Eligibility.CompiledPredicate!.Evaluate(facts))
-                return new DecisionResult(Index, Definition, false, float.NegativeInfinity, target.EntityId, target.LocationId);
+            if (!Definition.Eligibility.Evaluate(facts))
+                return new DecisionResult(Definition.RuntimeIndex, Definition, false, float.NegativeInfinity, target.EntityId, target.LocationId);
             var score = Definition.BaseUtility;
             foreach (var input in Definition.UtilityInputs)
-                score += input.Weight * Curve(input.Curve, input.CompiledExpression!.Evaluate(facts));
+                score += input.Weight * Curve(input.Curve, input.Expression.Evaluate(facts));
             foreach (var modifier in Definition.TraitModifiers)
-                if ((context.TraitMask & traits[modifier.Trait]) != 0) score += modifier.Modifier;
-            return new DecisionResult(Index, Definition, true, score, target.EntityId, target.LocationId);
+                if ((context.TraitMask & modifier.TraitBit) != 0) score += modifier.Modifier;
+            return new DecisionResult(Definition.RuntimeIndex, Definition, true, score, target.EntityId, target.LocationId);
         }
 
         private static float Curve(IReadOnlyList<ResponsePoint> points, float value)
@@ -214,8 +214,8 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
         ArgumentNullException.ThrowIfNull(catalog);
         _clock = clock;
         _schema = catalog.AgentAttributes;
-        _effects = catalog.Actions.ToDictionary(action => (action.Hash, action.Activity.Hash), action => action.Effects
-            .Select(effect => (_schema.GetIndex(effect.Attribute), effect.PerMinute)).ToArray());
+        _effects = catalog.Intents.All.ToDictionary(intent => (intent.Hash, intent.Activity.Hash), intent => intent.Effects
+            .Select(effect => (effect.AttributeIndex, effect.PerMinute)).ToArray());
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 

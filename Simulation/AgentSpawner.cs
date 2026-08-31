@@ -55,8 +55,7 @@ public sealed class AgentSpawner
         }
 
         var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
-        var restActionHash = _catalog.Actions.Single(action =>
-            string.Equals(action.Id, "rest", StringComparison.OrdinalIgnoreCase)).Hash;
+        var fallback = _catalog.Intents.Fallback;
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -87,19 +86,19 @@ public sealed class AgentSpawner
                 {
                     SecretStateHash = 0
                 },
-                new IntentionState { ActionHash = restActionHash },
+                new IntentionState { ActionHash = fallback.Hash },
                 new ActivityState
                 {
-                    ActionHash = restActionHash,
-                    ActivityTypeHash = _catalog.Actions.Single(action => action.Hash == restActionHash).Activity.Hash,
+                    ActionHash = fallback.Hash,
+                    ActivityTypeHash = fallback.Activity.Hash,
                     Phase = ActivityPhase.Performing
                 },
                 new DecisionState
                 {
                     LastConsideredMinute = -1,
                     Dirty = true,
-                    CooldownActionHashes = new int[_catalog.Actions.Count],
-                    CooldownUntilMinutes = new long[_catalog.Actions.Count]
+                    CooldownActionHashes = new int[_catalog.Intents.Count],
+                    CooldownUntilMinutes = new long[_catalog.Intents.Count]
                 },
                 new AgentLocation
                 {
