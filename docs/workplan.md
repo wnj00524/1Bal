@@ -158,10 +158,10 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 13: Dependency-Driven Reevaluation](https://github.com/wnj00524/proxystate/milestone/14)
 
-- [ ] [M13.1 — Introduce `FactDependencyMask`](https://github.com/wnj00524/proxystate/issues/66)
-- [ ] [M13.2 — Track changed fact categories](https://github.com/wnj00524/proxystate/issues/67)
-- [ ] [M13.3 — Selective intent reevaluation](https://github.com/wnj00524/proxystate/issues/68)
-- [ ] [M13.4 — Benchmark dependency-driven decisions](https://github.com/wnj00524/proxystate/issues/69)
+- [x] [M13.1 — Introduce `FactDependencyMask`](https://github.com/wnj00524/proxystate/issues/66)
+- [x] [M13.2 — Track changed fact categories](https://github.com/wnj00524/proxystate/issues/67)
+- [x] [M13.3 — Selective intent reevaluation](https://github.com/wnj00524/proxystate/issues/68)
+- [x] [M13.4 — Benchmark dependency-driven decisions](https://github.com/wnj00524/proxystate/issues/69)
 
 ## [Milestone 14: Candidate Indexing](https://github.com/wnj00524/proxystate/milestone/15)
 

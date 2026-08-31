@@ -97,6 +97,11 @@ public sealed class AgentSpawner
                 {
                     LastConsideredMinute = -1,
                     Dirty = true,
+                    ChangedFacts = FactDependencyMask.All,
+                    CachedScores = new float[_catalog.Intents.Count],
+                    CachedEligibility = new bool[_catalog.Intents.Count],
+                    CachedTargetEntityIds = new int[_catalog.Intents.Count],
+                    CachedTargetLocationIds = new int[_catalog.Intents.Count],
                     CooldownActionHashes = new int[_catalog.Intents.Count],
                     CooldownUntilMinutes = new long[_catalog.Intents.Count]
                 },

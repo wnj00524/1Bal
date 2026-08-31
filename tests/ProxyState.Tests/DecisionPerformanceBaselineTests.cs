@@ -41,8 +41,33 @@ public sealed class DecisionPerformanceBaselineTests(ITestOutputHelper output)
         }
         stopwatch.Stop();
         var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        var fullEvaluations = store.Query<DecisionState>().Entities.Sum(entity =>
+            entity.GetComponent<DecisionState>().EvaluationCount);
 
         output.WriteLine($"population={population}; minutes={measuredMinutes}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={allocatedBytes}; nsPerAgentDecision={stopwatch.Elapsed.TotalNanoseconds / (population * measuredMinutes):F1}; bytesPerAgentDecision={(double)allocatedBytes / (population * measuredMinutes):F2}");
+
+        // Keep the clock fixed and dirty only fatigue. This exercises the M13
+        // selective path against the same warmed population and catalogue.
+        var fatigueIndex = catalog.AgentAttributes.GetIndex("fatigue");
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        stopwatch.Restart();
+        for (var index = 0; index < measuredMinutes; index++)
+        {
+            foreach (var entity in store.Query<DecisionState>().Entities)
+            {
+                ref var decision = ref entity.GetComponent<DecisionState>();
+                DecisionInvalidation.SignalAttribute(ref decision, fatigueIndex);
+            }
+            root.Update(default);
+        }
+        stopwatch.Stop();
+        var selectiveAllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        var totalEvaluations = store.Query<DecisionState>().Entities.Sum(entity =>
+            entity.GetComponent<DecisionState>().EvaluationCount);
+        var selectiveEvaluations = totalEvaluations - fullEvaluations;
+        output.WriteLine($"selectiveElapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; selectiveAllocatedBytes={selectiveAllocatedBytes}; selectiveEvaluations={selectiveEvaluations}; fullEvaluations={fullEvaluations}");
+        Assert.True(selectiveEvaluations < population * measuredMinutes * 3L);
         Assert.Equal(population, store.Query<IntentionState>().Count);
     }
 }

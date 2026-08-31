@@ -51,3 +51,22 @@ a full consideration pass for every Tier 1 agent. Allocation is measured with
 `GC.GetAllocatedBytesForCurrentThread`; it is practical and reproducible but
 does not include allocations performed by other threads. Run the same command
 and environment for later comparisons.
+
+## Milestone 13 dependency-driven comparison
+
+Measured on 2026-08-31 in the same container class, using .NET 10 roll-forward
+to execute the `net8.0` Release test because the .NET 8 runtime was unavailable.
+The benchmark first runs the safety-fallback full pass, then holds the minute
+fixed and signals only the fatigue attribute for sixty updates.
+
+| Mode | Intent evaluations | Elapsed | Allocated | Change from current full pass |
+|---|---:|---:|---:|---:|
+| M13 full-minute fallback | 180,000 | 994.105 ms | 177,969,688 B | — |
+| M13 fatigue-selective | 120,000 | 419.300 ms | 98,793,688 B | -33.3% evaluations, -57.8% CPU, -44.5% allocation |
+
+The full-minute path is slower and allocates more than the M6 measurement
+(+15.1% elapsed and +82.5% allocation). This is an explicitly recorded
+regression from retaining per-agent candidate results while the minute fallback
+remains enabled. The selective path already more than offsets CPU cost for the
+measured mutation; M14 candidate indexing should address the remaining target
+resolution and catalogue-scan allocation before the fallback is retired.

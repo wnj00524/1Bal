@@ -32,6 +32,20 @@ public sealed class IntentCompilerTests
     }
 
     [Fact]
+    public void CompilerDerivesDependenciesWithoutAuthoringDuplication()
+    {
+        var catalog = LoadCatalog();
+        var work = catalog.Intents.All.Single(intent => intent.Id == "work");
+        var socialize = catalog.Intents.All.Single(intent => intent.Id == "socialize");
+        var fatigue = catalog.AgentAttributes.GetIndex("fatigue");
+
+        Assert.True(work.Dependencies.Intersects(new(FactDependencyCategory.Time)));
+        Assert.True(work.Dependencies.Intersects(new(FactDependencyCategory.Attributes, 1UL << fatigue)));
+        Assert.True(socialize.Dependencies.Intersects(new(FactDependencyCategory.SocialTargets)));
+        Assert.True(socialize.Dependencies.Intersects(new(FactDependencyCategory.TargetAffinity)));
+    }
+
+    [Fact]
     public void MissingFallbackFailsWithAPathAwareMessage()
     {
         using var content = MutableContent.Create();

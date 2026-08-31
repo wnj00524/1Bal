@@ -19,6 +19,45 @@ public enum FactKind : byte
     JobIsWorkDay
 }
 
+[Flags]
+public enum FactDependencyCategory : ushort
+{
+    None = 0, Time = 1 << 0, Schedule = 1 << 1, Attributes = 1 << 2,
+    Traits = 1 << 3, Location = 1 << 4, Travel = 1 << 5,
+    SocialTargets = 1 << 6, TargetAffinity = 1 << 7, TargetLocation = 1 << 8,
+    All = ushort.MaxValue
+}
+
+// Attribute indexes are tracked separately from broad categories so changing
+// fatigue, for example, does not wake an intent which only reads wealth.
+public readonly record struct FactDependencyMask(FactDependencyCategory Categories, ulong AttributeBits = 0)
+{
+    public static FactDependencyMask None => default;
+    public static FactDependencyMask All => new(FactDependencyCategory.All, ulong.MaxValue);
+    public bool Intersects(FactDependencyMask other)
+    {
+        var shared = Categories & other.Categories;
+        return (shared & ~FactDependencyCategory.Attributes) != 0 ||
+            ((shared & FactDependencyCategory.Attributes) != 0 && (AttributeBits & other.AttributeBits) != 0);
+    }
+    public static FactDependencyMask operator |(FactDependencyMask left, FactDependencyMask right) =>
+        new(left.Categories | right.Categories, left.AttributeBits | right.AttributeBits);
+
+    internal static FactDependencyMask From(FactId fact) => fact.Kind switch
+    {
+        FactKind.AgentAttribute => new(FactDependencyCategory.Attributes,
+            fact.Index < 64 ? 1UL << fact.Index : ulong.MaxValue),
+        FactKind.TimeMinuteOfDay or FactKind.TimeDayOfWeek => new(FactDependencyCategory.Time),
+        FactKind.JobWorkStartMinute or FactKind.JobWorkEndMinute or FactKind.JobIsWorkDay => new(FactDependencyCategory.Schedule),
+        FactKind.AgentLocationCurrent or FactKind.AgentLocationHome or FactKind.AgentLocationWork => new(FactDependencyCategory.Location),
+        FactKind.TravelReachable => new(FactDependencyCategory.Travel),
+        FactKind.TargetAffinity => new(FactDependencyCategory.TargetAffinity),
+        FactKind.TargetEntity => new(FactDependencyCategory.SocialTargets),
+        FactKind.TargetLocationCurrent => new(FactDependencyCategory.TargetLocation),
+        _ => None
+    };
+}
+
 public enum FactValueKind : byte { Number, Boolean }
 
 public readonly record struct FactId(FactKind Kind, int Index = 0);
@@ -93,11 +132,14 @@ public sealed class CompiledNumericExpression
     public const int MaximumInstructions = 64;
     private readonly NumericInstruction[] _instructions;
     private readonly int _stackSize;
+    public FactDependencyMask Dependencies { get; }
 
     private CompiledNumericExpression(NumericInstruction[] instructions, int stackSize)
     {
         _instructions = instructions;
         _stackSize = stackSize;
+        Dependencies = instructions.Aggregate(FactDependencyMask.None,
+            (mask, instruction) => mask | FactDependencyMask.From(instruction.Fact));
     }
 
     public static CompiledNumericExpression Compile(NumericExpressionDefinition? expression, FactRegistry facts)

@@ -110,7 +110,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                     BeginTravel(location.CurrentLocationId, destination.Value, ref travel, ref decision);
                 if (travel.Mode == AgentTravelMode.Travelling &&
                     AdvanceTravel(ref location, ref travel, elapsedMinutes))
-                    decision.Dirty = true;
+                    DecisionInvalidation.SignalLocation(ref decision);
             }
 
             if (location.CurrentLocationId != destination.Value)
@@ -140,15 +140,15 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                 return location.CurrentLocationId;
             case ExecutorKind.PerformAtLocation:
                 if (intention.TargetLocationId != 0) return intention.TargetLocationId;
-                decision.Dirty = true;
+                DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
             case ExecutorKind.PerformWithEntity:
                 if (intention.TargetEntityId != 0 && entityLocations.TryGetValue(intention.TargetEntityId, out var targetLocation))
                     return targetLocation;
-                decision.Dirty = true;
+                DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
             default:
-                decision.Dirty = true;
+                DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
         }
     }
@@ -178,25 +178,27 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
 
     private bool AdvanceTravel(ref AgentLocation location, ref AgentTravel travel, double elapsedMinutes)
     {
+        var locationChanged = false;
         while (elapsedMinutes > 0d && travel.Mode == AgentTravelMode.Travelling)
         {
             if (travel.RemainingTravelMinutes > elapsedMinutes)
             {
                 travel.RemainingTravelMinutes -= (float)elapsedMinutes;
-                return false;
+                return locationChanged;
             }
             elapsedMinutes -= travel.RemainingTravelMinutes;
             travel.RoutePosition++;
             location.CurrentLocationId = travel.RouteLocationIds[travel.RoutePosition];
+            locationChanged = true;
             if (travel.RoutePosition == travel.RouteLocationIds.Length - 1)
             {
                 CancelTravel(ref travel);
-                return true;
+                return locationChanged;
             }
             travel.RemainingTravelMinutes = _world.GetTravelMinutes(
                 travel.RouteLocationIds[travel.RoutePosition], travel.RouteLocationIds[travel.RoutePosition + 1]);
         }
-        return false;
+        return locationChanged;
     }
 
     private static void CancelTravel(ref AgentTravel travel)

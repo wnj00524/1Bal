@@ -25,11 +25,16 @@ public sealed class CompiledPredicate
     public const int MaximumInstructions = 64;
     private readonly PredicateInstruction[] _instructions;
     private readonly int _stackSize;
+    public FactDependencyMask Dependencies { get; }
 
     private CompiledPredicate(PredicateInstruction[] instructions, int stackSize)
     {
         _instructions = instructions;
         _stackSize = stackSize;
+        Dependencies = instructions.Aggregate(FactDependencyMask.None, (mask, instruction) =>
+            mask | FactDependencyMask.From(instruction.Fact) |
+            (instruction.Left?.Dependencies ?? FactDependencyMask.None) |
+            (instruction.Right?.Dependencies ?? FactDependencyMask.None));
     }
 
     public static CompiledPredicate Compile(PredicateDefinition? predicate, FactRegistry facts)
