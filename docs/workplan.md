@@ -165,9 +165,9 @@ each issue also records its dependencies and verification expectations.
 
 ## [Milestone 14: Candidate Indexing](https://github.com/wnj00524/proxystate/milestone/15)
 
-- [ ] [M14.1 — Add intent candidate bitsets](https://github.com/wnj00524/proxystate/issues/70)
-- [ ] [M14.2 — Build static intent indexes](https://github.com/wnj00524/proxystate/issues/71)
-- [ ] [M14.3 — Add scaling benchmark](https://github.com/wnj00524/proxystate/issues/72)
+- [x] [M14.1 — Add intent candidate bitsets](https://github.com/wnj00524/proxystate/issues/70)
+- [x] [M14.2 — Build static intent indexes](https://github.com/wnj00524/proxystate/issues/71)
+- [x] [M14.3 — Add scaling benchmark](https://github.com/wnj00524/proxystate/issues/72)
 
 ## [Milestone 15: Tooling, Diagnostics, and Content Safety](https://github.com/wnj00524/proxystate/milestone/16)
 

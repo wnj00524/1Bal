@@ -240,4 +240,20 @@ leaking ECS entities into ordinary presentation code.
   wall-clock noise. CPU and allocation comparisons are recorded in
   `docs/decisionbaseline.md`.
 
+### 4.16 Candidate Indexing (Milestone 14)
+
+* `IntentCompiler` assigns the bit position as part of its existing dense
+  runtime indexing. `CompiledIntentCatalog` constructs candidate bitsets once
+  during content loading and excludes the fallback from ordinary candidates.
+* Static indexes conservatively remove intents whose required home, workplace,
+  social relation, or universal job context is absent. Runtime context is
+  reduced to booleans before bitset intersection; no authored strings are read.
+* `AgentDecisionSystem` enumerates the intersected set bits for reevaluation and
+  cached winner selection. Its struct enumerator avoids catalogue scans,
+  per-agent candidate arrays, LINQ sorting, and hot-path iterator allocation.
+  Final ordering remains score descending then stable action hash ascending.
+* The safe fallback is applied only when no indexed ordinary candidate remains
+  eligible. Dependency masks continue to decide which members of that candidate
+  set must be rescored on a same-minute update.
+
 ---
