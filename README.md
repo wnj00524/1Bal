@@ -33,6 +33,17 @@ Its ground-truth-only network section shows copied family/company memberships,
 resolved roles and supervisors, plus a network summary with anchor and member
 count. Player-facing dossiers receive none of this network ground truth.
 
+## Editing simulation data
+
+The files in `data` can be read and changed with a plain-text editor; changing
+them does not require changing the C# program. Start with the plain-English
+[guide to reading and editing data files](docs/editing-data.md). It explains
+the JSON punctuation, what every file and field means, how entries refer to one
+another, which identifying numbers must remain unique, and how to check a
+change without opening the game. The separate
+[intent authoring guide](docs/intent-authoring.md) is an advanced reference for
+the expression rules in `actions.json`.
+
 Every generated agent belongs to one synthetic family anchored at home and one
 company anchored at work. Families are flat; companies use a bounded,
 single-supervisor hierarchy. Runtime network entities and membership relations
