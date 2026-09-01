@@ -30,6 +30,7 @@ Make sure that design principles/data structures/GUI rules are documented in the
 
 ** Core ECS Systems (Logic):** can be found in docs/coreecs.md. When updating ECS logic, update this document to reflect the changes. 
 ** Data Structures: ** See docs/datastructs.md for data structures. When editing, adding or removing a data structure make sure to update this file to reflect the change.
+** Agent LOD Roadmap: ** See docs/agent-lod-roadmap.md for the decision-complete Milestones 17–20 implementation sequence, issue task cards, testing matrix, and agent workflow.
 
 ### Core ECS Systems
 
