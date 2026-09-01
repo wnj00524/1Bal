@@ -18,7 +18,36 @@ public static class DecisionInvalidation
     public static void SignalLocation(ref DecisionState state) => Signal(ref state,
         new(FactDependencyCategory.Location | FactDependencyCategory.Travel | FactDependencyCategory.TargetLocation));
     public static void SignalTargetAvailability(ref DecisionState state) => Signal(ref state,
-        new(FactDependencyCategory.SocialTargets | FactDependencyCategory.TargetAffinity | FactDependencyCategory.TargetLocation));
+        new(FactDependencyCategory.SocialTargets | FactDependencyCategory.NetworkTargets |
+            FactDependencyCategory.TargetAffinity | FactDependencyCategory.TargetAttributes |
+            FactDependencyCategory.TargetLocation | FactDependencyCategory.Coordination));
+}
+
+internal static class DecisionUtility
+{
+    public static float Evaluate(float baseUtility, IReadOnlyList<CompiledUtilityInput> inputs,
+        IReadOnlyList<CompiledTraitModifier> modifiers, long traitMask, in DecisionFactContext facts)
+    {
+        var score = baseUtility;
+        foreach (var input in inputs)
+            score += input.Weight * Curve(input.Curve, input.Expression.Evaluate(facts));
+        foreach (var modifier in modifiers)
+            if ((traitMask & modifier.TraitBit) != 0) score += modifier.Modifier;
+        return score;
+    }
+
+    public static float Curve(IReadOnlyList<ResponsePoint> points, float value)
+    {
+        if (value <= points[0].X) return points[0].Y;
+        for (var index = 1; index < points.Count; index++)
+        {
+            if (value > points[index].X) continue;
+            var previous = points[index - 1];
+            var amount = (value - previous.X) / (points[index].X - previous.X);
+            return previous.Y + amount * (points[index].Y - previous.Y);
+        }
+        return points[^1].Y;
+    }
 }
 
 // Target resolution and utility scoring operate entirely from compiled content.
@@ -86,7 +115,8 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
             var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
             var candidateContext = new IntentCandidateContext(true, location.HomeLocationId != 0,
-                location.WorkLocationId != 0, targets.HasSocialRelations(entity.Id));
+                location.WorkLocationId != 0, targets.HasSocialRelations(entity.Id),
+                targets.HasNetworkRelations(entity.Id));
             decision.Dirty = false;
             decision.ChangedFacts = FactDependencyMask.None;
             decision.LastConsideredMinute = minute;
@@ -116,6 +146,25 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                 if (result.Action.Hash == currentActionHash) current = result;
                 if (winner.Action.Fallback || result.Score > winner.Score ||
                     result.Score == winner.Score && result.Action.Hash < winner.Action.Hash) winner = result;
+            }
+
+            if (entity.HasComponent<CoordinationState>())
+            {
+                ref var coordination = ref entity.GetComponent<CoordinationState>();
+                if (coordination.Active)
+                {
+                    var elapsed = coordination.StartedAtMinute < 0 ? 0 : minute - coordination.StartedAtMinute;
+                    var minimumElapsed = coordination.StartedAtMinute >= 0 &&
+                        elapsed >= coordination.MinimumDurationMinutes;
+                    var alternative = winner.Action.Hash != coordination.ActionHash;
+                    var urgent = winner.Score >= winner.Action.Controls.UrgentPreemptionThreshold;
+                    var beatsCoordination = winner.Score >= coordination.Utility +
+                        winner.Action.Controls.SwitchingThreshold;
+                    if (elapsed >= coordination.MaximumDurationMinutes ||
+                        minimumElapsed && alternative && (urgent || beatsCoordination))
+                        coordination.ReleaseRequested = true;
+                    return;
+                }
             }
             if (currentActionHash != 0 && winner.Action.Hash != currentActionHash)
             {
@@ -191,25 +240,55 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
     internal readonly record struct DecisionResult(int IntentIndex, CompiledIntent Action, bool Eligible,
         float Score, int TargetEntityId, int TargetLocationId);
-    private readonly record struct TargetSelection(int EntityId, int LocationId, float Affinity);
-    private readonly record struct DecisionContext(WorldTime Time, JobDefinition Job, float[] Attributes,
+    internal readonly record struct TargetSelection(int EntityId, int LocationId, float Affinity,
+        float[]? Attributes = null);
+    internal readonly record struct DecisionContext(WorldTime Time, JobDefinition Job, float[] Attributes,
         long TraitMask, AgentLocation Location, AgentTravel Travel);
 
-    private sealed class TargetResolver
+    internal sealed class TargetResolver
     {
         private readonly Dictionary<int, int> _locations;
+        private readonly Dictionary<int, float[]> _attributes;
         private readonly Dictionary<int, List<(int Id, float Affinity)>> _social;
+        private readonly Dictionary<(int Source, int Target), float> _affinities;
+        private readonly Dictionary<int, List<NetworkLink>> _memberships;
+        private readonly Dictionary<int, List<int>> _networkMembers;
+
+        private readonly record struct NetworkLink(int NetworkId, int TypeHash, int SupervisorId);
 
         public TargetResolver(EntityStore store)
         {
             _locations = store.Query<AgentLocation>().Entities.ToDictionary(
                 entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
+            _attributes = store.Query<AgentAttributes>().Entities.ToDictionary(
+                entity => entity.Id, entity => entity.GetComponent<AgentAttributes>().Values);
             _social = new();
+            _affinities = new();
             foreach (var edgeEntity in store.Query<EdgeData>().Entities)
             {
                 var edge = edgeEntity.GetComponent<EdgeData>();
                 if (!_social.TryGetValue(edge.Source.Id, out var edges)) _social[edge.Source.Id] = edges = new();
-                edges.Add((edge.Target.Id, Math.Clamp((edge.Affinity + 100f) / 200f, 0f, 1f)));
+                var affinity = Math.Clamp((edge.Affinity + 100f) / 200f, 0f, 1f);
+                edges.Add((edge.Target.Id, affinity));
+                _affinities[(edge.Source.Id, edge.Target.Id)] = affinity;
+            }
+
+            _memberships = new();
+            _networkMembers = new();
+            foreach (var agent in store.Query<Identity>().Entities)
+            {
+                foreach (var membership in agent.GetRelations<AgentNetworkMembership>())
+                {
+                    if (membership.Network.IsNull ||
+                        !membership.Network.TryGetComponent<AgentNetworkData>(out var network)) continue;
+                    if (!_memberships.TryGetValue(agent.Id, out var links))
+                        _memberships[agent.Id] = links = new();
+                    links.Add(new NetworkLink(membership.Network.Id, network.TypeHash,
+                        membership.Supervisor.IsNull ? 0 : membership.Supervisor.Id));
+                    if (!_networkMembers.TryGetValue(membership.Network.Id, out var members))
+                        _networkMembers[membership.Network.Id] = members = new();
+                    members.Add(agent.Id);
+                }
             }
         }
 
@@ -224,25 +303,71 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                     LocationValue.Current => context.Location.CurrentLocationId,
                     _ => 0
                 }, 0);
-            if (!_social.TryGetValue(actorId, out var edges)) return default;
-
             var query = definition.Query!;
+            var candidates = Enumerate(actorId, query);
             (TargetSelection Target, float[] Ranks)? best = null;
-            foreach (var edge in edges)
+            foreach (var candidate in candidates)
             {
-                if (!_locations.TryGetValue(edge.Id, out var targetLocation)) continue;
+                if (!_locations.TryGetValue(candidate.Id, out var targetLocation) ||
+                    !_attributes.TryGetValue(candidate.Id, out var targetAttributes)) continue;
                 var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes,
-                    context.Location, context.Travel, edge.Id, edge.Affinity, targetLocation);
+                    context.Location, context.Travel, candidate.Id, candidate.Affinity, targetLocation,
+                    targetAttributes);
                 if (query.Requirements.Any(requirement => !requirement.Evaluate(facts))) continue;
                 var ranks = query.RankBy.Select(rank => rank.Value.Evaluate(facts)).ToArray();
-                var target = new TargetSelection(edge.Id, context.Location.CurrentLocationId, edge.Affinity);
-                if (best is null || Compare(ranks, edge.Id, best.Value.Ranks, best.Value.Target.EntityId, query.RankBy) < 0)
+                var target = new TargetSelection(candidate.Id, targetLocation, candidate.Affinity, targetAttributes);
+                if (best is null || Compare(ranks, candidate.Id, best.Value.Ranks, best.Value.Target.EntityId, query.RankBy) < 0)
                     best = (target, ranks);
             }
             return best?.Target ?? default;
         }
 
         public bool HasSocialRelations(int actorId) => _social.ContainsKey(actorId);
+        public bool HasNetworkRelations(int actorId) => _memberships.ContainsKey(actorId);
+
+        public bool IsRelated(int actorId, int targetId, CompiledTargetQuery query) =>
+            Enumerate(actorId, query).Any(candidate => candidate.Id == targetId);
+
+        public TargetSelection ResolveSpecific(int actorId, int targetId)
+        {
+            if (!_locations.TryGetValue(targetId, out var location) ||
+                !_attributes.TryGetValue(targetId, out var attributes)) return default;
+            return new TargetSelection(targetId, location,
+                _affinities.TryGetValue((actorId, targetId), out var affinity) ? affinity : 0.5f,
+                attributes);
+        }
+
+        private IEnumerable<(int Id, float Affinity)> Enumerate(int actorId, CompiledTargetQuery query)
+        {
+            if (query.Relation == TargetRelationKind.Social)
+                return _social.TryGetValue(actorId, out var social) ? social : [];
+            if (!_memberships.TryGetValue(actorId, out var memberships)) return [];
+
+            var candidates = new HashSet<int>();
+            foreach (var membership in memberships)
+            {
+                if (membership.TypeHash != query.NetworkTypeHash) continue;
+                switch (query.Relation)
+                {
+                    case TargetRelationKind.NetworkMember:
+                        if (_networkMembers.TryGetValue(membership.NetworkId, out var members))
+                            foreach (var member in members) if (member != actorId) candidates.Add(member);
+                        break;
+                    case TargetRelationKind.NetworkSupervisor:
+                        if (membership.SupervisorId != 0) candidates.Add(membership.SupervisorId);
+                        break;
+                    case TargetRelationKind.NetworkDirectReport:
+                        if (_networkMembers.TryGetValue(membership.NetworkId, out var reports))
+                            foreach (var report in reports)
+                                if (_memberships.TryGetValue(report, out var reportLinks) && reportLinks.Any(link =>
+                                    link.NetworkId == membership.NetworkId && link.SupervisorId == actorId))
+                                    candidates.Add(report);
+                        break;
+                }
+            }
+            return candidates.OrderBy(id => id).Select(id => (id,
+                _affinities.TryGetValue((actorId, id), out var affinity) ? affinity : 0.5f));
+        }
 
         private static int Compare(float[] left, int leftId, float[] right, int rightId, IReadOnlyList<CompiledTargetRank> ranks)
         {
@@ -264,7 +389,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             float[]? utilityDiagnostics = null, float[]? traitDiagnostics = null)
         {
             var facts = new DecisionFactContext(context.Time, context.Job, context.Attributes, context.Location,
-                context.Travel, target.EntityId, target.Affinity, target.LocationId);
+                context.Travel, target.EntityId, target.Affinity, target.LocationId, target.Attributes);
             if (!Definition.Eligibility.Evaluate(facts))
             {
                 if (utilityDiagnostics is not null) Array.Clear(utilityDiagnostics);
@@ -275,7 +400,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             for (var index = 0; index < Definition.UtilityInputs.Length; index++)
             {
                 var input = Definition.UtilityInputs[index];
-                var contribution = input.Weight * Curve(input.Curve, input.Expression.Evaluate(facts));
+                var contribution = input.Weight * DecisionUtility.Curve(input.Curve, input.Expression.Evaluate(facts));
                 score += contribution;
                 if (utilityDiagnostics is not null) utilityDiagnostics[index] = contribution;
             }
@@ -288,19 +413,6 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             }
             return new DecisionResult(Definition.RuntimeIndex, Definition, true, score, target.EntityId, target.LocationId);
         }
-
-        private static float Curve(IReadOnlyList<ResponsePoint> points, float value)
-        {
-            if (value <= points[0].X) return points[0].Y;
-            for (var index = 1; index < points.Count; index++)
-            {
-                if (value > points[index].X) continue;
-                var previous = points[index - 1];
-                var amount = (value - previous.X) / (points[index].X - previous.X);
-                return previous.Y + amount * (points[index].Y - previous.Y);
-            }
-            return points[^1].Y;
-        }
     }
 }
 
@@ -310,7 +422,7 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
 {
     private readonly Entity _clock;
     private readonly AgentAttributeSchema _schema;
-    private readonly Dictionary<(int ActionHash, int ActivityTypeHash), (int Index, float Rate)[]> _effects;
+    private readonly Dictionary<(int ActionHash, int ActivityTypeHash), (int Index, float Rate, EffectSubject Subject)[]> _effects;
 
     public ActivityEffectsSystem(ContentCatalog catalog, Entity clock)
     {
@@ -318,7 +430,7 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
         _clock = clock;
         _schema = catalog.AgentAttributes;
         _effects = catalog.Intents.All.ToDictionary(intent => (intent.Hash, intent.Activity.Hash), intent => intent.Effects
-            .Select(effect => (effect.AttributeIndex, effect.PerMinute)).ToArray());
+            .Select(effect => (effect.AttributeIndex, effect.PerMinute, effect.Subject)).ToArray());
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -326,12 +438,16 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
     {
         var minutes = (float)(_clock.GetComponent<WorldTime>().DeltaSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
         if (minutes <= 0f) return;
-        Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, ref DecisionState decision, Entity _) =>
+        Query.ForEachEntity((ref AgentAttributes attributes, ref ActivityState activity, ref DecisionState decision, Entity entity) =>
         {
             if (activity.Phase != ActivityPhase.Performing) return;
             if (!_effects.TryGetValue((activity.ActionHash, activity.ActivityTypeHash), out var effects)) return;
-            foreach (var (index, rate) in effects)
+            var role = entity.HasComponent<CoordinationState>()
+                ? entity.GetComponent<CoordinationState>().Role : CoordinationRole.None;
+            foreach (var (index, rate, subject) in effects)
             {
+                if (subject == EffectSubject.Participant && role != CoordinationRole.Participant ||
+                    subject == EffectSubject.Initiator && role == CoordinationRole.Participant) continue;
                 var definition = _schema.Definitions[index];
                 var previous = attributes.Values[index];
                 attributes.Values[index] = Math.Clamp(previous + rate * minutes, definition.Min, definition.Max);

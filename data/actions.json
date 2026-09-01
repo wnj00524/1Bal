@@ -350,24 +350,23 @@
   },
   {
     "id": "socialize",
-    "name": "Socialize",
+    "name": "Meet Friends",
     "hash": 1003,
     "activity": {
       "id": "socialize",
-      "name": "Socialize",
+      "name": "Meet Friends",
       "hash": 4003
     },
     "baseUtility": 4,
     "eligibility": {
-      "op": "notEqual",
-      "left": {
-        "op": "fact",
-        "fact": "target.entity"
-      },
-      "right": {
-        "op": "constant",
-        "value": 0
-      }
+      "op": "and",
+      "inputs": [
+        { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+        { "op": "or", "inputs": [
+          { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "constant", "value": 1020 } },
+          { "op": "not", "input": { "op": "fact", "fact": "job.isWorkDay" } }
+        ] }
+      ]
     },
     "utilityInputs": [
       {
@@ -391,7 +390,7 @@
         }
       },
       {
-        "weight": 20,
+        "weight": 10,
         "curve": [
           {
             "x": 0,
@@ -465,32 +464,17 @@
       "urgentPreemptionThreshold": 90
     },
     "effects": [
-      {
-        "attribute": "stress",
-        "perMinute": -0.1
-      },
-      {
-        "attribute": "fatigue",
-        "perMinute": 0.03
-      }
+      { "attribute": "stress", "perMinute": -0.1, "subject": "initiator" },
+      { "attribute": "fatigue", "perMinute": 0.03, "subject": "initiator" },
+      { "attribute": "stress", "perMinute": -0.1, "subject": "participant" },
+      { "attribute": "fatigue", "perMinute": 0.03, "subject": "participant" }
     ],
     "target": {
       "kind": "entity",
       "query": {
-        "relation": "social",
-        "requirements": [
-          {
-            "op": "equal",
-            "left": {
-              "op": "fact",
-              "fact": "target.location.current"
-            },
-            "right": {
-              "op": "fact",
-              "fact": "agent.location.current"
-            }
-          }
-        ],
+        "relation": "network-member",
+        "networkType": "friend-group",
+        "requirements": [],
         "rankBy": [
           {
             "value": {
@@ -506,6 +490,210 @@
     "execution": {
       "executor": "performWithEntity",
       "destination": "intent.target"
+    },
+    "participation": {
+      "mode": "mutual",
+      "minimumDurationMinutes": 30,
+      "maximumDurationMinutes": 90,
+      "rejectionCooldownMinutes": 15,
+      "acceptance": {
+        "baseUtility": 4,
+        "eligibility": { "op": "constant", "value": true },
+        "utilityInputs": [
+          { "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.preference" } } },
+          { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "fact", "fact": "target.affinity" } },
+          { "weight": 12, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } }
+        ],
+        "traitModifiers": [{ "trait": "paranoid", "modifier": -18 }]
+      }
+    }
+  },
+  {
+    "id": "family-time", "name": "Family Time", "hash": 1005,
+    "activity": { "id": "family-time", "name": "Family Time", "hash": 4005 },
+    "baseUtility": 6,
+    "eligibility": { "op": "and", "inputs": [
+      { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+      { "op": "or", "inputs": [
+        { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "constant", "value": 1020 } },
+        { "op": "not", "input": { "op": "fact", "fact": "job.isWorkDay" } }
+      ] }
+    ] },
+    "utilityInputs": [
+      { "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } },
+      { "weight": 10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "target.attribute.stress" } } },
+      { "weight": -15, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.fatigue" } } }
+    ],
+    "traitModifiers": [],
+    "controls": { "minimumCommitmentMinutes": 20, "switchingThreshold": 6, "cooldownMinutes": 30, "urgentPreemptionThreshold": 90 },
+    "effects": [
+      { "attribute": "stress", "perMinute": -0.08, "subject": "initiator" },
+      { "attribute": "fatigue", "perMinute": 0.02, "subject": "initiator" },
+      { "attribute": "stress", "perMinute": -0.08, "subject": "participant" },
+      { "attribute": "fatigue", "perMinute": 0.02, "subject": "participant" }
+    ],
+    "target": { "kind": "entity", "query": {
+      "relation": "network-member", "networkType": "family", "requirements": [],
+      "rankBy": [{ "value": { "op": "fact", "fact": "target.attribute.stress" }, "order": "descending" }], "limit": 1
+    } },
+    "execution": { "executor": "performWithEntity", "destination": "intent.target" },
+    "participation": {
+      "mode": "mutual", "minimumDurationMinutes": 30, "maximumDurationMinutes": 120, "rejectionCooldownMinutes": 15,
+      "acceptance": {
+        "baseUtility": 6, "eligibility": { "op": "constant", "value": true },
+        "utilityInputs": [
+          { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } },
+          { "weight": -12, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.fatigue" } } }
+        ], "traitModifiers": []
+      }
+    }
+  },
+  {
+    "id": "support-family", "name": "Support Family", "hash": 1006,
+    "activity": { "id": "support-family", "name": "Support Family", "hash": 4006 },
+    "baseUtility": 8,
+    "eligibility": { "op": "and", "inputs": [
+      { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+      { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "agent.attribute.wealth" }, "right": { "op": "constant", "value": 500 } },
+      { "op": "or", "inputs": [
+        { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "target.attribute.stress" }, "right": { "op": "constant", "value": 60 } },
+        { "op": "lessOrEqual", "left": { "op": "fact", "fact": "target.attribute.wealth" }, "right": { "op": "constant", "value": 1500 } }
+      ] }
+    ] },
+    "utilityInputs": [
+      { "weight": 35, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "target.attribute.stress" } } },
+      { "weight": 30, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "target.attribute.wealth" } } } },
+      { "weight": 10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } }
+    ],
+    "traitModifiers": [{ "trait": "greedy", "modifier": -18 }],
+    "controls": { "minimumCommitmentMinutes": 10, "switchingThreshold": 4, "cooldownMinutes": 60, "urgentPreemptionThreshold": 75 },
+    "effects": [
+      { "attribute": "wealth", "perMinute": -10, "subject": "initiator" },
+      { "attribute": "stress", "perMinute": -0.02, "subject": "initiator" },
+      { "attribute": "wealth", "perMinute": 10, "subject": "participant" },
+      { "attribute": "stress", "perMinute": -0.1, "subject": "participant" }
+    ],
+    "target": { "kind": "entity", "query": {
+      "relation": "network-member", "networkType": "family", "requirements": [],
+      "rankBy": [
+        { "value": { "op": "fact", "fact": "target.attribute.stress" }, "order": "descending" },
+        { "value": { "op": "fact", "fact": "target.attribute.wealth" }, "order": "ascending" }
+      ], "limit": 1
+    } },
+    "execution": { "executor": "performWithEntity", "destination": "intent.target" },
+    "participation": {
+      "mode": "mutual", "minimumDurationMinutes": 15, "maximumDurationMinutes": 45, "rejectionCooldownMinutes": 20,
+      "acceptance": {
+        "baseUtility": 20, "eligibility": { "op": "constant", "value": true },
+        "utilityInputs": [
+          { "weight": 30, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } } },
+          { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } }
+        ], "traitModifiers": []
+      }
+    }
+  },
+  {
+    "id": "report-to-supervisor", "name": "Report to Supervisor", "hash": 1007,
+    "activity": { "id": "report-to-supervisor", "name": "Report to Supervisor", "hash": 4007 },
+    "baseUtility": 8,
+    "eligibility": { "op": "and", "inputs": [
+      { "op": "fact", "fact": "job.isWorkDay" },
+      { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+      { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "subtract", "left": { "op": "fact", "fact": "job.workStartMinute" }, "right": { "op": "constant", "value": 60 } } },
+      { "op": "less", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workEndMinute" } }
+    ] },
+    "utilityInputs": [
+      { "weight": 35, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "clamp", "input": { "op": "divide", "left": { "op": "add", "left": { "op": "subtract", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workStartMinute" } }, "right": { "op": "constant", "value": 60 } }, "right": { "op": "constant", "value": 120 } }, "min": 0, "max": 1 } },
+      { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } } },
+      { "weight": 10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } }
+    ],
+    "traitModifiers": [],
+    "controls": { "minimumCommitmentMinutes": 10, "switchingThreshold": 6, "cooldownMinutes": 15, "urgentPreemptionThreshold": 85 },
+    "effects": [
+      { "attribute": "wealth", "perMinute": 2, "subject": "initiator" }, { "attribute": "stress", "perMinute": -0.03, "subject": "initiator" }, { "attribute": "fatigue", "perMinute": 0.06, "subject": "initiator" },
+      { "attribute": "wealth", "perMinute": 2, "subject": "participant" }, { "attribute": "stress", "perMinute": 0.04, "subject": "participant" }, { "attribute": "fatigue", "perMinute": 0.05, "subject": "participant" }
+    ],
+    "target": { "kind": "entity", "query": {
+      "relation": "network-supervisor", "networkType": "company",
+      "requirements": [{ "op": "equal", "left": { "op": "fact", "fact": "target.location.current" }, "right": { "op": "fact", "fact": "agent.location.work" } }],
+      "rankBy": [{ "value": { "op": "fact", "fact": "target.entity" }, "order": "ascending" }], "limit": 1
+    } },
+    "execution": { "executor": "performWithEntity", "destination": "intent.target" },
+    "participation": {
+      "mode": "mutual", "minimumDurationMinutes": 15, "maximumDurationMinutes": 30, "rejectionCooldownMinutes": 10,
+      "acceptance": { "baseUtility": 6, "eligibility": { "op": "fact", "fact": "job.isWorkDay" },
+        "utilityInputs": [{ "weight": 15, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "target.attribute.stress" } } }], "traitModifiers": [] }
+    }
+  },
+  {
+    "id": "manage-report", "name": "Manage Report", "hash": 1008,
+    "activity": { "id": "manage-report", "name": "Manage Report", "hash": 4008 },
+    "baseUtility": 7,
+    "eligibility": { "op": "and", "inputs": [
+      { "op": "fact", "fact": "job.isWorkDay" },
+      { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+      { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "subtract", "left": { "op": "fact", "fact": "job.workStartMinute" }, "right": { "op": "constant", "value": 60 } } },
+      { "op": "less", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workEndMinute" } }
+    ] },
+    "utilityInputs": [
+      { "weight": 25, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalizeRange", "input": { "op": "subtract", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workStartMinute" } }, "min": 0, "max": 480 } },
+      { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "target.attribute.stress" } } }
+    ],
+    "traitModifiers": [],
+    "controls": { "minimumCommitmentMinutes": 10, "switchingThreshold": 6, "cooldownMinutes": 15, "urgentPreemptionThreshold": 85 },
+    "effects": [
+      { "attribute": "wealth", "perMinute": 2.5, "subject": "initiator" }, { "attribute": "stress", "perMinute": 0.04, "subject": "initiator" }, { "attribute": "fatigue", "perMinute": 0.06, "subject": "initiator" },
+      { "attribute": "wealth", "perMinute": 2, "subject": "participant" }, { "attribute": "stress", "perMinute": -0.03, "subject": "participant" }, { "attribute": "fatigue", "perMinute": 0.05, "subject": "participant" }
+    ],
+    "target": { "kind": "entity", "query": {
+      "relation": "network-direct-report", "networkType": "company",
+      "requirements": [{ "op": "equal", "left": { "op": "fact", "fact": "target.location.current" }, "right": { "op": "fact", "fact": "agent.location.work" } }],
+      "rankBy": [{ "value": { "op": "fact", "fact": "target.attribute.stress" }, "order": "descending" }], "limit": 1
+    } },
+    "execution": { "executor": "performWithEntity", "destination": "intent.target" },
+    "participation": {
+      "mode": "mutual", "minimumDurationMinutes": 15, "maximumDurationMinutes": 30, "rejectionCooldownMinutes": 10,
+      "acceptance": { "baseUtility": 8, "eligibility": { "op": "fact", "fact": "job.isWorkDay" },
+        "utilityInputs": [
+          { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } } },
+          { "weight": 15, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.stress" } } }
+        ], "traitModifiers": [] }
+    }
+  },
+  {
+    "id": "collaborate", "name": "Collaborate", "hash": 1009,
+    "activity": { "id": "collaborate", "name": "Collaborate", "hash": 4009 },
+    "baseUtility": 7,
+    "eligibility": { "op": "and", "inputs": [
+      { "op": "fact", "fact": "job.isWorkDay" },
+      { "op": "notEqual", "left": { "op": "fact", "fact": "target.entity" }, "right": { "op": "constant", "value": 0 } },
+      { "op": "greaterOrEqual", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "subtract", "left": { "op": "fact", "fact": "job.workStartMinute" }, "right": { "op": "constant", "value": 60 } } },
+      { "op": "less", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workEndMinute" } }
+    ] },
+    "utilityInputs": [
+      { "weight": 30, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "normalizeRange", "input": { "op": "subtract", "left": { "op": "fact", "fact": "time.minuteOfDay" }, "right": { "op": "fact", "fact": "job.workStartMinute" } }, "min": 0, "max": 480 } },
+      { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } } },
+      { "weight": 10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "fact", "fact": "target.affinity" } }
+    ],
+    "traitModifiers": [],
+    "controls": { "minimumCommitmentMinutes": 15, "switchingThreshold": 6, "cooldownMinutes": 20, "urgentPreemptionThreshold": 85 },
+    "effects": [
+      { "attribute": "wealth", "perMinute": 2.2, "subject": "initiator" }, { "attribute": "stress", "perMinute": -0.02, "subject": "initiator" }, { "attribute": "fatigue", "perMinute": 0.06, "subject": "initiator" },
+      { "attribute": "wealth", "perMinute": 2.2, "subject": "participant" }, { "attribute": "stress", "perMinute": -0.02, "subject": "participant" }, { "attribute": "fatigue", "perMinute": 0.06, "subject": "participant" }
+    ],
+    "target": { "kind": "entity", "query": {
+      "relation": "network-member", "networkType": "company",
+      "requirements": [{ "op": "equal", "left": { "op": "fact", "fact": "target.location.current" }, "right": { "op": "fact", "fact": "agent.location.work" } }],
+      "rankBy": [{ "value": { "op": "fact", "fact": "target.affinity" }, "order": "descending" }], "limit": 1
+    } },
+    "execution": { "executor": "performWithEntity", "destination": "intent.target" },
+    "participation": {
+      "mode": "mutual", "minimumDurationMinutes": 20, "maximumDurationMinutes": 60, "rejectionCooldownMinutes": 10,
+      "acceptance": { "baseUtility": 7, "eligibility": { "op": "fact", "fact": "job.isWorkDay" },
+        "utilityInputs": [
+          { "weight": 20, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "oneMinus", "input": { "op": "normalize", "input": { "op": "fact", "fact": "agent.attribute.wealth" } } } },
+          { "weight": 10, "curve": [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }], "expression": { "op": "fact", "fact": "target.affinity" } }
+        ], "traitModifiers": [] }
     }
   },
   {

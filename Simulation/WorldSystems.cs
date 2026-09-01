@@ -84,13 +84,27 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
 
         Query.ForEachEntity((ref AgentLocation location, ref AgentTravel travel,
             ref IntentionState intention, ref ActivityState activity,
-            ref DecisionState decision, Entity _) =>
+            ref DecisionState decision, Entity entity) =>
         {
             if (!_executors.TryGetValue(intention.ActionHash, out var executor))
             {
                 decision.Dirty = true;
                 SetActivity(ref activity, ActivityPhase.Blocked, 0, 0, minute);
                 return;
+            }
+
+            if (entity.HasComponent<CoordinationState>())
+            {
+                ref var coordination = ref entity.GetComponent<CoordinationState>();
+                if (coordination.Active && coordination.Role == CoordinationRole.Participant)
+                {
+                    CancelTravel(ref travel);
+                    SetActivity(ref activity,
+                        coordination.Status == CoordinationStatus.Performing
+                            ? ActivityPhase.Performing : ActivityPhase.Waiting,
+                        intention.ActionHash, _activityTypes[intention.ActionHash], minute);
+                    return;
+                }
             }
 
             var destination = ResolveDestination(executor, intention, location, entityLocations, ref decision);
@@ -124,9 +138,14 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
             }
 
             CancelTravel(ref travel);
-            SetActivity(ref activity,
-                executor == ExecutorKind.Wait ? ActivityPhase.Idle : ActivityPhase.Performing,
-                intention.ActionHash, _activityTypes[intention.ActionHash], minute);
+            var phase = executor == ExecutorKind.Wait ? ActivityPhase.Idle : ActivityPhase.Performing;
+            if (entity.HasComponent<CoordinationState>())
+            {
+                var coordination = entity.GetComponent<CoordinationState>();
+                if (coordination.Active && coordination.Status != CoordinationStatus.Performing)
+                    phase = ActivityPhase.Waiting;
+            }
+            SetActivity(ref activity, phase, intention.ActionHash, _activityTypes[intention.ActionHash], minute);
         });
     }
 

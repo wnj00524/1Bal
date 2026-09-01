@@ -118,19 +118,22 @@ Make sure every home can reach every workplace that agents may need. A place
 that is listed but disconnected from the rest of the map can leave an agent
 unable to travel there.
 
-### `networks.json`: families and companies
+### `networks.json`: families, friends, and companies
 
 This file describes how the simulation groups agents. It has three lists:
 
 1. `networkTypes` defines a kind of group and lists the role IDs allowed in it.
    `flat` means no one supervises anyone; `single-supervisor` means each person
    below the head has one supervisor. `maxNetworksPerAgent` limits how many
-   groups of that type one agent can join.
+   groups of that type one agent can join. `seedsSocialGraph` makes every pair
+   in each generated group reciprocal social peers; use it only when membership
+   implies an ongoing social relationship.
 2. `roles` defines the displayed roles and says which network type owns each
    role. A role must also appear in that type's `roles` list.
 3. `generators` says how to create the groups. `home-location` groups people
    who share a home location; `work-location` groups people who share a work
-   location. Minimum and maximum sizes set the permitted range. `sizeWeights`
+   location; `global` partitions the whole town and uses anchor `0`. Minimum
+   and maximum sizes set the permitted range. `sizeWeights`
    makes some sizes more likely than others: a larger positive weight means a
    size is chosen more often, not that it is guaranteed.
 
@@ -171,8 +174,12 @@ Read an entry from top to bottom:
   interruption.
 * `effects` changes attributes while the activity is being performed. A
   positive `perMinute` raises the value and a negative one lowers it. The
-  attribute's minimum and maximum still apply.
+  attribute's minimum and maximum still apply. Optional `subject` is
+  `initiator` or, for mutual activities, `participant`.
 * `target` and `execution` say where and how it happens.
+* Optional `participation` makes an entity activity mutual. It sets minimum and
+  maximum shared duration, rejection cooldown, and the invitee's separately
+  evaluated eligibility and utility.
 
 The target and execution must be one of these matching pairs:
 
@@ -192,6 +199,12 @@ Facts and expression rules are intentionally strict. For a first edit, change a
 display name, score, time, effect, or existing curve rather than inventing a
 new question tree. For new behaviour, copy the closest complete action and use
 the [advanced intent authoring guide](intent-authoring.md) as a reference.
+
+Entity queries may use `social`, `network-member`, `network-supervisor`, or
+`network-direct-report`. Every network relation requires `networkType`; social
+must omit it. Supervisor/report queries require a `single-supervisor` type.
+Target scoring may read `target.attribute.<id>` and `target.affinity`; network
+members without a social edge use neutral affinity.
 
 ## A safe editing example
 

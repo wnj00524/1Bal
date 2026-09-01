@@ -65,7 +65,7 @@ public sealed class IntentBitSet
 }
 
 public readonly record struct IntentCandidateContext(bool HasJob, bool HasHome, bool HasWorkplace,
-    bool HasSocialRelations);
+    bool HasSocialRelations, bool HasNetworkRelations = false);
 
 // These sets are compiled once with the intent catalogue. "Available" sets are
 // deliberately inclusive: intersecting them can only remove an intent when a
@@ -73,13 +73,14 @@ public readonly record struct IntentCandidateContext(bool HasJob, bool HasHome, 
 public sealed class IntentCandidateIndex
 {
     private IntentCandidateIndex(IntentBitSet global, IntentBitSet withoutJob, IntentBitSet withoutHome,
-        IntentBitSet withoutWorkplace, IntentBitSet withoutSocialRelations)
+        IntentBitSet withoutWorkplace, IntentBitSet withoutSocialRelations, IntentBitSet withoutNetworkRelations)
     {
         Global = global;
         AvailableWithoutJob = withoutJob;
         AvailableWithoutHome = withoutHome;
         AvailableWithoutWorkplace = withoutWorkplace;
         AvailableWithoutSocialRelations = withoutSocialRelations;
+        AvailableWithoutNetworkRelations = withoutNetworkRelations;
     }
 
     public IntentBitSet Global { get; }
@@ -87,6 +88,7 @@ public sealed class IntentCandidateIndex
     public IntentBitSet AvailableWithoutHome { get; }
     public IntentBitSet AvailableWithoutWorkplace { get; }
     public IntentBitSet AvailableWithoutSocialRelations { get; }
+    public IntentBitSet AvailableWithoutNetworkRelations { get; }
 
     internal static IntentCandidateIndex Build(IReadOnlyList<CompiledIntent> intents, int fallbackIndex)
     {
@@ -96,7 +98,8 @@ public sealed class IntentCandidateIndex
             IntentBitSet.From(intents.Count, Array.Empty<int>()),
             Available(candidates, intents.Count, intent => intent.Target is not { Kind: TargetKind.Location, Location: LocationValue.Home }),
             Available(candidates, intents.Count, intent => intent.Target is not { Kind: TargetKind.Location, Location: LocationValue.Work }),
-            Available(candidates, intents.Count, intent => intent.Target.Kind != TargetKind.Entity));
+            Available(candidates, intents.Count, intent => intent.Target.Query?.Relation != TargetRelationKind.Social),
+            Available(candidates, intents.Count, intent => intent.Target.Query?.Relation is null or TargetRelationKind.Social));
     }
 
     private static IntentBitSet Available(IEnumerable<CompiledIntent> intents, int count,
@@ -110,6 +113,7 @@ public sealed class IntentCandidateIndex
         if (!context.HasHome) result = result.Intersect(AvailableWithoutHome);
         if (!context.HasWorkplace) result = result.Intersect(AvailableWithoutWorkplace);
         if (!context.HasSocialRelations) result = result.Intersect(AvailableWithoutSocialRelations);
+        if (!context.HasNetworkRelations) result = result.Intersect(AvailableWithoutNetworkRelations);
         return result;
     }
 
@@ -143,6 +147,7 @@ public sealed class IntentCandidateIndex
                 if (!_context.HasHome) _word &= _index.AvailableWithoutHome.GetWord(_wordIndex);
                 if (!_context.HasWorkplace) _word &= _index.AvailableWithoutWorkplace.GetWord(_wordIndex);
                 if (!_context.HasSocialRelations) _word &= _index.AvailableWithoutSocialRelations.GetWord(_wordIndex);
+                if (!_context.HasNetworkRelations) _word &= _index.AvailableWithoutNetworkRelations.GetWord(_wordIndex);
             }
             var bit = BitOperations.TrailingZeroCount(_word);
             Current = (_wordIndex << 6) + bit;

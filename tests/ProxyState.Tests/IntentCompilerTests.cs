@@ -53,13 +53,15 @@ public sealed class IntentCompilerTests
         var rest = intents.All.Single(intent => intent.Id == "rest");
         var socialize = intents.All.Single(intent => intent.Id == "socialize");
 
-        Assert.Equal(3, intents.Candidates.Global.Count);
+        Assert.Equal(8, intents.Candidates.Global.Count);
         Assert.False(intents.Candidates.Global.Contains(intents.Fallback.RuntimeIndex));
-        var noSocial = intents.Candidates.GetCandidates(new(true, true, true, false));
-        Assert.True(noSocial.Contains(work.RuntimeIndex));
-        Assert.True(noSocial.Contains(rest.RuntimeIndex));
-        Assert.False(noSocial.Contains(socialize.RuntimeIndex));
-        var noWorkplace = intents.Candidates.GetCandidates(new(true, true, false, true));
+        var noRelations = intents.Candidates.GetCandidates(new(true, true, true, false, false));
+        Assert.True(noRelations.Contains(work.RuntimeIndex));
+        Assert.True(noRelations.Contains(rest.RuntimeIndex));
+        Assert.False(noRelations.Contains(socialize.RuntimeIndex));
+        var withNetworks = intents.Candidates.GetCandidates(new(true, true, true, false, true));
+        Assert.True(withNetworks.Contains(socialize.RuntimeIndex));
+        var noWorkplace = intents.Candidates.GetCandidates(new(true, true, false, true, true));
         Assert.False(noWorkplace.Contains(work.RuntimeIndex));
     }
 
@@ -67,9 +69,10 @@ public sealed class IntentCompilerTests
     public void CandidateBitsetsCanBeIntersectedWithoutStringOrHashLookups()
     {
         var candidates = LoadCatalog().Intents.Candidates;
-        var intersection = candidates.Global.Intersect(candidates.AvailableWithoutSocialRelations);
+        var intersection = candidates.Global.Intersect(candidates.AvailableWithoutSocialRelations)
+            .Intersect(candidates.AvailableWithoutNetworkRelations);
 
-        Assert.Equal(candidates.GetCandidates(new(true, true, true, false)).EnumerateSetBits(),
+        Assert.Equal(candidates.GetCandidates(new(true, true, true, false, false)).EnumerateSetBits(),
             intersection.EnumerateSetBits());
         Assert.Throws<ArgumentException>(() => intersection.Intersect(
             IntentBitSet.FromIndexes(intersection.Capacity + 1, Array.Empty<int>())));
@@ -98,6 +101,48 @@ public sealed class IntentCompilerTests
         var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
 
         Assert.Contains("actions.json:actions[0].traitModifiers[0].trait", exception.Message);
+    }
+
+    [Fact]
+    public void UnknownNetworkTypeFailsAtItsJsonPath()
+    {
+        using var content = MutableContent.Create();
+        var socialize = content.Actions.Single(action => action!["id"]!.GetValue<string>() == "socialize")!;
+        socialize["target"]!["query"]!["networkType"] = "missing-network";
+        content.Save();
+
+        var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
+
+        Assert.Contains("target.query.networkType", exception.Message);
+        Assert.Contains("missing-network", exception.Message);
+    }
+
+    [Fact]
+    public void ParticipantEffectWithoutMutualParticipationFailsAtItsJsonPath()
+    {
+        using var content = MutableContent.Create();
+        var rest = content.Actions.Single(action => action!["id"]!.GetValue<string>() == "rest")!;
+        rest["effects"]![0]!["subject"] = "participant";
+        content.Save();
+
+        var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
+
+        Assert.Contains("actions.json:actions", exception.Message);
+        Assert.Contains("participant effects require mutual participation", exception.Message);
+    }
+
+    [Fact]
+    public void InvalidMutualDurationFailsAtItsJsonPath()
+    {
+        using var content = MutableContent.Create();
+        var socialize = content.Actions.Single(action => action!["id"]!.GetValue<string>() == "socialize")!;
+        socialize["participation"]!["minimumDurationMinutes"] = 0;
+        content.Save();
+
+        var exception = Assert.Throws<InvalidDataException>(() => ContentCatalog.Load(content.Directory));
+
+        Assert.Contains("participation", exception.Message);
+        Assert.Contains("invalid duration", exception.Message);
     }
 
     private static ContentCatalog LoadCatalog() =>

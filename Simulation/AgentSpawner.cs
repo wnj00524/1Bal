@@ -17,7 +17,7 @@ public sealed class AgentSpawner
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _schema = catalog.AgentAttributes;
         _world = catalog.World;
-        _socialGraphBuilder = socialGraphBuilder ?? new SocialGraphBuilder();
+        _socialGraphBuilder = socialGraphBuilder ?? new SocialGraphBuilder(catalog.Networks);
         _networkBuilder = new AgentNetworkBuilder(catalog.Networks);
     }
 
@@ -120,6 +120,8 @@ public sealed class AgentSpawner
                     Mode = AgentTravelMode.Stationary
                 },
                 Tags.Get<Tier1LodTag>());
+
+            entity.AddComponent<CoordinationState>();
 
             if (isOperative)
             {

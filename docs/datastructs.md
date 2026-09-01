@@ -45,7 +45,7 @@ public struct AgentState : IComponent {
 
 public struct IntentionState : IComponent {
     public int ActionHash;          // Goal selected by utility deliberation.
-    public int TargetEntityId;     // Social target, or 0.
+    public int TargetEntityId;     // Social or network target, or 0.
     public int TargetLocationId;   // Destination for location-bound goals.
     public long SelectedAtMinute;
     public float Utility;
@@ -54,8 +54,24 @@ public struct IntentionState : IComponent {
 public struct ActivityState : IComponent {
     public int ActionHash;          // Content action responsible for the activity.
     public int ActivityTypeHash;    // Data-defined identity from the selected action.
-    public ActivityPhase Phase;     // Idle, Moving, Performing, or Blocked mechanics.
+    public ActivityPhase Phase;     // Idle, Moving, Waiting, Performing, or Blocked mechanics.
     public long StartedAtMinute;
+}
+
+public enum CoordinationRole : byte { None, Initiator, Participant }
+public enum CoordinationStatus : byte { None, Reserved, Travelling, Waiting, Performing }
+
+public struct CoordinationState : IComponent {
+    public int PartnerEntityId;
+    public int ActionHash;
+    public CoordinationRole Role;
+    public CoordinationStatus Status;
+    public long AcceptedAtMinute;
+    public long StartedAtMinute;
+    public int MinimumDurationMinutes;
+    public int MaximumDurationMinutes;
+    public float Utility;          // This agent's utility for the coordinated action.
+    public bool ReleaseRequested;
 }
 
 public struct DecisionState : IComponent {
@@ -112,12 +128,22 @@ covert system may change the secret hash without changing intention or activity.
 `data/actions.json` owns each candidate's eligibility predicate, base utility,
 weighted numeric expressions, piecewise-linear response curves, trait modifiers,
 minimum commitment, switching margin, cooldown, urgent-preemption threshold,
-per-minute effects, activity identity, and target definition. `TargetDefinition` selects `none`, a
+per-minute effects, activity identity, target definition, and optional mutual
+participation. `TargetDefinition` selects `none`, a
 direct agent `location`, or an `entity` query. Entity queries contain a relation,
 compiled predicate requirements, ordered compiled numeric rankings, and an
 optional positive candidate limit; the runtime result carries both entity and
-location IDs alongside eligibility and score. Runtime cooldowns use parallel fixed-size arrays because
-the first slice has exactly three actions and does not need per-agent dictionaries.
+location IDs alongside eligibility and score. Runtime cooldowns and candidate
+caches use parallel fixed-size arrays indexed by the compiled catalogue and do
+not need per-agent dictionaries.
+
+`ParticipationDefinition` owns the mutual minimum and maximum duration,
+rejection cooldown, and a separately compiled participant acceptance predicate,
+utility inputs, and trait modifiers. `CoordinationState` is pure ECS ground
+truth describing the accepted pair and lifecycle; it stores hashes, IDs,
+scalars, and enums rather than behavior-specific roles or strings. Effect
+definitions compile an optional subject enum; omission means the initiator and
+participant effects are accepted only on mutual entity actions.
 
 Every action also declares an `ExecutorDefinition`. Loading compiles its
 `executor` string to `ExecutorKind` (`performHere`, `performAtLocation`,
@@ -129,7 +155,9 @@ not branch on work, rest, or socialize identity.
 Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
 schema index. `FactRegistry` resolves authoring references such as
 `agent.attribute.fatigue`, `time.minuteOfDay`, `job.workStartMinute`, and
-`target.affinity` during catalog loading. `NumericExpressionDefinition` is the
+`target.affinity` and `target.attribute.<id>` during catalog loading. Network
+targets without a directional social edge receive normalized affinity `0.5`.
+`NumericExpressionDefinition` is the
 JSON authoring tree; the loader compiles it to a bounded postfix instruction
 array containing opcodes, fact handles, and numeric operands. The runtime stack
 evaluator uses `stackalloc`, performs no string lookup, and supports `fact`,
@@ -196,7 +224,7 @@ source's known mask.
 
 ### 2.3 Debug Inspection Snapshots
 
-Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, and resolved network memberships. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, resolved network memberships, and an optional copied coordination snapshot. `DebugCoordinationSnapshot` contains partner, role, status, acceptance/performance times, duration bounds, current utilities, and release request. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values. None of the network or coordination projections enter `PlayerIntelligenceDB`.
 
 `DebugDecisionCandidateSnapshot` copies candidate eligibility, rejection path,
 target IDs, utility and trait contributions, cooldown, commitment state, final
@@ -258,20 +286,22 @@ to stable FNV-1a integer hashes during loading; lookups by either ID or hash are
 cached dictionaries and do not perform runtime string searches.
 
 Hierarchy is deliberately limited to `Flat` and `SingleSupervisor`. Partitioning
-is also a registered set (`HomeLocation` and `WorkLocation`), rather than a
+is also a registered set (`HomeLocation`, `WorkLocation`, and `Global`), rather than a
 content-supplied query language. A generator contains bounded weighted sizes,
 an explicit remainder policy, data-driven role hashes, and (only for a
 single-supervisor hierarchy) span-of-control and depth limits. Runtime ECS
 network instances use `AgentNetworkData` ECS entities. `TypeHash` selects their
 validated type, `AnchorLocationId` is the partition location (or zero for an
 unanchored network), and `Ordinal` provides deterministic identity within a
-generated series.
+generated series. Global partitions use anchor `0`. `SeedsSocialGraph` allows a
+type to request reciprocal clique edges after generation; it is enabled for
+families and friend groups and disabled for companies.
 
 Agent membership is an `AgentNetworkMembership : ILinkRelation` stored on the
 agent and keyed by its `Network` entity. It carries the data-driven `RoleHash`
 and an optional `Supervisor` entity. The relation key guarantees at most one
-membership per agent/network pair while still allowing unrelated family and
-company memberships. The supervisor is intentionally not another relation key,
+membership per agent/network pair while still allowing unrelated family,
+friend-group, and company memberships. The supervisor is intentionally not another relation key,
 so deletion cleanup must update it explicitly.
 
 `AgentNetworkService` is the only supported mutation boundary. It validates
@@ -285,7 +315,7 @@ entity. Its type, anchor, and ordinal are immutable after creation.
 
 Persistent network storage remains linear in population. ECS data contains no
 display strings, member arrays, dictionaries, descendant closures, or redundant
-supervisor indexes: each generated agent contributes approximately one family
+supervisor indexes: each generated agent contributes one family, one friend-group,
 and one company relation. Resolved names and summary collections are transient
 debug projections and are discarded after presentation.
 
@@ -302,7 +332,7 @@ catalog rather than mutable authoring trees.
 `IntentBitSet` maps the same dense runtime index to one bit in a packed
 `ulong[]`. `IntentCandidateIndex`, built by `CompiledIntentCatalog`, owns the
 global non-fallback set and the sets that remain available without a job, home,
-workplace, or social relation. Public immutable intersections support tooling
+workplace, social relation, or network relation. Public immutable intersections support tooling
 and tests. The decision hot path instead intersects words through a struct
 enumerator, visiting set bits without allocating or scanning the compiled
 intent array. Target/executor contracts are the source of these conservative
@@ -319,7 +349,9 @@ references and incompatible structures directly.
 `FactDependencyMask` combines a flagged `FactDependencyCategory` with a 64-bit
 schema-attribute bitset. `CompiledNumericExpression` and `CompiledPredicate`
 derive masks from their pre-resolved instructions; `CompiledIntent` adds trait
-and target-query dependencies. No dependency list is authored in JSON.
+and target-query dependencies. Categories include social targets, network
+targets, target attributes, target location/affinity, and coordination. No
+dependency list is authored in JSON.
 
 `DecisionState.ChangedFacts` accumulates mutation signals until consideration.
 Its parallel score, eligibility, and target arrays are indexed by the compiled

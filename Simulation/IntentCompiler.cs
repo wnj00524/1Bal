@@ -3,16 +3,25 @@ namespace ProxyState.Simulation;
 public enum TargetKind : byte { None, Location, Entity }
 public enum LocationValue : byte { None, Current, Home, Work }
 public enum SortOrder : byte { Ascending, Descending }
+public enum TargetRelationKind : byte { Social, NetworkMember, NetworkSupervisor, NetworkDirectReport }
+public enum EffectSubject : byte { Initiator, Participant }
 
 public sealed record CompiledUtilityInput(
     CompiledNumericExpression Expression, float Weight, ResponsePoint[] Curve);
 public sealed record CompiledTraitModifier(long TraitBit, float Modifier);
-public sealed record CompiledEffect(int AttributeIndex, float PerMinute);
+public sealed record CompiledEffect(int AttributeIndex, float PerMinute, EffectSubject Subject);
 public sealed record CompiledTargetRank(CompiledNumericExpression Value, SortOrder Order);
 public sealed record CompiledTargetQuery(
+    TargetRelationKind Relation, int NetworkTypeHash,
     CompiledPredicate[] Requirements, CompiledTargetRank[] RankBy, int? Limit);
 public sealed record CompiledTargetSelector(
     TargetKind Kind, LocationValue Location, CompiledTargetQuery? Query);
+public sealed record CompiledParticipantAcceptance(
+    float BaseUtility, CompiledPredicate Eligibility,
+    CompiledUtilityInput[] UtilityInputs, CompiledTraitModifier[] TraitModifiers);
+public sealed record CompiledParticipation(
+    int MinimumDurationMinutes, int MaximumDurationMinutes, int RejectionCooldownMinutes,
+    CompiledParticipantAcceptance Acceptance);
 
 // This is the only intent representation consumed during simulation ticks.
 // Authoring strings have been replaced by compact enums, indexes, and bit values.
@@ -30,6 +39,7 @@ public sealed record CompiledIntent(
     CompiledEffect[] Effects,
     CompiledTargetSelector Target,
     ExecutorKind Executor,
+    CompiledParticipation? Participation,
     bool Fallback,
     FactDependencyMask Dependencies);
 
@@ -64,7 +74,8 @@ public static class IntentCompiler
     public static CompiledIntentCatalog Compile(
         IReadOnlyList<ActionDefinition> definitions,
         IReadOnlyList<TraitDefinition> traits,
-        AgentAttributeSchema attributes)
+        AgentAttributeSchema attributes,
+        AgentNetworkCatalog networks)
     {
         ArgumentNullException.ThrowIfNull(definitions);
         if (definitions.Count > ushort.MaxValue)
@@ -84,7 +95,7 @@ public static class IntentCompiler
             if (definition.Hash == 0 || !hashes.Add(definition.Hash))
                 throw Error($"{path}.hash", "must be non-zero and unique");
 
-            try { compiled[index] = CompileOne(definition, (ushort)index, path, traitBits, facts, attributes); }
+            try { compiled[index] = CompileOne(definition, (ushort)index, path, traitBits, facts, attributes, networks); }
             catch (InvalidDataException exception)
             {
                 throw new InvalidDataException($"actions.json:intent '{definition.Id ?? "<missing>"}': {exception.Message}", exception);
@@ -98,7 +109,8 @@ public static class IntentCompiler
     }
 
     private static CompiledIntent CompileOne(ActionDefinition definition, ushort index, string path,
-        IReadOnlyDictionary<string, long> traitBits, FactRegistry facts, AgentAttributeSchema attributes)
+        IReadOnlyDictionary<string, long> traitBits, FactRegistry facts, AgentAttributeSchema attributes,
+        AgentNetworkCatalog networks)
     {
         CompiledPredicate eligibility;
         try { eligibility = CompiledPredicate.Compile(definition.Eligibility, facts); }
@@ -118,11 +130,20 @@ public static class IntentCompiler
         }).ToArray();
         var effects = definition.Effects.Select((effect, effectIndex) =>
         {
-            try { return new CompiledEffect(attributes.GetIndex(effect.Attribute), effect.PerMinute); }
+            var subject = effect.Subject?.ToLowerInvariant() switch
+            {
+                null or "initiator" => EffectSubject.Initiator,
+                "participant" => EffectSubject.Participant,
+                _ => throw Error($"{path}.effects[{effectIndex}].subject", "must be 'initiator' or 'participant'")
+            };
+            try { return new CompiledEffect(attributes.GetIndex(effect.Attribute), effect.PerMinute, subject); }
             catch (KeyNotFoundException exception) { throw Error($"{path}.effects[{effectIndex}].attribute", exception.Message, exception); }
         }).ToArray();
-        var target = CompileTarget(definition.Target, path, facts);
+        var target = CompileTarget(definition.Target, path, facts, networks);
         var executor = CompileExecutor(definition.Execution, target.Kind, path);
+        var participation = CompileParticipation(definition.Participation, path, facts, traitBits, target.Kind, executor);
+        if (effects.Any(effect => effect.Subject == EffectSubject.Participant) && participation is null)
+            throw Error($"{path}.effects", "participant effects require mutual participation");
         if (definition.Fallback && (target.Kind != TargetKind.None || executor != ExecutorKind.Wait))
             throw Error(path, "fallback intent must use target kind 'none' and executor 'wait'");
         var dependencies = eligibility.Dependencies;
@@ -131,20 +152,23 @@ public static class IntentCompiler
         dependencies |= TargetDependencies(target);
         return new CompiledIntent(definition.Id, definition.Name, definition.Hash, index, definition.Activity,
             definition.BaseUtility, eligibility, inputs, modifiers, definition.Controls, effects, target, executor,
-            definition.Fallback, dependencies);
+            participation, definition.Fallback, dependencies);
     }
 
     private static FactDependencyMask TargetDependencies(CompiledTargetSelector target)
     {
         if (target.Kind == TargetKind.None) return FactDependencyMask.None;
         if (target.Kind == TargetKind.Location) return new(FactDependencyCategory.Location);
-        var mask = new FactDependencyMask(FactDependencyCategory.SocialTargets | FactDependencyCategory.TargetLocation);
-        foreach (var requirement in target.Query!.Requirements) mask |= requirement.Dependencies;
+        var mask = new FactDependencyMask(target.Query!.Relation == TargetRelationKind.Social
+            ? FactDependencyCategory.SocialTargets | FactDependencyCategory.TargetLocation
+            : FactDependencyCategory.NetworkTargets | FactDependencyCategory.TargetLocation);
+        foreach (var requirement in target.Query.Requirements) mask |= requirement.Dependencies;
         foreach (var rank in target.Query.RankBy) mask |= rank.Value.Dependencies;
         return mask;
     }
 
-    private static CompiledTargetSelector CompileTarget(TargetDefinition target, string path, FactRegistry facts)
+    private static CompiledTargetSelector CompileTarget(TargetDefinition target, string path, FactRegistry facts,
+        AgentNetworkCatalog networks)
     {
         switch (target.Kind?.ToLowerInvariant())
         {
@@ -161,8 +185,32 @@ public static class IntentCompiler
                 return new(TargetKind.Location, location, null);
             case "entity" when target.Value is null && target.Query is not null:
                 var query = target.Query;
-                if (!string.Equals(query.Relation, "social", StringComparison.OrdinalIgnoreCase))
-                    throw Error($"{path}.target.query.relation", $"unsupported relation '{query.Relation}'");
+                var relation = query.Relation?.ToLowerInvariant() switch
+                {
+                    "social" => TargetRelationKind.Social,
+                    "network-member" => TargetRelationKind.NetworkMember,
+                    "network-supervisor" => TargetRelationKind.NetworkSupervisor,
+                    "network-direct-report" => TargetRelationKind.NetworkDirectReport,
+                    _ => throw Error($"{path}.target.query.relation", $"unsupported relation '{query.Relation}'")
+                };
+                var networkTypeHash = 0;
+                if (relation == TargetRelationKind.Social)
+                {
+                    if (!string.IsNullOrWhiteSpace(query.NetworkType))
+                        throw Error($"{path}.target.query.networkType", "must be omitted for social relations");
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(query.NetworkType))
+                        throw Error($"{path}.target.query.networkType", "is required for network relations");
+                    NetworkTypeDefinition networkType;
+                    try { networkType = networks.GetType(query.NetworkType); }
+                    catch (KeyNotFoundException exception) { throw Error($"{path}.target.query.networkType", exception.Message, exception); }
+                    if (relation is TargetRelationKind.NetworkSupervisor or TargetRelationKind.NetworkDirectReport &&
+                        networkType.HierarchyMode != NetworkHierarchyMode.SingleSupervisor)
+                        throw Error($"{path}.target.query.networkType", "supervisor relations require a single-supervisor network");
+                    networkTypeHash = networkType.Hash;
+                }
                 if (query.Limit is <= 0) throw Error($"{path}.target.query.limit", "must be positive when provided");
                 var requirements = query.Requirements.Select((requirement, i) =>
                 {
@@ -177,10 +225,46 @@ public static class IntentCompiler
                     catch (InvalidDataException exception) { throw Error($"{path}.target.query.rankBy[{i}].value", exception.Message, exception); }
                 }).ToArray();
                 if (ranks.Length == 0) throw Error($"{path}.target.query.rankBy", "must contain at least one ranking");
-                return new(TargetKind.Entity, LocationValue.None, new(requirements, ranks, query.Limit));
+                return new(TargetKind.Entity, LocationValue.None,
+                    new(relation, networkTypeHash, requirements, ranks, query.Limit));
             default:
                 throw Error($"{path}.target", $"invalid target kind '{target.Kind}' or incompatible fields");
         }
+    }
+
+    private static CompiledParticipation? CompileParticipation(ParticipationDefinition? definition, string path,
+        FactRegistry facts, IReadOnlyDictionary<string, long> traitBits, TargetKind target, ExecutorKind executor)
+    {
+        if (definition is null) return null;
+        if (!string.Equals(definition.Mode, "mutual", StringComparison.OrdinalIgnoreCase))
+            throw Error($"{path}.participation.mode", "must be 'mutual'");
+        if (target != TargetKind.Entity || executor != ExecutorKind.PerformWithEntity)
+            throw Error($"{path}.participation", "mutual participation requires an entity target and performWithEntity executor");
+        if (definition.MinimumDurationMinutes <= 0 ||
+            definition.MaximumDurationMinutes < definition.MinimumDurationMinutes ||
+            definition.RejectionCooldownMinutes < 0 || definition.Acceptance is null)
+            throw Error($"{path}.participation", "contains invalid duration, cooldown, or acceptance values");
+        var acceptance = definition.Acceptance;
+        CompiledPredicate eligibility;
+        try { eligibility = CompiledPredicate.Compile(acceptance.Eligibility, facts); }
+        catch (InvalidDataException exception) { throw Error($"{path}.participation.acceptance.eligibility", exception.Message, exception); }
+        var inputs = acceptance.UtilityInputs.Select((input, inputIndex) =>
+        {
+            try { return new CompiledUtilityInput(CompiledNumericExpression.Compile(input.Expression, facts),
+                input.Weight, input.Curve.ToArray()); }
+            catch (InvalidDataException exception) { throw Error($"{path}.participation.acceptance.utilityInputs[{inputIndex}]", exception.Message, exception); }
+        }).ToArray();
+        var modifiers = acceptance.TraitModifiers.Select((modifier, modifierIndex) =>
+        {
+            if (!traitBits.TryGetValue(modifier.Trait, out var bit))
+                throw Error($"{path}.participation.acceptance.traitModifiers[{modifierIndex}].trait", $"unknown trait '{modifier.Trait}'");
+            return new CompiledTraitModifier(bit, modifier.Modifier);
+        }).ToArray();
+        if (!float.IsFinite(acceptance.BaseUtility))
+            throw Error($"{path}.participation.acceptance.baseUtility", "must be finite");
+        return new(definition.MinimumDurationMinutes, definition.MaximumDurationMinutes,
+            definition.RejectionCooldownMinutes,
+            new(acceptance.BaseUtility, eligibility, inputs, modifiers));
     }
 
     private static ExecutorKind CompileExecutor(ExecutorDefinition execution, TargetKind target, string path)

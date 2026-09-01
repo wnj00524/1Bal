@@ -19,7 +19,7 @@ public sealed class Milestone15Tests
             new[] { ContentValidation.Command, Path.Combine(AppContext.BaseDirectory, "data") }, output, error);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Validated 4 intents", output.ToString());
+        Assert.Contains("Validated 9 intents", output.ToString());
         Assert.Equal(string.Empty, error.ToString());
     }
 

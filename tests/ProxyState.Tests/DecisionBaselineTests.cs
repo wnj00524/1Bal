@@ -37,7 +37,7 @@ public sealed class DecisionBaselineTests
     }
 
     [Fact]
-    public void SocializeRequiresAndTargetsAnAvailableColocatedPeer()
+    public void MeetFriendsRequiresAndTargetsAFriendGroupMember()
     {
         using var withoutPeer = new DecisionFixture(1_020);
         withoutPeer.Set(preference: 1, charisma: 100, fatigue: 0, stress: 0);
@@ -51,23 +51,23 @@ public sealed class DecisionBaselineTests
         Assert.Equal(Socialize, trace.IntentHash);
         Assert.Equal(peer.Id, trace.TargetEntityId);
         Assert.Equal(3001, trace.TargetLocationId);
-        Assert.Equal(79f, trace.Utility, precision: 3);
+        Assert.Equal(69f, trace.Utility, precision: 3);
     }
 
     [Fact]
-    public void SocialTargetRequirementsRankingAndTieBreakAreDataDefined()
+    public void FriendTargetAffinityRankingAndTieBreakAreDataDefined()
     {
         using var fixture = new DecisionFixture(1_020);
         fixture.Set(preference: 1, charisma: 100, fatigue: 0, stress: 0);
-        _ = fixture.AddPeer(affinity: 100, location: 3004); // excluded by the JSON requirement
+        var highest = fixture.AddPeer(affinity: 100, location: 3004);
         var first = fixture.AddPeer(affinity: 50);
         var second = fixture.AddPeer(affinity: 50);
 
         var trace = fixture.Decide();
 
         Assert.Equal(Socialize, trace.IntentHash);
-        Assert.Equal(Math.Min(first.Id, second.Id), trace.TargetEntityId);
-        Assert.Equal(3001, trace.TargetLocationId);
+        Assert.Equal(highest.Id, trace.TargetEntityId);
+        Assert.Equal(3004, trace.TargetLocationId);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class DecisionBaselineTests
         fixture.Decide();
 
         var selectiveCount = fixture.EvaluationCount - fullPassCount;
-        Assert.InRange(selectiveCount, 1, 2);
+        Assert.InRange(selectiveCount, 1, 3);
     }
 
     [Fact]
@@ -178,6 +178,8 @@ public sealed class DecisionBaselineTests
         private readonly Entity _clock;
         private readonly AgentDecisionSystem _decisions;
         private readonly IntentExecutionSystem _execution;
+        private readonly AgentNetworkService _networkService;
+        private readonly Entity _friendNetwork;
         private readonly SystemRoot _decisionRoot;
         private readonly SystemRoot _executionRoot;
 
@@ -201,6 +203,9 @@ public sealed class DecisionBaselineTests
                 },
                 new DecisionState { Dirty = true, CooldownActionHashes = new int[3], CooldownUntilMinutes = new long[3] },
                 Tags.Get<Tier1LodTag>());
+            _networkService = new AgentNetworkService(_store, _catalog.Networks);
+            _friendNetwork = _networkService.CreateNetwork(_catalog.Networks.GetType("friend-group").Hash, 0, 0);
+            _networkService.AddMembership(Agent, _friendNetwork, _catalog.Networks.GetRole("friend").Hash);
             _decisions = new AgentDecisionSystem(_store, _catalog, _clock);
             _execution = new IntentExecutionSystem(_store, _catalog, _clock);
             _decisionRoot = new SystemRoot(_store) { _decisions };
@@ -234,7 +239,13 @@ public sealed class DecisionBaselineTests
 
         public Entity AddPeer(float affinity, int location = 3001)
         {
-            var peer = _store.CreateEntity(new AgentLocation { CurrentLocationId = location });
+            var peer = _store.CreateEntity(
+                new Identity { NameId = 2, OccupationId = 2001 },
+                new AgentAttributes { Values = _catalog.AgentAttributes.Definitions.Select(definition => definition.Average).ToArray() },
+                new Psychology(),
+                new AgentLocation { HomeLocationId = 3001, WorkLocationId = 3004, CurrentLocationId = location },
+                new AgentTravel { RouteLocationIds = Array.Empty<int>() });
+            _networkService.AddMembership(peer, _friendNetwork, _catalog.Networks.GetRole("friend").Hash);
             _store.CreateEntity(new EdgeData { Source = Agent, Target = peer, Affinity = affinity });
             Agent.GetComponent<DecisionState>().Dirty = true;
             return peer;
