@@ -5,6 +5,7 @@ namespace ProxyState.Simulation;
 public enum FactKind : byte
 {
     AgentAttribute,
+    TargetAttribute,
     TimeMinuteOfDay,
     TimeDayOfWeek,
     JobWorkStartMinute,
@@ -25,6 +26,7 @@ public enum FactDependencyCategory : ushort
     None = 0, Time = 1 << 0, Schedule = 1 << 1, Attributes = 1 << 2,
     Traits = 1 << 3, Location = 1 << 4, Travel = 1 << 5,
     SocialTargets = 1 << 6, TargetAffinity = 1 << 7, TargetLocation = 1 << 8,
+    NetworkTargets = 1 << 9, TargetAttributes = 1 << 10, Coordination = 1 << 11,
     All = ushort.MaxValue
 }
 
@@ -47,6 +49,7 @@ public readonly record struct FactDependencyMask(FactDependencyCategory Categori
     {
         FactKind.AgentAttribute => new(FactDependencyCategory.Attributes,
             fact.Index < 64 ? 1UL << fact.Index : ulong.MaxValue),
+        FactKind.TargetAttribute => new(FactDependencyCategory.TargetAttributes),
         FactKind.TimeMinuteOfDay or FactKind.TimeDayOfWeek => new(FactDependencyCategory.Time),
         FactKind.JobWorkStartMinute or FactKind.JobWorkEndMinute or FactKind.JobIsWorkDay => new(FactDependencyCategory.Schedule),
         FactKind.AgentLocationCurrent or FactKind.AgentLocationHome or FactKind.AgentLocationWork => new(FactDependencyCategory.Location),
@@ -89,6 +92,8 @@ public sealed class FactRegistry
             var definition = attributes.Definitions[index];
             _facts.Add($"agent.attribute.{definition.Id}", new RegisteredFact(
                 new FactId(FactKind.AgentAttribute, index), FactValueKind.Number, definition.Min, definition.Max));
+            _facts.Add($"target.attribute.{definition.Id}", new RegisteredFact(
+                new FactId(FactKind.TargetAttribute, index), FactValueKind.Number, definition.Min, definition.Max));
         }
     }
 
@@ -266,11 +271,14 @@ public sealed class CompiledNumericExpression
 
 internal readonly record struct DecisionFactContext(
     WorldTime Time, JobDefinition Job, float[] Attributes, AgentLocation Location,
-    AgentTravel Travel, int TargetEntityId, float TargetAffinity, int TargetLocationId = 0)
+    AgentTravel Travel, int TargetEntityId, float TargetAffinity, int TargetLocationId = 0,
+    float[]? TargetAttributes = null)
 {
     public float Read(FactId fact) => fact.Kind switch
     {
         FactKind.AgentAttribute => Attributes[fact.Index],
+        FactKind.TargetAttribute => TargetAttributes is not null && fact.Index < TargetAttributes.Length
+            ? TargetAttributes[fact.Index] : 0f,
         FactKind.TimeMinuteOfDay => Time.MinuteOfDay,
         FactKind.TimeDayOfWeek => Time.DayOfWeek,
         FactKind.JobWorkStartMinute => Job.WorkStartMinute,

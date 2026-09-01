@@ -107,3 +107,26 @@ agent context in the generated population, so evaluation counts do not fall in
 that production fixture yet. The improvement comes from word-indexed traversal
 and removing per-agent candidate LINQ arrays/sorts. Larger sparse catalogues are
 where candidate rejection reduces evaluations as well.
+
+## Milestone 16 relationship-driven comparison
+
+Measured on 2026-09-01 on Windows x64 with .NET 8.0.13 in Release. This host is
+not comparable for elapsed time with the earlier Linux runs, so allocation and
+deterministic evaluation counts are the more useful change record.
+
+| Mode | Intent evaluations | Elapsed | Allocated | Per agent decision |
+|---|---:|---:|---:|---:|
+| M16 full-minute pass | 488,000 | 1,300.567 ms | 1,038,153,808 B | 21,676.1 ns / 17,302.56 B |
+| M16 fatigue-selective | 180,000 | 365.345 ms | 219,095,760 B | — |
+
+The ordinary catalogue grew from three to eight scored intents, including six
+entity-target behaviors and separately evaluated participant offers. Full-pass
+evaluations rose 171.1% from the M13 180,000 count. Allocation rose roughly
+10.3x versus the recorded M14 full pass because each minute now builds social,
+location, attribute, and network target snapshots and evaluates a much larger
+targeted catalogue; this is recorded performance debt, not a semantic failure.
+Fatigue-only invalidation evaluates 180,000 candidates rather than all 488,000,
+a 63.1% reduction, showing that the dependency masks still avoid unrelated
+relationship work on same-minute mutations. Future optimization should reuse
+target snapshot storage before weakening deterministic selection or content
+generality.

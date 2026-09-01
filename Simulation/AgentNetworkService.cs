@@ -58,6 +58,7 @@ public sealed class AgentNetworkService : IDisposable
 
         ValidateSupervisor(agent, network, type, supervisor, adding: true);
         agent.AddRelation(new AgentNetworkMembership { Network = network, RoleHash = roleHash, Supervisor = supervisor });
+        InvalidateNetworkMembers(network, agent);
     }
 
     public AgentNetworkMembership GetMembership(Entity agent, Entity network)
@@ -93,6 +94,7 @@ public sealed class AgentNetworkService : IDisposable
         RequireRole(type, roleHash);
         ref var membership = ref GetMembershipReference(agent, network);
         membership.RoleHash = roleHash;
+        InvalidateNetworkMembers(network, agent);
     }
 
     public void ChangeSupervisor(Entity agent, Entity network, Entity supervisor)
@@ -103,6 +105,7 @@ public sealed class AgentNetworkService : IDisposable
         ValidateSupervisor(agent, network, type, supervisor, adding: false);
         ref var membership = ref GetMembershipReference(agent, network);
         membership.Supervisor = supervisor;
+        InvalidateNetworkMembers(network, agent);
     }
 
     /// <summary>
@@ -126,6 +129,7 @@ public sealed class AgentNetworkService : IDisposable
         if (type.HierarchyMode == NetworkHierarchyMode.Flat)
         {
             agent.RemoveRelation<AgentNetworkMembership>(network);
+            InvalidateNetworkMembers(network, agent);
             return;
         }
 
@@ -150,6 +154,7 @@ public sealed class AgentNetworkService : IDisposable
             foreach (var report in reports) GetMembershipReference(report, network).Supervisor = membership.Supervisor;
         }
         agent.RemoveRelation<AgentNetworkMembership>(network);
+        InvalidateNetworkMembers(network, agent);
     }
 
     private void ValidateSupervisor(Entity agent, Entity network, NetworkTypeDefinition type, Entity supervisor, bool adding)
@@ -221,6 +226,26 @@ public sealed class AgentNetworkService : IDisposable
         var agents = new List<Entity>();
         foreach (var link in network.GetIncomingLinks<AgentNetworkMembership>()) agents.Add(link.Entity);
         foreach (var agent in agents) agent.RemoveRelation<AgentNetworkMembership>(network);
+        InvalidateAgents(agents);
+    }
+
+    // Network membership, role, and hierarchy mutations can change both target
+    // availability and an active mutual relation for every member in the group.
+    private static void InvalidateNetworkMembers(Entity network, params Entity[] additionalAgents)
+    {
+        var affected = new HashSet<Entity>(additionalAgents);
+        foreach (var link in network.GetIncomingLinks<AgentNetworkMembership>()) affected.Add(link.Entity);
+        InvalidateAgents(affected);
+    }
+
+    private static void InvalidateAgents(IEnumerable<Entity> agents)
+    {
+        foreach (var agent in agents)
+        {
+            if (agent.IsNull || !agent.TryGetComponent<DecisionState>(out _)) continue;
+            ref var decision = ref agent.GetComponent<DecisionState>();
+            DecisionInvalidation.SignalTargetAvailability(ref decision);
+        }
     }
 
     private void HandleEntityDelete(EntityDelete deletion)

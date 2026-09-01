@@ -20,8 +20,8 @@ public sealed class AgentNetworkBuilderTests
         {
             var memberships = new List<AgentNetworkMembership>();
             foreach (var membership in agent.GetRelations<AgentNetworkMembership>()) memberships.Add(membership);
-            Assert.Equal(2, memberships.Count);
-            Assert.Equal(2, memberships.Select(membership =>
+            Assert.Equal(3, memberships.Count);
+            Assert.Equal(3, memberships.Select(membership =>
                 first.Catalog.Networks.GetType(membership.Network.GetComponent<AgentNetworkData>().TypeHash).Id)
                 .Distinct().Count());
         });
@@ -32,27 +32,29 @@ public sealed class AgentNetworkBuilderTests
     {
         var result = Spawn(300, 9082);
         var family = result.Catalog.Networks.GetType("family");
+        var friends = result.Catalog.Networks.GetType("friend-group");
         var company = result.Catalog.Networks.GetType("company");
         var familyGenerator = result.Catalog.Networks.GetGenerator("families-by-home");
+        var friendGenerator = result.Catalog.Networks.GetGenerator("town-wide-friend-groups");
         var companyGenerator = result.Catalog.Networks.GetGenerator("companies-by-work");
 
         foreach (var network in result.Store.Query<AgentNetworkData>().Entities)
         {
             var data = network.GetComponent<AgentNetworkData>();
             var members = GetMembers(network);
-            var generator = data.TypeHash == family.Hash ? familyGenerator : companyGenerator;
+            var generator = data.TypeHash == family.Hash ? familyGenerator :
+                data.TypeHash == friends.Hash ? friendGenerator : companyGenerator;
 
             Assert.InRange(members.Length, 1, generator.MaximumSize);
             Assert.All(members, member => Assert.Equal(data.AnchorLocationId,
-                data.TypeHash == family.Hash
-                    ? member.Agent.GetComponent<AgentLocation>().HomeLocationId
-                    : member.Agent.GetComponent<AgentLocation>().WorkLocationId));
+                data.TypeHash == family.Hash ? member.Agent.GetComponent<AgentLocation>().HomeLocationId :
+                data.TypeHash == company.Hash ? member.Agent.GetComponent<AgentLocation>().WorkLocationId : 0));
 
-            if (data.TypeHash == family.Hash)
+            if (data.TypeHash is var flatType && (flatType == family.Hash || flatType == friends.Hash))
             {
                 Assert.All(members, member =>
                 {
-                    Assert.Equal(familyGenerator.MemberRoleHash, member.Membership.RoleHash);
+                    Assert.Equal(generator.MemberRoleHash, member.Membership.RoleHash);
                     Assert.True(member.Membership.Supervisor.IsNull);
                 });
                 continue;
@@ -99,7 +101,9 @@ public sealed class AgentNetworkBuilderTests
         populationOnly.Spawn(noNetworkStore, 80, seed, generateNetworks: false);
 
         Assert.Equal(CaptureAgents(normalStore), CaptureAgents(noNetworkStore));
-        Assert.Equal(CaptureEdges(normalStore), CaptureEdges(noNetworkStore));
+        var normalEdges = CaptureEdges(normalStore).ToHashSet();
+        Assert.All(CaptureEdges(noNetworkStore), edge => Assert.Contains(edge, normalEdges));
+        Assert.True(normalEdges.Count >= CaptureEdges(noNetworkStore).Length);
     }
 
     private static (EntityStore Store, ContentCatalog Catalog, Entity[] Agents) Spawn(int count, int seed)

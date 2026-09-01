@@ -13,7 +13,7 @@ public sealed record ActionControlDefinition(
     int CooldownMinutes,
     float UrgentPreemptionThreshold,
     bool CooldownOnExit = true);
-public sealed record ActionEffectDefinition(string Attribute, float PerMinute);
+public sealed record ActionEffectDefinition(string Attribute, float PerMinute, string? Subject = null);
 public sealed record ActivityDefinition(string Id, string Name, int Hash);
 public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
 ;
@@ -21,7 +21,8 @@ public sealed record TargetQueryDefinition(
     string Relation,
     List<PredicateDefinition> Requirements,
     List<TargetRankDefinition> RankBy,
-    int? Limit);
+    int? Limit,
+    string? NetworkType = null);
 public sealed record TargetDefinition(string Kind, string? Value, TargetQueryDefinition? Query);
 public enum ExecutorKind : byte
 {
@@ -32,6 +33,17 @@ public enum ExecutorKind : byte
 }
 public sealed record ExecutorDefinition(string Executor, string? Destination)
 ;
+public sealed record ParticipantAcceptanceDefinition(
+    float BaseUtility,
+    PredicateDefinition Eligibility,
+    List<UtilityInputDefinition> UtilityInputs,
+    List<TraitUtilityModifier> TraitModifiers);
+public sealed record ParticipationDefinition(
+    string Mode,
+    int MinimumDurationMinutes,
+    int MaximumDurationMinutes,
+    int RejectionCooldownMinutes,
+    ParticipantAcceptanceDefinition Acceptance);
 public sealed record ActionDefinition(
     string Id,
     string Name,
@@ -45,7 +57,8 @@ public sealed record ActionDefinition(
     List<ActionEffectDefinition> Effects,
     TargetDefinition Target,
     ExecutorDefinition Execution,
-    bool Fallback = false);
+    bool Fallback = false,
+    ParticipationDefinition? Participation = null);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -155,9 +168,9 @@ public sealed class ContentCatalog
 
         ValidateSecretStates(secretStates);
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
-        var intents = IntentCompiler.Compile(actions, traits, agentAttributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
+        var intents = IntentCompiler.Compile(actions, traits, agentAttributes, networks);
         return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks);
     }
 
@@ -297,6 +310,22 @@ public sealed class ContentCatalog
                 throw new InvalidDataException($"Action '{action.Id}' has a non-finite trait modifier.");
             if (action.Effects.Any(effect => !float.IsFinite(effect.PerMinute)))
                 throw new InvalidDataException($"Action '{action.Id}' has a non-finite effect rate.");
+            if (action.Participation is { } participation)
+            {
+                var acceptance = participation.Acceptance;
+                if (acceptance is null || acceptance.Eligibility is null || acceptance.UtilityInputs is null ||
+                    acceptance.TraitModifiers is null || !float.IsFinite(acceptance.BaseUtility))
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid participation definition.");
+                foreach (var input in acceptance.UtilityInputs)
+                {
+                    if (input.Expression is null || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                        input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
+                        input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
+                        throw new InvalidDataException($"Action '{action.Id}' has an invalid participant utility input.");
+                }
+                if (acceptance.TraitModifiers.Any(modifier => !float.IsFinite(modifier.Modifier)))
+                    throw new InvalidDataException($"Action '{action.Id}' has a non-finite participant trait modifier.");
+            }
         }
     }
 

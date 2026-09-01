@@ -19,10 +19,11 @@
   parsing, casing, string comparison, or expression allocation.
 * Every action declares a `none`, `location`, or `entity` target. Direct location
   values resolve home, work, or current location without action-ID branches.
-  Entity queries traverse the declared social relation, evaluate compiled target
-  requirements, rank candidates lexicographically, and break exact ties by
-  ascending entity ID. Losing or changing the selected target dirties the
-  decision immediately through the same generic resolver.
+  Entity queries traverse a compiled social, network-member, network-supervisor,
+  or network-direct-report relation, evaluate compiled target requirements,
+  rank candidates lexicographically, and break exact ties by ascending entity
+  ID. Target attribute facts use schema indexes; affinity comes from the
+  directional edge or is neutral for network members without an edge.
 * The highest score wins. Exact ties use ascending stable action hash, never
   JSON or query order. A switch additionally pays the configured switching
   threshold unless its score reaches the urgent-preemption threshold.
@@ -47,7 +48,7 @@
 
 **Goal:** Handle target interrogation/surveillance based on Perception vs Willpower.
 
-* `SocialGraphBuilder` creates a randomized simple graph with five peers per agent (or the largest valid degree for smaller populations), storing each pair as two directed `EdgeData` entities.
+* `SocialGraphBuilder` creates a randomized simple graph with at least five peers per agent (or the largest valid degree for smaller populations), then adds reciprocal clique edges for every family and friend group whose type enables `seedsSocialGraph`. Duplicate directed pairs are suppressed.
 * `InteractionSystem` runs on every 60th ECS update by default. The interval is injectable for tests and future tuning.
 * Each edge performs an opposed d100 contest: `Source` rolls d100 plus schema-defined `perception`; `Target` rolls d100 plus schema-defined `willpower`, with a 20-point bonus when the target has the `Paranoid` trait.
 * On a source victory, one present and not-yet-known target trait is selected and revealed with bitwise `OR` on `EdgeData.KnownTraitMask` (for example, `KnownTraitMask |= 0x0004`).
@@ -87,8 +88,9 @@ The system is configured with an optional positive per-tick increase so simulati
 * Location and entity executors share deterministic shortest-route traversal;
   the movement path contains no action IDs.
 * Execution copies the action's data-defined activity hash into `ActivityState`.
-  `ActivityPhase` contains only the generic Idle, Moving, Performing, and Blocked
-  engine phases; arrival changes Moving to Performing and dirties the decision.
+  `ActivityPhase` contains only generic Idle, Moving, Waiting, Performing, and
+  Blocked engine phases. Waiting reserves a mutual participant in place while
+  the initiator travels; arrival changes both partners to Performing.
   A missing entity or unreachable destination blocks the actor and dirties its
   decision for reconsideration.
 * `ActivityEffectsSystem` applies effects only for a Performing state whose
@@ -162,6 +164,8 @@ runtime mutation boundary.
 * The service subscribes to ECS entity deletion events because Friflo cleans up
   the keyed `Network` link but cannot clean the non-key `Supervisor` field.
   Network deletion first removes all incoming membership relations.
+* Every membership, role, supervisor, or network deletion mutation invalidates
+  target availability and active coordination for all affected members.
 
 ### 4.12 Deterministic Agent Network Generation
 
@@ -174,13 +178,16 @@ without coupling unrelated replay outcomes.
   social peers.
 * Network generation runs after every agent has home and work assignments and
   before `SocialGraphBuilder` creates interpersonal edges.
-* `AgentNetworkBuilder` buckets agents by the generator's registered home- or
-  work-location strategy, sorts buckets by location hash, shuffles each bucket,
+* `AgentNetworkBuilder` buckets agents by the generator's registered home-,
+  work-, or global-partition strategy, sorts buckets by location hash, shuffles each bucket,
   samples configured weighted sizes, and consumes every member exactly once.
   Each resulting network is anchored to its bucket location.
 * Families are flat synthetic groupings whose members all use the configured
   member role and have no supervisor. Generation intentionally adds no inferred
   genealogy, ages, or surnames.
+* Friend groups are flat, town-wide partitions anchored at location `0`.
+  Weighted target sizes are redistributed deterministically so the final group
+  remains within the authored three-to-six-member bounds.
 * Companies are built breadth-first. Children are distributed evenly across a
   level up to the configured target span; validated size capacity guarantees
   the maximum depth is sufficient. The root is the only head, non-root agents
@@ -231,7 +238,8 @@ leaking ECS entities into ordinary presentation code.
   `FactDependencyMask`. Attribute dependencies retain their schema index bits.
 * Mutation boundaries signal categories through `DecisionInvalidation`.
   Effects report precise attribute indexes, movement reports location/travel,
-  and social affinity changes report target availability.
+  and social-affinity or network mutations report target availability and
+  coordination dependencies.
 * `DecisionState` caches each candidate result. A same-minute dirty update only
   resolves and scores candidates whose dependency masks overlap changed facts;
   cached unaffected results still participate in deterministic score/hash
@@ -269,3 +277,27 @@ leaking ECS entities into ordinary presentation code.
 * `--validate-content [directory]` loads and compiles content without Raylib.
   CI runs the test suite and this command so malformed intent content fails with
   its file, intent ID, and JSON path.
+
+### 4.18 Mutual Activity Coordination (Milestone 16)
+
+* `CoordinationSystem` runs after deliberation and before execution. Mutual
+  winners produce invitations; participant eligibility and utility are evaluated
+  from separately compiled content with the invitee as agent and initiator as
+  target.
+* Invitations are sorted by participant utility, initiator utility, action hash,
+  initiator ID, and target ID. Greedy disjoint acceptance makes pairing
+  deterministic and prevents double booking. Rejected initiators receive the
+  authored cooldown and are dirtied for reconsideration.
+* Normal minimum-commitment, switching, and urgent-preemption controls protect
+  the invitee. The participant waits in place while the initiator follows the
+  generic route; both begin Performing only when colocated.
+* Before the mutual minimum duration both remain committed. After it, either
+  partner's better alternative releases the pair under normal switching rules;
+  the authored maximum duration releases them unconditionally. Missing partners,
+  invalidated relations, and impossible travel release immediately.
+* Effects declare `subject: initiator|participant` and are applied independently
+  only while both partners are Performing. Release clears both coordination
+  components, applies the safe fallback, and dirties both decisions.
+* Debug snapshots copy partner, role, status, timing, duration, utilities, and
+  release state. These coordination and network facts never enter
+  `PlayerIntelligenceDB`.

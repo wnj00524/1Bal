@@ -236,14 +236,15 @@ public sealed class SimulationTests
         var inspection = DebugSnapshotBuilder.CaptureInspection(store, catalog);
 
         Assert.Equal(12, inspection.Agents.Count);
-        Assert.All(inspection.Agents, agent => Assert.Equal(2, agent.Networks.Count));
+        Assert.All(inspection.Agents, agent => Assert.Equal(3, agent.Networks.Count));
         Assert.NotEmpty(inspection.Networks);
-        Assert.Equal(24, inspection.Networks.Sum(network => network.MemberCount));
+        Assert.Equal(36, inspection.Networks.Sum(network => network.MemberCount));
         Assert.All(inspection.Networks, network =>
         {
             Assert.NotEmpty(network.DisplayName);
             Assert.NotEmpty(network.TypeName);
-            Assert.NotNull(network.Anchor);
+            if (network.TypeName == "Friend Group") Assert.Null(network.Anchor);
+            else Assert.NotNull(network.Anchor);
             Assert.True(network.MemberCount > 0);
         });
         Assert.All(inspection.Agents.SelectMany(agent => agent.Networks), membership =>
@@ -280,12 +281,12 @@ public sealed class SimulationTests
             .Select(entity => entity.GetComponent<EdgeData>())
             .ToArray();
 
-        Assert.Equal(10 * SimulationDefaults.SocialRelationshipsPerAgent, edges.Length);
+        Assert.True(edges.Length >= 10 * SimulationDefaults.SocialRelationshipsPerAgent);
         foreach (var agent in agents)
         {
             var outgoing = edges.Where(edge => edge.Source == agent).ToArray();
-            Assert.Equal(5, outgoing.Length);
-            Assert.Equal(5, outgoing.Select(edge => edge.Target).Distinct().Count());
+            Assert.True(outgoing.Length >= 5);
+            Assert.Equal(outgoing.Length, outgoing.Select(edge => edge.Target).Distinct().Count());
             Assert.DoesNotContain(outgoing, edge => edge.Target == agent);
 
             foreach (var edge in outgoing)

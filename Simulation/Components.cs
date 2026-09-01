@@ -77,9 +77,31 @@ public struct IntentionState : IComponent
 public enum ActivityPhase : byte
 {
     Idle,
+    Waiting,
     Moving,
     Performing,
     Blocked
+}
+
+public enum CoordinationRole : byte { None, Initiator, Participant }
+public enum CoordinationStatus : byte { None, Reserved, Travelling, Waiting, Performing }
+
+// Mutual activity state is deliberately mechanical: action data supplies the
+// social meaning, while this component only owns pairing and timing.
+public struct CoordinationState : IComponent
+{
+    public int PartnerEntityId;
+    public int ActionHash;
+    public CoordinationRole Role;
+    public CoordinationStatus Status;
+    public long AcceptedAtMinute;
+    public long StartedAtMinute;
+    public int MinimumDurationMinutes;
+    public int MaximumDurationMinutes;
+    public float Utility;
+    public bool ReleaseRequested;
+
+    public readonly bool Active => PartnerEntityId != 0 && Role != CoordinationRole.None;
 }
 
 public struct ActivityState : IComponent

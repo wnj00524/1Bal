@@ -45,6 +45,17 @@ public sealed record DebugNetworkSnapshot(
     DebugLocationSnapshot? Anchor,
     int MemberCount);
 
+public sealed record DebugCoordinationSnapshot(
+    int PartnerEntityId,
+    CoordinationRole Role,
+    CoordinationStatus Status,
+    long AcceptedAtMinute,
+    long StartedAtMinute,
+    int MinimumDurationMinutes,
+    int MaximumDurationMinutes,
+    float Utility,
+    bool ReleaseRequested);
+
 public sealed record DebugDecisionContributionSnapshot(string Label, float Value);
 
 public sealed record DebugDecisionCandidateSnapshot(
@@ -90,6 +101,7 @@ public sealed record DebugAgentSnapshot(
     DebugLocationSnapshot Workplace,
     DebugLocationSnapshot CurrentLocation,
     DebugTravelSnapshot Travel,
+    DebugCoordinationSnapshot? Coordination,
     IReadOnlyList<DebugDecisionCandidateSnapshot> Decisions,
     IReadOnlyList<DebugNetworkMembershipSnapshot> Networks)
 {
@@ -204,6 +216,7 @@ public static class DebugSnapshotBuilder
                     travel.RoutePosition,
                     travel.RemainingTravelMinutes,
                     travel.Mode),
+                CopyCoordination(entity),
                 CopyDecisions(catalog, intention, decision),
                 (networkMembershipsByAgent.TryGetValue(entity.Id, out var memberships)
                     ? memberships.OrderBy(item => item.NetworkEntityId).ToArray()
@@ -213,6 +226,17 @@ public static class DebugSnapshotBuilder
         return new DebugInspectionSnapshot(
             snapshots.AsReadOnly(),
             networkSnapshots.OrderBy(network => network.EntityId).ToArray().AsReadOnly());
+    }
+
+    private static DebugCoordinationSnapshot? CopyCoordination(Entity entity)
+    {
+        if (!entity.HasComponent<CoordinationState>()) return null;
+        var coordination = entity.GetComponent<CoordinationState>();
+        return !coordination.Active ? null : new DebugCoordinationSnapshot(
+            coordination.PartnerEntityId, coordination.Role, coordination.Status,
+            coordination.AcceptedAtMinute, coordination.StartedAtMinute,
+            coordination.MinimumDurationMinutes, coordination.MaximumDurationMinutes,
+            coordination.Utility, coordination.ReleaseRequested);
     }
 
     private static IReadOnlyList<DebugDecisionCandidateSnapshot> CopyDecisions(
@@ -388,6 +412,22 @@ public sealed class DebugWindow
         ImGui.BulletText($"Home: {FormatLocation(agent.Home)}");
         ImGui.BulletText($"Workplace: {FormatLocation(agent.Workplace)}");
         ImGui.BulletText($"Current location: {FormatLocation(agent.CurrentLocation)}");
+
+        ImGui.Separator();
+        ImGui.Text("Coordination");
+        if (agent.Coordination is null)
+        {
+            ImGui.BulletText("None");
+        }
+        else
+        {
+            ImGui.BulletText($"Partner entity: {agent.Coordination.PartnerEntityId}");
+            ImGui.BulletText($"Role/status: {agent.Coordination.Role} / {agent.Coordination.Status}");
+            ImGui.BulletText($"Accepted/start minute: {agent.Coordination.AcceptedAtMinute} / {agent.Coordination.StartedAtMinute}");
+            ImGui.BulletText($"Duration window: {agent.Coordination.MinimumDurationMinutes}-{agent.Coordination.MaximumDurationMinutes} minutes");
+            ImGui.BulletText($"Coordination utility: {agent.Coordination.Utility:0.###}");
+            ImGui.BulletText($"Release requested: {agent.Coordination.ReleaseRequested}");
+        }
 
         ImGui.Separator();
         ImGui.Text("Decision inspector");

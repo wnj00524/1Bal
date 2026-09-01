@@ -39,26 +39,66 @@ public sealed class AgentNetworkBuilder
 
     private static IEnumerable<(int LocationId, Entity[] Agents)> Partition(
         IReadOnlyList<Entity> agents, NetworkPartitionStrategy strategy) =>
-        agents.GroupBy(agent => strategy == NetworkPartitionStrategy.HomeLocation
-                ? agent.GetComponent<AgentLocation>().HomeLocationId
-                : agent.GetComponent<AgentLocation>().WorkLocationId)
+        agents.GroupBy(agent => strategy switch
+            {
+                NetworkPartitionStrategy.Global => 0,
+                NetworkPartitionStrategy.HomeLocation => agent.GetComponent<AgentLocation>().HomeLocationId,
+                NetworkPartitionStrategy.WorkLocation => agent.GetComponent<AgentLocation>().WorkLocationId,
+                _ => throw new InvalidOperationException($"Unsupported partition strategy '{strategy}'.")
+            })
             .OrderBy(group => group.Key)
             .Select(group => (group.Key, group.OrderBy(agent => agent.Id).ToArray()));
 
     private static IEnumerable<Entity[]> Divide(Entity[] agents, NetworkGeneratorDefinition generator, Random random)
     {
+        if (agents.Length == 0) yield break;
+
+        // Sample the whole partition before yielding so a short final group can
+        // be redistributed into earlier groups without exceeding maximum size.
+        var sizes = new List<int>();
         var offset = 0;
         while (offset < agents.Length)
         {
             var remaining = agents.Length - offset;
             var size = Math.Min(SampleSize(generator.SizeWeights, random), remaining);
+            sizes.Add(size);
+            offset += size;
+        }
 
-            if (generator.RemainderHandling == NetworkRemainderHandling.MergeIntoPrevious &&
-                remaining - size > 0 && remaining - size < generator.MinimumSize)
+        if (generator.RemainderHandling == NetworkRemainderHandling.MergeIntoPrevious &&
+            sizes.Count > 1 && sizes[^1] < generator.MinimumSize)
+        {
+            var remainder = sizes[^1];
+            sizes.RemoveAt(sizes.Count - 1);
+            for (var index = sizes.Count - 1; index >= 0 && remainder > 0; index--)
             {
-                size = Math.Min(remaining, generator.MaximumSize);
+                var room = generator.MaximumSize - sizes[index];
+                var moved = Math.Min(room, remainder);
+                sizes[index] += moved;
+                remainder -= moved;
             }
 
+            if (remainder > 0)
+            {
+                var needed = generator.MinimumSize - remainder;
+                for (var index = sizes.Count - 1; index >= 0 && needed > 0; index--)
+                {
+                    var movable = sizes[index] - generator.MinimumSize;
+                    var moved = Math.Min(movable, needed);
+                    sizes[index] -= moved;
+                    remainder += moved;
+                    needed -= moved;
+                }
+            }
+
+            // A partition smaller than the configured minimum remains a single
+            // undersized group; no agent is ever dropped.
+            if (remainder > 0) sizes.Add(remainder);
+        }
+
+        offset = 0;
+        foreach (var size in sizes)
+        {
             yield return agents.AsSpan(offset, size).ToArray();
             offset += size;
         }
@@ -107,7 +147,7 @@ public sealed class AgentNetworkBuilder
         }
 
         if (nextMember != members.Length)
-            throw new InvalidOperationException("Generated company exceeds its validated hierarchy capacity.");
+            throw new InvalidOperationException("Generated hierarchical network exceeds its validated capacity.");
 
         service.AddMembership(members[0], network, generator.RootRoleHash);
         for (var index = 1; index < members.Length; index++)
