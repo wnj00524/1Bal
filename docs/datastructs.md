@@ -213,8 +213,9 @@ entities, one in each direction, with independent knowledge masks. Populations
 smaller than six receive the largest valid graph degree for their size. Self-links
 and duplicate peers are not created.
 
-`InteractionSystem` processes every edge on the configured interval (60 ECS
-ticks by default). A source's d100 plus `perception` competes with the target's
+`InteractionSystem` processes the packed outgoing edges of eligible detailed
+sources on the configured interval (60 ECS ticks by default), rather than
+scanning the entire edge population. A source's d100 plus `perception` competes with the target's
 d100 plus `willpower`; a target with the `paranoid` trait receives a 20-point
 willpower bonus. A successful contest reveals one present, previously unknown
 trait by OR-ing its bit into `KnownTraitMask`. The mask records confirmed
@@ -239,6 +240,11 @@ attribute arrays are read from the agent directory's resolved ECS entity.
 Network target enumeration deliberately remains in Friflo's native
 `AgentNetworkMembership` incoming-link and relation storage rather than adding
 a duplicate network-member snapshot.
+
+Milestone 17.4 also uses the direct agent directory to resolve a moving
+intention target's current `AgentLocation`; execution no longer builds a
+full-population location dictionary on every tick. Deleted or component-missing
+targets follow the ordinary target-availability invalidation path.
 
 The snapshot is immutable between rebuilds in Milestone 17.2. Code that changes
 the population must call `NotifyPopulationChanged`; code that adds, removes, or

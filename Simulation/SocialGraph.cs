@@ -121,8 +121,10 @@ public sealed class SocialGraphBuilder
 /// Periodically lets every directed relationship attempt to discover one
 /// currently hidden, present trait on its target.
 /// </summary>
-public sealed class InteractionSystem : QuerySystem<EdgeData>
+public sealed class InteractionSystem : QuerySystem<Identity>
 {
+    private readonly AgentSocialIndexes _socialIndexes;
+    private readonly SimulationWorkDiagnostics? _workDiagnostics;
     private readonly Random _random;
     private readonly int _intervalTicks;
     private readonly int _perceptionIndex;
@@ -133,10 +135,14 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
     private int _ticks;
 
     public InteractionSystem(
+        EntityStore store,
         ContentCatalog catalog,
         Random random,
-        int intervalTicks = SimulationDefaults.InteractionIntervalTicks)
+        int intervalTicks = SimulationDefaults.InteractionIntervalTicks,
+        AgentSocialIndexes? socialIndexes = null,
+        SimulationWorkDiagnostics? workDiagnostics = null)
     {
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(random);
         if (intervalTicks <= 0)
@@ -145,6 +151,8 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
         }
 
         _random = random;
+        _socialIndexes = socialIndexes ?? BuildIndexes(store);
+        _workDiagnostics = workDiagnostics;
         _intervalTicks = intervalTicks;
         _perceptionIndex = catalog.AgentAttributes.GetIndex("perception");
         _willpowerIndex = catalog.AgentAttributes.GetIndex("willpower");
@@ -153,6 +161,7 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
         _paranoidBit = _traits
             .FirstOrDefault(trait => string.Equals(trait.Id, "paranoid", StringComparison.OrdinalIgnoreCase))
             ?.Bit ?? 0L;
+        Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
     protected override void OnUpdate()
@@ -163,7 +172,28 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
             return;
         }
 
-        Query.ForEachEntity((ref EdgeData edge, Entity _) => Interact(ref edge));
+        // Iterate detailed sources, then only their packed adjacency ranges.
+        // Unrelated edges therefore never enter the interval's hot path.
+        Query.ForEachEntity((ref Identity identity, Entity source) =>
+        {
+            foreach (var indexedEdge in _socialIndexes.GetOutgoingEdges(source.Id))
+            {
+                _workDiagnostics?.RecordEdgeVisit();
+                if (_socialIndexes.TryGetEdge(indexedEdge.EdgeEntityId, out var edgeEntity) &&
+                    !edgeEntity.IsNull && edgeEntity.TryGetComponent<EdgeData>(out _))
+                {
+                    ref var edge = ref edgeEntity.GetComponent<EdgeData>();
+                    Interact(ref edge);
+                }
+            }
+        });
+    }
+
+    private static AgentSocialIndexes BuildIndexes(EntityStore store)
+    {
+        var indexes = new AgentSocialIndexes();
+        indexes.Rebuild(store);
+        return indexes;
     }
 
     private void Interact(ref EdgeData edge)
