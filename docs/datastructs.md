@@ -99,6 +99,8 @@ public struct CoordinationState : IComponent {
 public struct DecisionState : IComponent {
     public long LastConsideredMinute;
     public bool Dirty;
+    public FactDependencyMask ChangedFacts;
+    public DecisionWakeReason ImmediateWakeReasons;
     public int[] CooldownActionHashes;
     public long[] CooldownUntilMinutes;
     public float[][] CachedUtilityContributions; // Allocated in debug mode only.
@@ -141,6 +143,10 @@ or investigated direct neighbour, preventing an agent from leaving Tier 2 while
 another POI still references it. Its drained `InvestigationChangedEvent` values
 contain only `AgentId` and `Enabled`; the copied records can cross into a later
 player-intelligence projection without leaking ECS `Entity` handles or LOD state.
+`ScheduledDemotionMinute` is `-1` when no reduction is pending and otherwise
+stores the earliest next-day boundary computed from elapsed simulation minutes.
+`ActiveInteraction` is backed by service-owned reference counts so overlapping
+owners cannot clear one another's pins; the flag is removed only on final release.
 
 `AgentAttributeSchema` loads the ordered numeric definitions from
 `data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores
@@ -419,6 +425,11 @@ targets, target attributes, target location/affinity, and coordination. No
 dependency list is authored in JSON.
 
 `DecisionState.ChangedFacts` accumulates mutation signals until consideration.
+`Dirty` records that ordinary dependencies changed, while the flagged
+`DecisionWakeReason` distinguishes target loss, coordination lifecycle,
+investigation, and promotion events that cannot wait for a Tier 2 cadence
+boundary. Both are cleared only after a decision pass; ordinary Tier 2 changes
+therefore remain accumulated for the next data-defined interval.
 Its parallel score, eligibility, and target arrays are indexed by the compiled
 intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
 is diagnostic Ground Truth state and is not copied into player intelligence.

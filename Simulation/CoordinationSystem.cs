@@ -30,14 +30,14 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         _fallback = catalog.Intents.Fallback;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
         _lodService = lodService;
-        Filter.AllTags(Tags.Get<Tier1LodTag>());
+        Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
     protected override void OnUpdate()
     {
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
-        PromoteInvitationTargets();
+        PromoteTier3InvitationTargets();
         var agents = _store.Query<Identity>().Entities
             .Where(IsCoordinatable).OrderBy(entity => entity.Id).ToArray();
         var byId = agents.ToDictionary(entity => entity.Id);
@@ -47,18 +47,16 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         MatchInvitations(agents, byId, targets, time, minute);
     }
 
-    private void PromoteInvitationTargets()
+    private void PromoteTier3InvitationTargets()
     {
         if (_lodService is null) return;
         var byId = _store.Query<Identity>().Entities.ToDictionary(entity => entity.Id);
         foreach (var initiator in _store.Query<IntentionState>().Entities.Where(entity => entity.Tags.Has<Tier1LodTag>()))
         {
             var intention = initiator.GetComponent<IntentionState>();
-            if (!_intents.TryGetValue(intention.ActionHash, out var intent) || intent.Participation is null ||
-                !byId.TryGetValue(intention.TargetEntityId, out var participant) || !participant.Tags.Has<Tier3LodTag>()) continue;
-            // This happens outside any active component query iteration, so the
-            // target has all detailed state before offer evaluation can read it.
-            _lodService.PinActiveInteraction(participant);
+            if (_intents.TryGetValue(intention.ActionHash, out var intent) && intent.Participation is not null &&
+                byId.TryGetValue(intention.TargetEntityId, out var target) && target.Tags.Has<Tier3LodTag>())
+                _lodService.AcquireInteractionPin(target);
         }
     }
 
@@ -70,6 +68,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     }
 
     private static bool IsCoordinatable(Entity entity) =>
+        (entity.Tags.Has<Tier1LodTag>() || entity.Tags.Has<Tier2LodTag>()) &&
         entity.HasComponent<CoordinationState>() && entity.HasComponent<IntentionState>() &&
         entity.HasComponent<ActivityState>() && entity.HasComponent<DecisionState>() &&
         entity.HasComponent<AgentAttributes>() && entity.HasComponent<Psychology>() &&
@@ -243,7 +242,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
             (urgent || offer >= current.Utility + invitation.Controls.SwitchingThreshold);
     }
 
-    private static void Accept(Proposal proposal, long minute)
+    private void Accept(Proposal proposal, long minute)
     {
         var participation = proposal.Intent.Participation!;
         ref var initiatorCoordination = ref proposal.Initiator.GetComponent<CoordinationState>();
@@ -252,6 +251,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
             CoordinationRole.Initiator, proposal.InitiatorUtility, participation, minute);
         participantCoordination = CreateState(proposal.Initiator.Id, proposal.Intent.Hash,
             CoordinationRole.Participant, proposal.ParticipantUtility, participation, minute);
+        _lodService?.AcquireInteractionPin(proposal.Initiator);
+        _lodService?.AcquireInteractionPin(proposal.Participant);
 
         ref var participantIntention = ref proposal.Participant.GetComponent<IntentionState>();
         participantIntention.ActionHash = proposal.Intent.Hash;
@@ -259,10 +260,10 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         participantIntention.TargetLocationId = proposal.Initiator.GetComponent<AgentLocation>().CurrentLocationId;
         participantIntention.SelectedAtMinute = minute;
         participantIntention.Utility = proposal.ParticipantUtility;
-        DecisionInvalidation.Signal(ref proposal.Initiator.GetComponent<DecisionState>(),
-            new(FactDependencyCategory.Coordination));
-        DecisionInvalidation.Signal(ref proposal.Participant.GetComponent<DecisionState>(),
-            new(FactDependencyCategory.Coordination));
+        DecisionInvalidation.SignalCoordinationLifecycle(
+            ref proposal.Initiator.GetComponent<DecisionState>());
+        DecisionInvalidation.SignalCoordinationLifecycle(
+            ref proposal.Participant.GetComponent<DecisionState>());
     }
 
     private static CoordinationState CreateState(int partnerId, int actionHash, CoordinationRole role,
@@ -292,8 +293,6 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         SetCooldown(participant, actionHash, minute + cooldown);
         ResetToFallback(initiator);
         ResetToFallback(participant);
-        _lodService?.ReleaseActiveInteraction(initiator);
-        _lodService?.ReleaseActiveInteraction(participant);
     }
 
     private void ReleaseSingle(Entity agent, int actionHash, long minute)
@@ -301,11 +300,12 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         var cooldown = _intents.TryGetValue(actionHash, out var intent) ? intent.Controls.CooldownMinutes : 0;
         SetCooldown(agent, actionHash, minute + cooldown);
         ResetToFallback(agent);
-        _lodService?.ReleaseActiveInteraction(agent);
     }
 
     private void ResetToFallback(Entity agent)
     {
+        if (agent.GetComponent<CoordinationState>().Active)
+            _lodService?.ReleaseInteractionPin(agent);
         agent.GetComponent<CoordinationState>() = default;
         ref var intention = ref agent.GetComponent<IntentionState>();
         intention.ActionHash = _fallback.Hash;
@@ -313,7 +313,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         intention.TargetLocationId = 0;
         intention.Utility = _fallback.BaseUtility;
         ref var decision = ref agent.GetComponent<DecisionState>();
-        DecisionInvalidation.Signal(ref decision, FactDependencyMask.All);
+        DecisionInvalidation.SignalCritical(ref decision, FactDependencyMask.All,
+            DecisionWakeReason.CoordinationLifecycle);
     }
 
     private static void SetCooldown(Entity agent, int actionHash, long untilMinute)
