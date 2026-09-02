@@ -17,9 +17,10 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CompiledIntent _fallback;
     private readonly AgentSocialIndexes _socialIndexes;
+    private readonly AgentLodService? _lodService;
 
     public CoordinationSystem(EntityStore store, ContentCatalog catalog, Entity clock,
-        AgentSocialIndexes? socialIndexes = null)
+        AgentSocialIndexes? socialIndexes = null, AgentLodService? lodService = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -28,6 +29,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
+        _lodService = lodService;
         Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
@@ -226,7 +228,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
             (urgent || offer >= current.Utility + invitation.Controls.SwitchingThreshold);
     }
 
-    private static void Accept(Proposal proposal, long minute)
+    private void Accept(Proposal proposal, long minute)
     {
         var participation = proposal.Intent.Participation!;
         ref var initiatorCoordination = ref proposal.Initiator.GetComponent<CoordinationState>();
@@ -235,6 +237,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
             CoordinationRole.Initiator, proposal.InitiatorUtility, participation, minute);
         participantCoordination = CreateState(proposal.Initiator.Id, proposal.Intent.Hash,
             CoordinationRole.Participant, proposal.ParticipantUtility, participation, minute);
+        _lodService?.AcquireInteractionPin(proposal.Initiator);
+        _lodService?.AcquireInteractionPin(proposal.Participant);
 
         ref var participantIntention = ref proposal.Participant.GetComponent<IntentionState>();
         participantIntention.ActionHash = proposal.Intent.Hash;
@@ -286,6 +290,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
 
     private void ResetToFallback(Entity agent)
     {
+        if (agent.GetComponent<CoordinationState>().Active)
+            _lodService?.ReleaseInteractionPin(agent);
         agent.GetComponent<CoordinationState>() = default;
         ref var intention = ref agent.GetComponent<IntentionState>();
         intention.ActionHash = _fallback.Hash;

@@ -32,8 +32,8 @@ public static class Program
         {
             clock,
             new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode,
-                socialIndexes: agentSocialIndexes),
-            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
+                socialIndexes: agentSocialIndexes, lodService: spawner.LodService),
+            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes, spawner.LodService),
             new IntentExecutionSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
             new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes)
