@@ -10,6 +10,10 @@ public sealed class AgentSpawner
     private readonly SocialGraphBuilder _socialGraphBuilder;
     private readonly AgentNetworkBuilder _networkBuilder;
 
+    // The same snapshot owner is retained across explicit population rebuilds;
+    // downstream systems can safely keep this reference for later milestones.
+    public AgentSocialIndexes Indexes { get; } = new();
+
     public AgentSpawner(
         ContentCatalog catalog,
         SocialGraphBuilder? socialGraphBuilder = null)
@@ -141,6 +145,10 @@ public sealed class AgentSpawner
             _networkBuilder.Populate(networkService, agents, SimulationRandomStreams.Networks(seed));
         }
         _socialGraphBuilder.Populate(store, agents, SimulationRandomStreams.SocialGraph(seed));
+
+        // Networks can contribute social edges, so indexing is deliberately the
+        // final bootstrap step after every generated graph input is complete.
+        Indexes.Rebuild(store);
 
         return count;
     }

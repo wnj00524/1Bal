@@ -222,6 +222,22 @@ present traits only, so confirmed absence is not represented. Affinity is the
 normalized percentage of configured traits shared by the target and the
 source's known mask.
 
+`AgentSocialIndexes` is the persistent, non-ECS lookup snapshot created after
+agent, network, and social-edge generation. Its direct agent directory is
+indexed by integer entity ID. Outgoing relationships are stored in one packed
+array of `SocialEdgeIndexEntry(TargetAgentId, EdgeEntityId)` values, ordered by
+source agent ID, target agent ID, and edge entity ID; a compact source-range
+table provides a `ReadOnlySpan<SocialEdgeIndexEntry>` for one agent without a
+dictionary or allocation. Construction uses fixed-pass integer radix sorting,
+so build work and retained storage are linear in generated entities and directed
+edges.
+
+The snapshot is immutable between rebuilds in Milestone 17.2. Code that changes
+the population must call `NotifyPopulationChanged`; code that adds, removes, or
+retargets `EdgeData` must call `NotifySocialGraphChanged`. Lookups then fail
+explicitly until `Rebuild(EntityStore)` is called, preventing stale entity IDs
+from being consumed. Dynamic social mutation itself remains out of scope.
+
 ### 2.3 Debug Inspection Snapshots
 
 Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, resolved network memberships, and an optional copied coordination snapshot. `DebugCoordinationSnapshot` contains partner, role, status, acceptance/performance times, duration bounds, current utilities, and release request. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values. None of the network or coordination projections enter `PlayerIntelligenceDB`.

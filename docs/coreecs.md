@@ -315,3 +315,21 @@ leaking ECS entities into ordinary presentation code.
 * The baseline deliberately instruments the existing population scans rather
   than optimizing them. Milestones 17.2–17.4 use these counts to prove that
   persistent indexes remove unrelated visits without changing decisions.
+
+### 4.20 Agent and Social Lookup Bootstrap (Milestone 17.2)
+
+* `AgentSpawner` owns one persistent `AgentSocialIndexes` instance and rebuilds
+  it only after agents, network memberships, and all network-seeded and baseline
+  social edges have been generated. Existing decision, execution, interaction,
+  and intelligence behavior does not consume the indexes in this slice.
+* The agent directory provides constant-time integer-ID lookup. Directed edges
+  are radix-ordered by source, target, and edge entity ID into one packed array;
+  source ranges provide allocation-free neighbour spans and binary search for a
+  particular target without visiting unrelated agents or edges.
+* The generated social graph is immutable after bootstrap for this milestone.
+  Explicit population/social mutation notifications invalidate the relevant
+  lookups, which throw until a full rebuild makes the snapshot current again.
+  This guards future mutation entry points rather than silently serving stale
+  ECS IDs.
+* Indexes remain Ground Truth simulation infrastructure. They are not queried by
+  ImGui and are never copied into `PlayerIntelligenceDB`.
