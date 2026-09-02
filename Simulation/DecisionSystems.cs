@@ -62,8 +62,10 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly IntentCandidateIndex _candidateIndex;
     private readonly CompiledIntent _fallback;
     private readonly bool _captureDiagnostics;
+    private readonly SimulationWorkDiagnostics? _workDiagnostics;
 
-    public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock, bool captureDiagnostics = false)
+    public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock, bool captureDiagnostics = false,
+        SimulationWorkDiagnostics? workDiagnostics = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(catalog);
@@ -71,6 +73,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
         _captureDiagnostics = captureDiagnostics;
+        _workDiagnostics = workDiagnostics;
         _candidateIndex = catalog.Intents.Candidates;
         _candidatesByIndex = new CandidateEvaluator?[catalog.Intents.Count];
         _candidatesByHash = new();
@@ -87,7 +90,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     {
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
-        var targets = new TargetResolver(_store);
+        var targets = new TargetResolver(_store, _workDiagnostics);
 
         Query.ForEachEntity((ref Identity identity, ref AgentAttributes attributes, ref Psychology psychology,
             ref AgentLocation location, ref AgentTravel travel, Entity entity) =>
@@ -114,6 +117,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             if (_captureDiagnostics) EnsureDiagnosticCache(ref decision);
             var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
             var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
+            _workDiagnostics?.RecordDecisionPass();
             var candidateContext = new IntentCandidateContext(true, location.HomeLocationId != 0,
                 location.WorkLocationId != 0, targets.HasSocialRelations(entity.Id),
                 targets.HasNetworkRelations(entity.Id));
@@ -127,6 +131,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                 var result = candidate.Evaluate(context, targets.Resolve(entity.Id, candidate.Definition.Target, context),
                     _captureDiagnostics ? decision.CachedUtilityContributions[candidate.Definition.RuntimeIndex] : null,
                     _captureDiagnostics ? decision.CachedTraitContributions[candidate.Definition.RuntimeIndex] : null);
+                _workDiagnostics?.RecordCandidateEvaluation();
                 var index = candidate.Definition.RuntimeIndex;
                 decision.CachedScores[index] = result.Score;
                 decision.CachedEligibility[index] = result.Eligible;
@@ -253,41 +258,67 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         private readonly Dictionary<(int Source, int Target), float> _affinities;
         private readonly Dictionary<int, List<NetworkLink>> _memberships;
         private readonly Dictionary<int, List<int>> _networkMembers;
+        private readonly SimulationWorkDiagnostics? _diagnostics;
 
         private readonly record struct NetworkLink(int NetworkId, int TypeHash, int SupervisorId);
 
-        public TargetResolver(EntityStore store)
+        public TargetResolver(EntityStore store, SimulationWorkDiagnostics? diagnostics = null)
         {
-            _locations = store.Query<AgentLocation>().Entities.ToDictionary(
-                entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
-            _attributes = store.Query<AgentAttributes>().Entities.ToDictionary(
-                entity => entity.Id, entity => entity.GetComponent<AgentAttributes>().Values);
+            _diagnostics = diagnostics;
+            _locations = new();
+            foreach (var entity in store.Query<AgentLocation>().Entities)
+            {
+                diagnostics?.RecordTargetPopulationVisit();
+                diagnostics?.RecordTransientOperation();
+                _locations.Add(entity.Id, entity.GetComponent<AgentLocation>().CurrentLocationId);
+            }
+            _attributes = new();
+            foreach (var entity in store.Query<AgentAttributes>().Entities)
+            {
+                diagnostics?.RecordTargetPopulationVisit();
+                diagnostics?.RecordTransientOperation();
+                _attributes.Add(entity.Id, entity.GetComponent<AgentAttributes>().Values);
+            }
             _social = new();
             _affinities = new();
             foreach (var edgeEntity in store.Query<EdgeData>().Entities)
             {
+                diagnostics?.RecordEdgeVisit();
                 var edge = edgeEntity.GetComponent<EdgeData>();
-                if (!_social.TryGetValue(edge.Source.Id, out var edges)) _social[edge.Source.Id] = edges = new();
+                if (!_social.TryGetValue(edge.Source.Id, out var edges))
+                {
+                    _social[edge.Source.Id] = edges = new();
+                    diagnostics?.RecordTransientOperation();
+                }
                 var affinity = Math.Clamp((edge.Affinity + 100f) / 200f, 0f, 1f);
                 edges.Add((edge.Target.Id, affinity));
                 _affinities[(edge.Source.Id, edge.Target.Id)] = affinity;
+                diagnostics?.RecordTransientOperation(2);
             }
 
             _memberships = new();
             _networkMembers = new();
             foreach (var agent in store.Query<Identity>().Entities)
             {
+                diagnostics?.RecordTargetPopulationVisit();
                 foreach (var membership in agent.GetRelations<AgentNetworkMembership>())
                 {
                     if (membership.Network.IsNull ||
                         !membership.Network.TryGetComponent<AgentNetworkData>(out var network)) continue;
                     if (!_memberships.TryGetValue(agent.Id, out var links))
+                    {
                         _memberships[agent.Id] = links = new();
+                        diagnostics?.RecordTransientOperation();
+                    }
                     links.Add(new NetworkLink(membership.Network.Id, network.TypeHash,
                         membership.Supervisor.IsNull ? 0 : membership.Supervisor.Id));
                     if (!_networkMembers.TryGetValue(membership.Network.Id, out var members))
+                    {
                         _networkMembers[membership.Network.Id] = members = new();
+                        diagnostics?.RecordTransientOperation();
+                    }
                     members.Add(agent.Id);
+                    diagnostics?.RecordTransientOperation(2);
                 }
             }
         }
@@ -315,6 +346,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                     targetAttributes);
                 if (query.Requirements.Any(requirement => !requirement.Evaluate(facts))) continue;
                 var ranks = query.RankBy.Select(rank => rank.Value.Evaluate(facts)).ToArray();
+                _diagnostics?.RecordTransientOperation();
                 var target = new TargetSelection(candidate.Id, targetLocation, candidate.Affinity, targetAttributes);
                 if (best is null || Compare(ranks, candidate.Id, best.Value.Ranks, best.Value.Target.EntityId, query.RankBy) < 0)
                     best = (target, ranks);
@@ -344,6 +376,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             if (!_memberships.TryGetValue(actorId, out var memberships)) return [];
 
             var candidates = new HashSet<int>();
+            _diagnostics?.RecordTransientOperation();
             foreach (var membership in memberships)
             {
                 if (membership.TypeHash != query.NetworkTypeHash) continue;

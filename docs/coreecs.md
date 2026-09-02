@@ -301,3 +301,17 @@ leaking ECS entities into ordinary presentation code.
 * Debug snapshots copy partner, role, status, timing, duration, utilities, and
   release state. These coordination and network facts never enter
   `PlayerIntelligenceDB`.
+
+### 4.19 Deterministic Work Diagnostics (Milestone 17.1)
+
+* `SimulationWorkDiagnostics` is an optional observer injected into
+  `AgentDecisionSystem`. Production behavior and the player-intelligence
+  boundary are unchanged when it is absent.
+* A snapshot separates five deterministic counts: actual decision passes,
+  scored candidate evaluations, target-snapshot population visits, social-edge
+  visits, and allocation-sensitive transient collection/rank operations.
+  Counters never read elapsed wall time and can be reset between measured
+  phases.
+* The baseline deliberately instruments the existing population scans rather
+  than optimizing them. Milestones 17.2–17.4 use these counts to prove that
+  persistent indexes remove unrelated visits without changing decisions.
