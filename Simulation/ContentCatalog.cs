@@ -73,6 +73,48 @@ public sealed record JobDefinition(
 public sealed record WorldLocationDefinition(string Id, string Name, int Hash, string Type);
 public sealed record WorldConnectionDefinition(string From, string To, int TravelMinutes);
 
+public sealed class LodDocument
+{
+    public bool Enabled { get; init; }
+    public bool Tier3Enabled { get; init; }
+    public Tier2LodDocument? Tier2 { get; init; }
+    public string? DemotionPolicy { get; init; }
+    public Tier3LodDocument? Tier3 { get; init; }
+}
+
+public sealed class Tier2LodDocument
+{
+    public int DecisionIntervalMinutes { get; init; }
+    public List<string>? RelatedBy { get; init; }
+}
+
+public sealed class Tier3LodDocument
+{
+    public int ShardCount { get; init; }
+}
+
+public enum AgentRelationKind : byte
+{
+    Social,
+    NetworkSupervisor,
+    NetworkDirectReport
+}
+
+public enum AgentDemotionPolicy : byte
+{
+    EndOfDay
+}
+
+// Runtime settings contain enums rather than authoring strings, so simulation
+// code cannot silently acquire a second interpretation of the JSON contract.
+public sealed record AgentLodSettings(
+    bool Enabled,
+    bool Tier3Enabled,
+    int Tier2DecisionIntervalMinutes,
+    IReadOnlyList<AgentRelationKind> RelatedBy,
+    AgentDemotionPolicy DemotionPolicy,
+    int Tier3ShardCount);
+
 public sealed class AgentAttributeSchema
 {
     private readonly Dictionary<string, int> _indices;
@@ -120,7 +162,8 @@ public sealed class ContentCatalog
         AgentAttributeSchema agentAttributes,
         IReadOnlyList<JobDefinition> jobs,
         WorldTopology world,
-        AgentNetworkCatalog networks)
+        AgentNetworkCatalog networks,
+        AgentLodSettings lod)
     {
         Traits = traits;
         Actions = actions;
@@ -131,6 +174,7 @@ public sealed class ContentCatalog
         Jobs = jobs;
         World = world;
         Networks = networks;
+        Lod = lod;
         AllTraitBits = traits.Aggregate(0L, (mask, trait) => mask | trait.Bit);
     }
 
@@ -143,6 +187,7 @@ public sealed class ContentCatalog
     public IReadOnlyList<JobDefinition> Jobs { get; }
     public WorldTopology World { get; }
     public AgentNetworkCatalog Networks { get; }
+    public AgentLodSettings Lod { get; }
     public long AllTraitBits { get; }
 
     public ActivityDefinition GetActivity(int hash) => Actions
@@ -162,6 +207,7 @@ public sealed class ContentCatalog
         var schemaDocument = LoadObject<AgentSchemaDocument>(directory, "agent-schema.json", options);
         var jobs = LoadFile<JobDefinition>(directory, "jobs.json", options);
         var worldDocument = LoadObject<WorldDocument>(directory, "world.json", options);
+        var lodDocument = LoadObject<LodDocument>(directory, "lod.json", options);
         var networksPath = Path.Combine(directory, "networks.json");
         if (!File.Exists(networksPath))
             throw new FileNotFoundException($"Required content file was not found: {networksPath}", networksPath);
@@ -170,8 +216,53 @@ public sealed class ContentCatalog
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
+        var lod = ValidateLod(lodDocument);
         var intents = IntentCompiler.Compile(actions, traits, agentAttributes, networks);
-        return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks);
+        return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks, lod);
+    }
+
+    private static AgentLodSettings ValidateLod(LodDocument document)
+    {
+        if (document.Tier2 is null)
+            throw new InvalidDataException("lod.json:tier2 is required.");
+        if (document.Tier2.DecisionIntervalMinutes <= 0)
+            throw new InvalidDataException("lod.json:tier2.decisionIntervalMinutes must be positive.");
+        if (document.Tier2.RelatedBy is null || document.Tier2.RelatedBy.Count == 0)
+            throw new InvalidDataException("lod.json:tier2.relatedBy must contain the supported relationship scopes.");
+
+        var relations = new List<AgentRelationKind>(document.Tier2.RelatedBy.Count);
+        for (var index = 0; index < document.Tier2.RelatedBy.Count; index++)
+        {
+            var relation = document.Tier2.RelatedBy[index];
+            relations.Add(relation switch
+            {
+                "social" => AgentRelationKind.Social,
+                "networkSupervisor" => AgentRelationKind.NetworkSupervisor,
+                "networkDirectReport" => AgentRelationKind.NetworkDirectReport,
+                _ => throw new InvalidDataException(
+                    $"lod.json:tier2.relatedBy[{index}] has unsupported relationship '{relation}'.")
+            });
+        }
+
+        if (relations.Count != 3 || relations.Distinct().Count() != 3)
+            throw new InvalidDataException(
+                "lod.json:tier2.relatedBy must contain each of social, networkSupervisor, and networkDirectReport exactly once.");
+
+        var demotionPolicy = document.DemotionPolicy switch
+        {
+            "endOfDay" => AgentDemotionPolicy.EndOfDay,
+            _ => throw new InvalidDataException(
+                $"lod.json:demotionPolicy has unsupported policy '{document.DemotionPolicy}'.")
+        };
+
+        if (document.Tier3 is null)
+            throw new InvalidDataException("lod.json:tier3 is required.");
+        if (document.Tier3.ShardCount <= 0)
+            throw new InvalidDataException("lod.json:tier3.shardCount must be positive.");
+
+        return new AgentLodSettings(document.Enabled, document.Tier3Enabled,
+            document.Tier2.DecisionIntervalMinutes, relations.AsReadOnly(), demotionPolicy,
+            document.Tier3.ShardCount);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(

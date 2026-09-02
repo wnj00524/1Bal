@@ -42,6 +42,18 @@ adding a similar one, then change only the values you understand.
 
 ## What each file controls
 
+### `lod.json`: simulation detail rollout
+
+This file controls the staged agent level-of-detail rollout. `enabled` turns on
+the classification contract, while `tier3Enabled` must remain `false` until the
+coarse routine implementation is complete. `tier2.decisionIntervalMinutes` and
+`tier3.shardCount` must be positive whole numbers. The supported `relatedBy`
+values are exactly `social`, `networkSupervisor`, and `networkDirectReport`;
+each must appear once. The only supported `demotionPolicy` is `endOfDay`.
+
+These values are validated and compiled when content loads. Do not add new
+relationship or policy words without implementing their runtime meaning first.
+
 ### `agent-schema.json`: agent numbers
 
 The `attributes` list describes the numerical qualities every generated agent

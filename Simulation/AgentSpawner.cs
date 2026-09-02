@@ -60,6 +60,7 @@ public sealed class AgentSpawner
 
         var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
         var fallback = _catalog.Intents.Fallback;
+        var lodService = new AgentLodService(_catalog.Lod);
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -122,8 +123,10 @@ public sealed class AgentSpawner
                     RoutePosition = 0,
                     RemainingTravelMinutes = 0f,
                     Mode = AgentTravelMode.Stationary
-                },
-                Tags.Get<Tier1LodTag>());
+                });
+
+            lodService.InitializeTierOne(entity,
+                isOperative ? AgentInterestReason.Operative : AgentInterestReason.None);
 
             entity.AddComponent<CoordinationState>();
 
