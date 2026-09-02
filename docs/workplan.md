@@ -175,3 +175,39 @@ each issue also records its dependencies and verification expectations.
 - [x] [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
 - [x] [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
 - [x] [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)
+
+## Milestones 17–20: Agent LOD and 100,000-Agent Roadmap
+
+The decision-complete implementation sequence, architectural invariants, test
+matrix, and agent handoff rules are maintained in
+[`docs/agent-lod-roadmap.md`](agent-lod-roadmap.md). The work is tracked by
+[Epic #106](https://github.com/wnj00524/proxystate/issues/106) and the four
+sequential milestones below.
+
+## [Milestone 17: Scalable Agent Lookup Foundation](https://github.com/wnj00524/proxystate/milestone/18)
+
+- [ ] [M17.1 — Record LOD and large-population baselines](https://github.com/wnj00524/proxystate/issues/107)
+- [ ] [M17.2 — Build compact agent and social relationship indexes](https://github.com/wnj00524/proxystate/issues/108)
+- [ ] [M17.3 — Refactor decision targeting to indexed direct lookup](https://github.com/wnj00524/proxystate/issues/109)
+- [ ] [M17.4 — Remove population scans from execution and interaction](https://github.com/wnj00524/proxystate/issues/110)
+
+## [Milestone 18: Dynamic Agent LOD Lifecycle](https://github.com/wnj00524/proxystate/milestone/19)
+
+- [ ] [M18.1 — Add LOD configuration and runtime contracts](https://github.com/wnj00524/proxystate/issues/111)
+- [ ] [M18.2 — Implement POI classification and investigation service](https://github.com/wnj00524/proxystate/issues/112)
+- [ ] [M18.3 — Implement Tier 2 cadence and critical wake-ups](https://github.com/wnj00524/proxystate/issues/113)
+- [ ] [M18.4 — Add demotion grace, interaction pins, and network notifications](https://github.com/wnj00524/proxystate/issues/114)
+
+## [Milestone 19: Data-Driven Coarse Agent Routines](https://github.com/wnj00524/proxystate/milestone/20)
+
+- [ ] [M19.1 — Compile and validate Tier 3 routine definitions](https://github.com/wnj00524/proxystate/issues/115)
+- [ ] [M19.2 — Build shared deterministic weekly routine profiles](https://github.com/wnj00524/proxystate/issues/116)
+- [ ] [M19.3 — Implement sharded Tier 3 effect integration](https://github.com/wnj00524/proxystate/issues/117)
+- [ ] [M19.4 — Materialize promotion and demotion state](https://github.com/wnj00524/proxystate/issues/118)
+- [ ] [M19.5 — Enable Tier 3 and verify cross-tier coordination](https://github.com/wnj00524/proxystate/issues/119)
+
+## [Milestone 20: Interactive 100,000-Agent Delivery](https://github.com/wnj00524/proxystate/milestone/21)
+
+- [ ] [M20.1 — Add incremental player-intelligence projection and investigation commands](https://github.com/wnj00524/proxystate/issues/120)
+- [ ] [M20.2 — Virtualize dossier and debug inspection](https://github.com/wnj00524/proxystate/issues/121)
+- [ ] [M20.3 — Add population CLI and complete 100k verification](https://github.com/wnj00524/proxystate/issues/122)
