@@ -19,6 +19,7 @@ public sealed class AgentSocialIndexes
     private bool[] _agentExists = [];
     private SourceRange[] _sourceRanges = [];
     private SocialEdgeIndexEntry[] _outgoingEdges = [];
+    private Dictionary<int, Entity> _edgesById = new();
     private bool _populationChanged;
     private bool _socialGraphChanged;
 
@@ -60,6 +61,7 @@ public sealed class AgentSocialIndexes
                 return new PendingEdge(edge.Source.Id, edge.Target.Id, entity.Id);
             })
             .ToArray();
+        _edgesById = store.Query<EdgeData>().Entities.ToDictionary(entity => entity.Id);
         RadixSort(edges);
 
         var packedEdges = new SocialEdgeIndexEntry[edges.Length];
@@ -137,6 +139,12 @@ public sealed class AgentSocialIndexes
 
         edge = default;
         return false;
+    }
+
+    public bool TryGetEdge(int edgeEntityId, out Entity entity)
+    {
+        EnsureSocialGraphCurrent();
+        return _edgesById.TryGetValue(edgeEntityId, out entity);
     }
 
     // Stable least-significant-byte radix passes order by source, target, then
