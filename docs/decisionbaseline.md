@@ -174,3 +174,47 @@ The scans to remove in later Milestone 17 slices are explicitly:
 * The long-lived `PlayerIntelligenceDB` and debug/dossier projections retain separate
   full-population or relationship scans. Those presentation-boundary scans are
   recorded here but remain explicitly outside Milestone 17 optimization scope.
+
+## Milestone 20.3 complete 100,000-agent acceptance
+
+Measured on 2026-09-02 in an Ubuntu 24.04 Linux x64 container using .NET SDK
+10.0.400 with the .NET 10.0.11 runtime roll-forward, 64 GiB RAM, no swap, and a
+17-vCPU Intel Xeon Platinum 8370C allocation. Results are Release observations
+from fixed seed `20003`; elapsed time, allocation, and process working set vary
+by host, while tier and work counts are asserted structurally.
+
+```text
+DOTNET_ROLL_FORWARD=Major PROXYSTATE_RUN_LARGE_BENCHMARKS=1 \
+  dotnet test ProxyState.sln -c Release \
+  --filter FullyQualifiedName~Milestone20AcceptanceTests \
+  --logger "console;verbosity=detailed"
+```
+
+| Population | Generation | Generation allocation | Edges | Tier 1 / 2 / 3 |
+|---:|---:|---:|---:|---:|
+| 1,000 | 86.096 ms | 18,579,480 B | 11,166 | 5 / 61 / 934 |
+| 10,000 | 1,076.521 ms | 158,622,576 B | 111,012 | 5 / 65 / 9,930 |
+| 100,000 | 14,683.523 ms | 1,693,670,816 B | 1,111,610 | 5 / 67 / 99,928 |
+
+| Population | Intelligence projection | Projection allocation | Debug bootstrap | Debug allocation | Visible rows |
+|---:|---:|---:|---:|---:|---:|
+| 1,000 | 0.913 ms | 96,168 B | 0.815 ms | 204,128 B | 20 |
+| 10,000 | 5.816 ms | 888,168 B | 5.901 ms | 2,171,040 B | 20 |
+| 100,000 | 92.182 ms | 8,808,536 B | 138.409 ms | 21,980,152 B | 20 |
+
+| Population | Simulated week | Week allocation | Decision passes | Candidate evaluations | Target / edge visits | Coarse visits |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 | 182.610 ms | 13,999,312 B | 11,088 | 88,704 | 0 / 0 | 6,538 |
+| 10,000 | 677.125 ms | 103,695,824 B | 11,760 | 94,080 | 0 / 0 | 69,510 |
+| 100,000 | 9,498.658 ms | 980,514,248 B | 12,096 | 96,768 | 0 / 0 | 699,496 |
+
+At 100,000 agents the measured process working set after generation was about
+600 MiB and after the simulated week about 1.18 GiB. Because all three theory
+cases share a testhost process, later smaller cases inherit managed/native heap
+capacity from the largest case; the table therefore reports phase allocations
+as the more reproducible memory comparison. The acceptance test additionally
+proves that Tier 3 owns neither `DecisionState` nor `AgentTravel`, detailed work
+is bounded by Tier 1/2 membership, promotion materializes detail immediately,
+demotion removes it at the next day boundary, intelligence performs one
+initial population/edge capture but no frame rescans, and UI traversal remains
+fixed at 20 visible rows. No platform-specific wall-time threshold is enforced.

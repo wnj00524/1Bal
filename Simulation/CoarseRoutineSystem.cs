@@ -18,6 +18,8 @@ public sealed class CoarseRoutineSystem
     }
 
     public int ProfileCount => _profiles.Count;
+    /// <summary>Deterministic count of coarse agents actually visited by shard updates and catch-up.</summary>
+    public long AgentVisits { get; private set; }
 
     public void Add(Entity agent, long currentMinute)
     {
@@ -58,6 +60,7 @@ public sealed class CoarseRoutineSystem
     public void CatchUp(Entity agent, long currentMinute)
     {
         if (!_agents.ContainsKey(agent.Id)) return;
+        AgentVisits++;
         ref var state = ref agent.GetComponent<AgentLodState>();
         if (currentMinute <= state.LastCoarseSimulatedMinute) return;
         if (!_profiles.TryGet(state.CoarseProfileId, out var profile))

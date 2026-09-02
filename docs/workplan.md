@@ -200,14 +200,14 @@ sequential milestones below.
 
 ## [Milestone 19: Data-Driven Coarse Agent Routines](https://github.com/wnj00524/proxystate/milestone/20)
 
-- [ ] [M19.1 — Compile and validate Tier 3 routine definitions](https://github.com/wnj00524/proxystate/issues/115)
-- [ ] [M19.2 — Build shared deterministic weekly routine profiles](https://github.com/wnj00524/proxystate/issues/116)
-- [ ] [M19.3 — Implement sharded Tier 3 effect integration](https://github.com/wnj00524/proxystate/issues/117)
-- [ ] [M19.4 — Materialize promotion and demotion state](https://github.com/wnj00524/proxystate/issues/118)
-- [ ] [M19.5 — Enable Tier 3 and verify cross-tier coordination](https://github.com/wnj00524/proxystate/issues/119)
+- [x] [M19.1 — Compile and validate Tier 3 routine definitions](https://github.com/wnj00524/proxystate/issues/115)
+- [x] [M19.2 — Build shared deterministic weekly routine profiles](https://github.com/wnj00524/proxystate/issues/116)
+- [x] [M19.3 — Implement sharded Tier 3 effect integration](https://github.com/wnj00524/proxystate/issues/117)
+- [x] [M19.4 — Materialize promotion and demotion state](https://github.com/wnj00524/proxystate/issues/118)
+- [x] [M19.5 — Enable Tier 3 and verify cross-tier coordination](https://github.com/wnj00524/proxystate/issues/119)
 
 ## [Milestone 20: Interactive 100,000-Agent Delivery](https://github.com/wnj00524/proxystate/milestone/21)
 
 - [x] [M20.1 — Add incremental player-intelligence projection and investigation commands](https://github.com/wnj00524/proxystate/issues/120)
-- [ ] [M20.2 — Virtualize dossier and debug inspection](https://github.com/wnj00524/proxystate/issues/121)
-- [ ] [M20.3 — Add population CLI and complete 100k verification](https://github.com/wnj00524/proxystate/issues/122)
+- [x] [M20.2 — Virtualize dossier and debug inspection](https://github.com/wnj00524/proxystate/issues/121)
+- [x] [M20.3 — Add population CLI and complete 100k verification](https://github.com/wnj00524/proxystate/issues/122)
