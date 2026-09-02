@@ -53,6 +53,7 @@ public static class Program
             var applicationShell = new ApplicationShell();
             var dossierWindow = new DossierWindow();
             var debugWindow = debugMode ? new DebugWindow() : null;
+            var debugProjection = debugMode ? DebugInspectionProjection.Create(store, catalog) : null;
 
             while (!Raylib.WindowShouldClose())
             {
@@ -71,12 +72,13 @@ public static class Program
 
                 rlImGui.Begin();
                 applicationShell.DrawLauncher(debugMode);
-                applicationShell.DrawDossiersWindow(intelligence, catalog.Traits, dossierWindow);
+                applicationShell.DrawDossiersWindow(intelligence, catalog.Traits, dossierWindow,
+                    investigationCommands.Enqueue);
                 if (debugWindow is not null && applicationShell.DebugWindowOpen)
                 {
-                    // Capture immutable values before drawing so the UI never
-                    // reaches into the Ground Truth ECS store directly.
-                    applicationShell.DrawDebugWindow(DebugSnapshotBuilder.CaptureInspection(store, catalog), debugWindow);
+                    // Only a changed selection crosses the on-demand copy boundary.
+                    debugProjection!.Select(debugWindow.SelectedAgentId);
+                    applicationShell.DrawDebugWindow(debugProjection.View, debugWindow);
                 }
                 WorldTimeBar.Draw(worldTime);
                 rlImGui.End();
