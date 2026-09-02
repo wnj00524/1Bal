@@ -23,6 +23,9 @@ public static class Program
         // A fresh seed gives each interactive run a new population. The spawner
         // accepts Random explicitly so tests and future replay tools can inject one.
         spawner.Spawn(store, SimulationDefaults.AgentCount, new Random());
+        // Retain the immutable bootstrap indexes for indexed simulation systems
+        // introduced by subsequent Milestone 17 slices.
+        var agentSocialIndexes = spawner.Indexes;
 
         var clock = new WorldClockSystem(store);
         var systems = new SystemRoot(store)
