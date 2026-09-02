@@ -9,10 +9,32 @@ contain behavior. The namespace for Milestone 1 types is `ProxyState.Simulation`
 ```csharp
 using Friflo.Engine.ECS;
 
-public struct Tier1LodTag : ITag { } // Updated every simulation tick.
-public struct Tier2LodTag : ITag { } // Reserved for hourly updates.
-public struct Tier3LodTag : ITag { } // Reserved for daily updates.
+public struct Tier1LodTag : ITag { } // Full-detail decisions.
+public struct Tier2LodTag : ITag { } // Reduced decision cadence.
+public struct Tier3LodTag : ITag { } // Coarse routine simulation.
+public struct DetailedSimulationTag : ITag { } // Present on Tier 1 and Tier 2.
 public struct OperativeTag : ITag { } // Player-controlled intelligence source.
+
+public enum AgentLodTier : byte { Tier1 = 1, Tier2 = 2, Tier3 = 3 }
+
+[Flags]
+public enum AgentInterestReason : byte {
+    None = 0,
+    Operative = 1,
+    Investigation = 2,
+    RelatedPointOfInterest = 4,
+    ActiveInteraction = 8
+}
+
+public struct AgentLodState : IComponent {
+    public AgentLodTier DesiredTier;
+    public int DirectPoiReferenceCount;
+    public AgentInterestReason InterestReasons;
+    public long ScheduledDemotionMinute;
+    public int CoarseProfileId;
+    public ulong CoarseProfileFingerprint;
+    public long LastCoarseSimulatedMinute;
+}
 
 public enum IntelligenceRole : byte {
     None,       // Zero/default value for unassigned agents.
@@ -106,6 +128,12 @@ public struct AgentTravel : IComponent {
     public AgentTravelMode Mode;
 }
 ```
+
+Every agent owns `AgentLodState` and exactly one tier tag. `AgentLodService` is
+the exclusive mutation boundary for that state and for `DetailedSimulationTag`.
+Tier 1 and Tier 2 are detailed; Tier 3 is not. During the Milestone 18 rollout,
+a desired Tier 3 assignment is materialized as Tier 2 because Tier 3 remains
+disabled. The coarse-profile fields are reserved contracts for Milestone 19.
 
 `AgentAttributeSchema` loads the ordered numeric definitions from
 `data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores

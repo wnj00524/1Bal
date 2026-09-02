@@ -231,6 +231,18 @@ leaking ECS entities into ordinary presentation code.
 * Spawning initializes intention and activity state from the compiled fallback,
   eliminating the former dependency on a specifically named domain action.
 
+### 4.14a Agent LOD Runtime Contracts (Milestone 18.1)
+
+* `ContentCatalog` loads `data/lod.json` and compiles its relationship scopes
+  and demotion policy to enums. Positive cadence/shard values and exact supported
+  tokens are rejected with JSON-path-specific validation errors.
+* Every spawned agent receives `AgentLodState`, `Tier1LodTag`, and
+  `DetailedSimulationTag`, preserving the pre-classification bootstrap behavior.
+* Exactly one of the three tier tags is valid. `AgentLodService` is the sole tag
+  mutation boundary and synchronizes `DetailedSimulationTag` for Tier 1/2.
+* Tier 3 remains disabled in the transitional content. A desired Tier 3 request
+  is retained in state but materializes as detailed Tier 2 until rollout.
+
 ### 4.15 Dependency-Driven Reevaluation (Milestone 13)
 
 * Compilation unions every fact read by eligibility predicates, utility

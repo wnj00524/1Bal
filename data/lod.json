@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "tier3Enabled": false,
+  "tier2": {
+    "decisionIntervalMinutes": 60,
+    "relatedBy": [
+      "social",
+      "networkSupervisor",
+      "networkDirectReport"
+    ]
+  },
+  "demotionPolicy": "endOfDay",
+  "tier3": {
+    "shardCount": 24
+  }
+}

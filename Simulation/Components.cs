@@ -7,6 +7,39 @@ namespace ProxyState.Simulation;
 public struct Tier1LodTag : ITag { }
 public struct Tier2LodTag : ITag { }
 public struct Tier3LodTag : ITag { }
+// Tier 1 and Tier 2 both retain the detailed component set. Systems introduced
+// during the staged rollout can select that shared capability explicitly.
+public struct DetailedSimulationTag : ITag { }
+
+public enum AgentLodTier : byte
+{
+    Tier1 = 1,
+    Tier2 = 2,
+    Tier3 = 3
+}
+
+[Flags]
+public enum AgentInterestReason : byte
+{
+    None = 0,
+    Operative = 1 << 0,
+    Investigation = 1 << 1,
+    RelatedPointOfInterest = 1 << 2,
+    ActiveInteraction = 1 << 3
+}
+
+// This compact state stays on every LOD tier. Profile fields are reserved for
+// Milestone 19; zero/-1 values mean that no coarse routine has been assigned.
+public struct AgentLodState : IComponent
+{
+    public AgentLodTier DesiredTier;
+    public int DirectPoiReferenceCount;
+    public AgentInterestReason InterestReasons;
+    public long ScheduledDemotionMinute;
+    public int CoarseProfileId;
+    public ulong CoarseProfileFingerprint;
+    public long LastCoarseSimulatedMinute;
+}
 
 // None is the zero value so manually created agents do not accidentally gain
 // an intelligence assignment before a simulation or content system sets one.
