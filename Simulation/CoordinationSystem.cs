@@ -28,7 +28,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
-        Filter.AllTags(Tags.Get<Tier1LodTag>());
+        Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
     protected override void OnUpdate()
@@ -52,6 +52,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     }
 
     private static bool IsCoordinatable(Entity entity) =>
+        (entity.Tags.Has<Tier1LodTag>() || entity.Tags.Has<Tier2LodTag>()) &&
         entity.HasComponent<CoordinationState>() && entity.HasComponent<IntentionState>() &&
         entity.HasComponent<ActivityState>() && entity.HasComponent<DecisionState>() &&
         entity.HasComponent<AgentAttributes>() && entity.HasComponent<Psychology>() &&
@@ -241,10 +242,10 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         participantIntention.TargetLocationId = proposal.Initiator.GetComponent<AgentLocation>().CurrentLocationId;
         participantIntention.SelectedAtMinute = minute;
         participantIntention.Utility = proposal.ParticipantUtility;
-        DecisionInvalidation.Signal(ref proposal.Initiator.GetComponent<DecisionState>(),
-            new(FactDependencyCategory.Coordination));
-        DecisionInvalidation.Signal(ref proposal.Participant.GetComponent<DecisionState>(),
-            new(FactDependencyCategory.Coordination));
+        DecisionInvalidation.SignalCoordinationLifecycle(
+            ref proposal.Initiator.GetComponent<DecisionState>());
+        DecisionInvalidation.SignalCoordinationLifecycle(
+            ref proposal.Participant.GetComponent<DecisionState>());
     }
 
     private static CoordinationState CreateState(int partnerId, int actionHash, CoordinationRole role,
@@ -292,7 +293,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         intention.TargetLocationId = 0;
         intention.Utility = _fallback.BaseUtility;
         ref var decision = ref agent.GetComponent<DecisionState>();
-        DecisionInvalidation.Signal(ref decision, FactDependencyMask.All);
+        DecisionInvalidation.SignalCritical(ref decision, FactDependencyMask.All,
+            DecisionWakeReason.CoordinationLifecycle);
     }
 
     private static void SetCooldown(Entity agent, int actionHash, long untilMinute)
