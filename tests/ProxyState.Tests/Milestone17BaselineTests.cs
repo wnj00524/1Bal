@@ -17,7 +17,7 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
 
         Assert.Equal(first.Work, second.Work);
         Assert.Equal(first.Intentions, second.Intentions);
-        Assert.Equal(64, first.Work.DecisionPasses);
+        Assert.Equal(SimulationDefaults.OperativeCount, first.Work.DecisionPasses);
         Assert.True(first.Work.CandidateEvaluations > 0);
         Assert.Equal(0, first.Work.TargetPopulationVisits);
         Assert.Equal(0, first.Work.EdgeVisits);
@@ -68,9 +68,13 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         stopwatch.Stop();
         var loopAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         var work = diagnostics.Snapshot();
+        var detailedPopulation = store.Query<Identity>().AllTags(Tags.Get<Tier1LodTag>()).Count;
         output.WriteLine($"phase=detailed-loop; population={population}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={loopAllocated}; decisionPasses={work.DecisionPasses}; candidateEvaluations={work.CandidateEvaluations}; targetPopulationVisits={work.TargetPopulationVisits}; edgeVisits={work.EdgeVisits}; transientOperations={work.TransientOperations}");
 
-        Assert.Equal(population, work.DecisionPasses);
+        // The decision system is intentionally Tier 1-only. Population LOD
+        // classification therefore makes the active detailed count, rather
+        // than the total generated population, the scalability invariant.
+        Assert.Equal(detailedPopulation, work.DecisionPasses);
         Assert.Equal(0, work.TargetPopulationVisits);
         Assert.Equal(0, work.EdgeVisits);
         Assert.Equal(0, work.TransientOperations);
