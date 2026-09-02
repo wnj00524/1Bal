@@ -89,7 +89,8 @@ public sealed class ApplicationShell
     public void DrawDossiersWindow(
         PlayerIntelligenceDB intelligence,
         IReadOnlyList<TraitDefinition> traits,
-        DossierWindow dossierWindow)
+        DossierWindow dossierWindow,
+        Action<InvestigationCommand> commandSink)
     {
         ArgumentNullException.ThrowIfNull(intelligence);
         ArgumentNullException.ThrowIfNull(traits);
@@ -101,11 +102,11 @@ public sealed class ApplicationShell
         }
 
         var isOpen = DossiersOpen;
-        dossierWindow.Draw(intelligence, traits, ref isOpen);
+        dossierWindow.Draw(intelligence, traits, commandSink, ref isOpen);
         DossiersOpen = isOpen;
     }
 
-    public void DrawDebugWindow(DebugInspectionSnapshot inspection, DebugWindow debugWindow)
+    public void DrawDebugWindow(DebugInspectionView inspection, DebugWindow debugWindow)
     {
         ArgumentNullException.ThrowIfNull(inspection);
         ArgumentNullException.ThrowIfNull(debugWindow);

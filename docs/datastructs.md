@@ -353,10 +353,23 @@ simulation-owned `InvestigationCommandQueue`; its result reports accepted and
 rejected command counts without exposing `AgentLodService` to ImGui.
 `PlayerIntelligenceProjectionDiagnostics` records one-time agent/edge visits and
 incremental replacements so scaling tests can prove that reads do not rescan ECS.
+`AgentIdentitySearchIndex` caches the indexes of identity rows matching agent ID
+or display name and invalidates only for new search text or a changed stable
+identity version. `VisibleRowRange` is the pure counterpart of the ImGui list
+clipper and makes visible-row work counts testable at full population scale.
 Operatives are assigned the `Officer` role
 when spawned; other agents default to `None`. The dossier displays non-empty
 roles alongside each agent and applies each configured trait bit with
 `knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.
+
+`DebugAgentIdentitySnapshot` is the lightweight row contract for debug search.
+`DebugInspectionView` pairs those immutable rows and copied network summaries
+with zero or one `DebugAgentSnapshot`. `DebugInspectionProjection` alone retains
+the simulation dependencies needed to copy that selected detail on demand; the
+view passed to ImGui retains neither `EntityStore` nor `Entity`. Debug agent
+detail additionally contains materialized/desired LOD tier, nullable pending
+demotion minute, and coarse-profile ID/fingerprint. Those fields deliberately
+do not appear in `PlayerIntelligenceAgentSnapshot`.
 
 ### 2.7 Agent Network Catalog
 

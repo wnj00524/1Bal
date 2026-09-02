@@ -52,6 +52,10 @@ public sealed class PlayerIntelligenceDB
 
     public PlayerIntelligenceProjectionDiagnostics Diagnostics { get; }
 
+    // Identities are immutable after bootstrap. UI search caches can therefore
+    // use this token without being invalidated by trait/investigation deltas.
+    public long StableIdentityVersion => 1;
+
     /// <summary>
     /// Copies only identity, team membership, and known relationship masks out
     /// of the ECS store. Ground-truth Psychology is never placed in the copy.
@@ -219,17 +223,78 @@ public static class DossierTraitFormatter
     }
 }
 
+/// <summary>Caches matching row indexes until text or stable identities change.</summary>
+public sealed class AgentIdentitySearchIndex
+{
+    private string _search = string.Empty;
+    private long _identityVersion = long.MinValue;
+    private int[] _matches = [];
+
+    public int RebuildCount { get; private set; }
+    public IReadOnlyList<int> Matches => _matches;
+
+    public IReadOnlyList<int> Update(
+        IReadOnlyList<PlayerIntelligenceAgentSnapshot> agents,
+        string? search,
+        long identityVersion)
+    {
+        ArgumentNullException.ThrowIfNull(agents);
+        search = search?.Trim() ?? string.Empty;
+        if (_identityVersion == identityVersion && string.Equals(_search, search, StringComparison.Ordinal))
+            return _matches;
+
+        _search = search;
+        _identityVersion = identityVersion;
+        _matches = agents.Select((agent, index) => (agent, index))
+            .Where(item => search.Length == 0 ||
+                item.agent.EntityId.ToString().Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                item.agent.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.index)
+            .ToArray();
+        RebuildCount++;
+        return _matches;
+    }
+}
+
+/// <summary>Pure range traversal used by clipped UI lists and scaling tests.</summary>
+public static class VisibleRowRange
+{
+    public static int Visit(int itemCount, int displayStart, int displayEnd, Action<int> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+        var start = Math.Clamp(displayStart, 0, itemCount);
+        var end = Math.Clamp(displayEnd, start, itemCount);
+        for (var index = start; index < end; index++) visitor(index);
+        return end - start;
+    }
+}
+
+public static class DossierInvestigationActions
+{
+    public static InvestigationCommand Toggle(PlayerIntelligenceAgentSnapshot agent)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        if (agent.IsOperative)
+            throw new InvalidOperationException("Operatives have permanent detail and cannot be investigated.");
+        return new InvestigationCommand(agent.EntityId, !agent.IsUnderInvestigation);
+    }
+}
+
 public sealed class DossierWindow
 {
     private int? _selectedAgentId;
+    private string _search = string.Empty;
+    private readonly AgentIdentitySearchIndex _searchIndex = new();
 
-    public void Draw(
+    public unsafe void Draw(
         PlayerIntelligenceDB intelligence,
         IReadOnlyList<TraitDefinition> traits,
+        Action<InvestigationCommand> commandSink,
         ref bool isOpen)
     {
         ArgumentNullException.ThrowIfNull(intelligence);
         ArgumentNullException.ThrowIfNull(traits);
+        ArgumentNullException.ThrowIfNull(commandSink);
 
         if (_selectedAgentId is not null &&
             !intelligence.Agents.Any(agent => agent.EntityId == _selectedAgentId.Value))
@@ -246,20 +311,28 @@ public sealed class DossierWindow
         ImGui.Text("Operative Intelligence");
         ImGui.Text($"Operatives: {intelligence.OperativeEntityIds.Count}");
         ImGui.Text($"Agents: {intelligence.Agents.Count}");
+        ImGui.SetNextItemWidth(280);
+        ImGui.InputTextWithHint("##dossier-search", "Search agent ID or name", ref _search, 128);
         ImGui.Separator();
 
         ImGui.BeginChild("dossier-agent-list", new Vector2(300, 0), ImGuiChildFlags.Borders);
-        foreach (var agent in intelligence.Agents)
+        var matches = _searchIndex.Update(intelligence.Agents, _search, intelligence.StableIdentityVersion);
+        var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+        clipper.Begin(matches.Count);
+        while (clipper.Step())
         {
-            var selected = agent.EntityId == _selectedAgentId;
-            var label = agent.IntelligenceRole != IntelligenceRole.None
-                ? $"[{agent.IntelligenceRole}] {agent.DisplayName}"
-                : agent.DisplayName;
-            if (ImGui.Selectable(label, selected))
+            VisibleRowRange.Visit(matches.Count, clipper.DisplayStart, clipper.DisplayEnd, row =>
             {
-                _selectedAgentId = agent.EntityId;
-            }
+                var agent = intelligence.Agents[matches[row]];
+                var selected = agent.EntityId == _selectedAgentId;
+                var label = agent.IntelligenceRole != IntelligenceRole.None
+                    ? $"[{agent.IntelligenceRole}] {agent.DisplayName}"
+                    : agent.DisplayName;
+                if (ImGui.Selectable(label, selected)) _selectedAgentId = agent.EntityId;
+            });
         }
+        clipper.End();
+        clipper.Destroy();
 
         ImGui.EndChild();
         ImGui.SameLine();
@@ -267,7 +340,7 @@ public sealed class DossierWindow
 
         if (intelligence.TryGetAgent(_selectedAgentId ?? -1, out var selectedAgent) && selectedAgent is not null)
         {
-            DrawDetails(selectedAgent, traits);
+            DrawDetails(selectedAgent, traits, commandSink);
         }
         else
         {
@@ -280,14 +353,22 @@ public sealed class DossierWindow
 
     private static void DrawDetails(
         PlayerIntelligenceAgentSnapshot agent,
-        IReadOnlyList<TraitDefinition> traits)
+        IReadOnlyList<TraitDefinition> traits,
+        Action<InvestigationCommand> commandSink)
     {
         ImGui.Text(agent.DisplayName);
         ImGui.Text($"Intelligence role: {agent.IntelligenceRole}");
         if (agent.IsOperative)
         {
-            ImGui.Text("Operative team member");
+            ImGui.Text("Permanent detail: Operative team member");
         }
+        else
+        {
+            var label = agent.IsUnderInvestigation ? "End Investigation" : "Investigate";
+            if (ImGui.Button(label))
+                commandSink(DossierInvestigationActions.Toggle(agent));
+        }
+        ImGui.Text($"Under investigation: {(agent.IsUnderInvestigation ? "Yes" : "No")}");
 
         ImGui.Separator();
         ImGui.Text("Known traits");

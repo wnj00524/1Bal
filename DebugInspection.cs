@@ -77,6 +77,38 @@ public sealed record DebugInspectionSnapshot(
     IReadOnlyList<DebugAgentSnapshot> Agents,
     IReadOnlyList<DebugNetworkSnapshot> Networks);
 
+public sealed record DebugAgentIdentitySnapshot(int EntityId, int NameId)
+{
+    public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
+}
+
+/// <summary>Presentation copy containing cheap rows and at most one full agent.</summary>
+public sealed record DebugInspectionView(
+    IReadOnlyList<DebugAgentIdentitySnapshot> AgentIdentities,
+    IReadOnlyList<DebugNetworkSnapshot> Networks,
+    DebugAgentSnapshot? SelectedAgent);
+
+public sealed class DebugAgentIdentitySearchIndex
+{
+    private string _search = string.Empty;
+    private IReadOnlyList<DebugAgentIdentitySnapshot>? _identities;
+    private int[] _matches = [];
+    public int RebuildCount { get; private set; }
+
+    public IReadOnlyList<int> Update(IReadOnlyList<DebugAgentIdentitySnapshot> identities, string? search)
+    {
+        search = search?.Trim() ?? string.Empty;
+        if (ReferenceEquals(identities, _identities) && search == _search) return _matches;
+        _identities = identities;
+        _search = search;
+        _matches = identities.Select((identity, index) => (identity, index))
+            .Where(item => search.Length == 0 || item.identity.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.index).ToArray();
+        RebuildCount++;
+        return _matches;
+    }
+}
+
 // These records intentionally contain only copied values. The UI can inspect
 // them freely without retaining an ECS Entity or a mutable component reference.
 public sealed record DebugAgentSnapshot(
@@ -103,7 +135,12 @@ public sealed record DebugAgentSnapshot(
     DebugTravelSnapshot Travel,
     DebugCoordinationSnapshot? Coordination,
     IReadOnlyList<DebugDecisionCandidateSnapshot> Decisions,
-    IReadOnlyList<DebugNetworkMembershipSnapshot> Networks)
+    IReadOnlyList<DebugNetworkMembershipSnapshot> Networks,
+    AgentLodTier LodTier,
+    AgentLodTier DesiredLodTier,
+    long? PendingDemotionMinute,
+    int CoarseProfileId,
+    ulong CoarseProfileFingerprint)
 {
     public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
 }
@@ -112,6 +149,75 @@ public static class DebugSnapshotBuilder
 {
     public static IReadOnlyList<DebugAgentSnapshot> Capture(EntityStore store, ContentCatalog catalog)
         => CaptureInspection(store, catalog).Agents;
+
+    /// <summary>Copies detail for one stable ID; no other agent detail is built.</summary>
+    public static DebugAgentSnapshot? CaptureSelectedAgent(EntityStore store, ContentCatalog catalog, int entityId)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var entity = store.Query<Identity>().Entities.FirstOrDefault(candidate => candidate.Id == entityId);
+        if (entity.IsNull) return null;
+
+        var memberships = new List<DebugNetworkMembershipSnapshot>();
+        foreach (var network in store.Query<AgentNetworkData>().Entities)
+        {
+            if (!network.GetIncomingLinks<AgentNetworkMembership>().Any(link => link.Entity.Id == entityId)) continue;
+            var data = network.GetComponent<AgentNetworkData>();
+            var type = catalog.Networks.GetType(data.TypeHash);
+            var membership = entity.GetRelation<AgentNetworkMembership, Entity>(network);
+            var role = catalog.Networks.GetRole(membership.RoleHash);
+            var supervisorId = membership.Supervisor.IsNull ? (int?)null : membership.Supervisor.Id;
+            memberships.Add(new DebugNetworkMembershipSnapshot(
+                network.Id, $"{type.Name} {data.Ordinal + 1}", type.Name,
+                role.Hash, role.Name, supervisorId,
+                supervisorId is null ? null : DescribeAgent(membership.Supervisor)));
+        }
+
+        var identity = entity.GetComponent<Identity>();
+        var faction = entity.GetComponent<PoliticalAlignment>();
+        var attributes = entity.GetComponent<AgentAttributes>();
+        var psychology = entity.GetComponent<Psychology>();
+        var state = entity.GetComponent<AgentState>();
+        var activity = entity.GetComponent<ActivityState>();
+        var location = entity.GetComponent<AgentLocation>();
+        var travel = entity.GetComponent<AgentTravel>();
+        var intention = entity.HasComponent<IntentionState>() ? entity.GetComponent<IntentionState>() : default;
+        var decision = entity.HasComponent<DecisionState>() ? entity.GetComponent<DecisionState>() : default;
+        var lod = entity.HasComponent<AgentLodState>() ? entity.GetComponent<AgentLodState>() : new AgentLodState
+        {
+            DesiredTier = AgentLodTier.Tier1,
+            ScheduledDemotionMinute = -1
+        };
+        var jobName = catalog.Jobs.FirstOrDefault(job => job.Hash == identity.OccupationId)?.Name
+            ?? $"Unknown ({identity.OccupationId})";
+        var factionName = catalog.Factions.FirstOrDefault(item => item.FactionId == faction.FactionId)?.Name
+            ?? $"Unknown ({faction.FactionId})";
+        var actionName = catalog.Actions.FirstOrDefault(action => action.Hash == activity.ActionHash)?.Name
+            ?? $"Unknown ({activity.ActionHash})";
+        string activityName;
+        try { activityName = catalog.GetActivity(activity.ActivityTypeHash).Name; }
+        catch (KeyNotFoundException) { activityName = $"Unknown ({activity.ActivityTypeHash})"; }
+        var secretName = catalog.SecretStates.FirstOrDefault(secret => secret.Hash == state.SecretStateHash)?.Name
+            ?? $"Unknown ({state.SecretStateHash})";
+
+        return new DebugAgentSnapshot(
+            entity.Id, identity.NameId, identity.OccupationId, jobName, identity.IntelligenceRole,
+            faction.FactionId, factionName, CopyAttributes(attributes, catalog.AgentAttributes),
+            CopyTraits(psychology.TraitMask, catalog.Traits), psychology.TraitMask,
+            activity.ActionHash, actionName, activity.ActivityTypeHash, activityName, activity.Phase,
+            state.SecretStateHash, secretName,
+            DescribeLocation(location.HomeLocationId, catalog.World),
+            DescribeLocation(location.WorkLocationId, catalog.World),
+            DescribeLocation(location.CurrentLocationId, catalog.World),
+            new DebugTravelSnapshot(
+                travel.RouteLocationIds.Select(id => DescribeLocation(id, catalog.World)).ToArray().AsReadOnly(),
+                travel.TotalTravelMinutes, travel.RoutePosition, travel.RemainingTravelMinutes, travel.Mode),
+            CopyCoordination(entity), CopyDecisions(catalog, intention, decision),
+            memberships.OrderBy(item => item.NetworkEntityId).ToArray().AsReadOnly(),
+            GetMaterializedTier(entity), lod.DesiredTier,
+            lod.ScheduledDemotionMinute >= 0 ? lod.ScheduledDemotionMinute : null,
+            lod.CoarseProfileId, lod.CoarseProfileFingerprint);
+    }
 
     public static DebugInspectionSnapshot CaptureInspection(EntityStore store, ContentCatalog catalog)
     {
@@ -220,13 +326,23 @@ public static class DebugSnapshotBuilder
                 CopyDecisions(catalog, intention, decision),
                 (networkMembershipsByAgent.TryGetValue(entity.Id, out var memberships)
                     ? memberships.OrderBy(item => item.NetworkEntityId).ToArray()
-                    : Array.Empty<DebugNetworkMembershipSnapshot>()).AsReadOnly()));
+                    : Array.Empty<DebugNetworkMembershipSnapshot>()).AsReadOnly(),
+                GetMaterializedTier(entity),
+                entity.HasComponent<AgentLodState>() ? entity.GetComponent<AgentLodState>().DesiredTier : AgentLodTier.Tier1,
+                entity.HasComponent<AgentLodState>() && entity.GetComponent<AgentLodState>().ScheduledDemotionMinute >= 0
+                    ? entity.GetComponent<AgentLodState>().ScheduledDemotionMinute : null,
+                entity.HasComponent<AgentLodState>() ? entity.GetComponent<AgentLodState>().CoarseProfileId : 0,
+                entity.HasComponent<AgentLodState>() ? entity.GetComponent<AgentLodState>().CoarseProfileFingerprint : 0));
         }
 
         return new DebugInspectionSnapshot(
             snapshots.AsReadOnly(),
             networkSnapshots.OrderBy(network => network.EntityId).ToArray().AsReadOnly());
     }
+
+    private static AgentLodTier GetMaterializedTier(Entity entity) =>
+        entity.Tags.Has<Tier1LodTag>() ? AgentLodTier.Tier1 :
+        entity.Tags.Has<Tier2LodTag>() ? AgentLodTier.Tier2 : AgentLodTier.Tier3;
 
     private static DebugCoordinationSnapshot? CopyCoordination(Entity entity)
     {
@@ -317,14 +433,77 @@ public static class DebugSnapshotBuilder
     }
 }
 
+/// <summary>
+/// Simulation-side owner of the debug projection. Stable identity rows and
+/// network summaries are copied once; selected detail is copied only when the
+/// requested stable ID changes.
+/// </summary>
+public sealed class DebugInspectionProjection
+{
+    private readonly EntityStore _store;
+    private readonly ContentCatalog _catalog;
+    private readonly ReadOnlyCollection<DebugAgentIdentitySnapshot> _identities;
+    private readonly ReadOnlyCollection<DebugNetworkSnapshot> _networks;
+    private int? _capturedAgentId;
+    private DebugAgentSnapshot? _selectedAgent;
+
+    private DebugInspectionProjection(EntityStore store, ContentCatalog catalog,
+        DebugAgentIdentitySnapshot[] identities, DebugNetworkSnapshot[] networks)
+    {
+        _store = store;
+        _catalog = catalog;
+        _identities = Array.AsReadOnly(identities);
+        _networks = Array.AsReadOnly(networks);
+    }
+
+    public int SelectedDetailCaptureCount { get; private set; }
+    public DebugInspectionView View => new(_identities, _networks, _selectedAgent);
+
+    public static DebugInspectionProjection Create(EntityStore store, ContentCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var identities = store.Query<Identity>().Entities
+            .Select(entity => new DebugAgentIdentitySnapshot(entity.Id, entity.GetComponent<Identity>().NameId))
+            .OrderBy(identity => identity.EntityId).ToArray();
+        var networks = store.Query<AgentNetworkData>().Entities.Select(network =>
+        {
+            var data = network.GetComponent<AgentNetworkData>();
+            var type = catalog.Networks.GetType(data.TypeHash);
+            var count = network.GetIncomingLinks<AgentNetworkMembership>().Count();
+            return new DebugNetworkSnapshot(network.Id, $"{type.Name} {data.Ordinal + 1}", data.TypeHash,
+                type.Name, data.AnchorLocationId == 0 ? null : DescribeDebugLocation(data.AnchorLocationId, catalog.World), count);
+        }).OrderBy(network => network.EntityId).ToArray();
+        return new DebugInspectionProjection(store, catalog, identities, networks);
+    }
+
+    public void Select(int? entityId)
+    {
+        if (_capturedAgentId == entityId) return;
+        _capturedAgentId = entityId;
+        _selectedAgent = entityId is null ? null : DebugSnapshotBuilder.CaptureSelectedAgent(_store, _catalog, entityId.Value);
+        if (entityId is not null) SelectedDetailCaptureCount++;
+    }
+
+    private static DebugLocationSnapshot DescribeDebugLocation(int id, WorldTopology world)
+    {
+        try { return new DebugLocationSnapshot(id, world.GetLocation(id).Name); }
+        catch (KeyNotFoundException) { return new DebugLocationSnapshot(id, $"Unknown ({id})"); }
+    }
+}
+
 public sealed class DebugWindow
 {
     private int? _selectedAgentId;
+    private string _search = string.Empty;
+    private readonly DebugAgentIdentitySearchIndex _searchIndex = new();
 
-    public void Draw(DebugInspectionSnapshot inspection, ref bool isOpen)
+    public int? SelectedAgentId => _selectedAgentId;
+
+    public unsafe void Draw(DebugInspectionView inspection, ref bool isOpen)
     {
         ArgumentNullException.ThrowIfNull(inspection);
-        var agents = inspection.Agents;
+        var agents = inspection.AgentIdentities;
 
         if (_selectedAgentId is not null && agents.All(agent => agent.EntityId != _selectedAgentId.Value))
         {
@@ -349,22 +528,30 @@ public sealed class DebugWindow
             }
         }
         ImGui.Separator();
+        ImGui.SetNextItemWidth(260);
+        ImGui.InputTextWithHint("##debug-search", "Search agent ID or name", ref _search, 128);
 
         ImGui.BeginChild("debug-agent-list", new Vector2(280, 0), ImGuiChildFlags.Borders);
-        foreach (var agent in agents)
+        var matches = _searchIndex.Update(agents, _search);
+        var clipper = new ImGuiListClipperPtr(ImGuiNative.ImGuiListClipper_ImGuiListClipper());
+        clipper.Begin(matches.Count);
+        while (clipper.Step())
         {
-            var selected = agent.EntityId == _selectedAgentId;
-            if (ImGui.Selectable(agent.DisplayName, selected))
+            VisibleRowRange.Visit(matches.Count, clipper.DisplayStart, clipper.DisplayEnd, row =>
             {
-                _selectedAgentId = agent.EntityId;
-            }
+                var agent = agents[matches[row]];
+                if (ImGui.Selectable(agent.DisplayName, agent.EntityId == _selectedAgentId))
+                    _selectedAgentId = agent.EntityId;
+            });
         }
+        clipper.End();
+        clipper.Destroy();
 
         ImGui.EndChild();
         ImGui.SameLine();
         ImGui.BeginChild("debug-agent-details", new Vector2(0, 0), ImGuiChildFlags.Borders);
 
-        var selectedAgent = agents.FirstOrDefault(agent => agent.EntityId == _selectedAgentId);
+        var selectedAgent = inspection.SelectedAgent?.EntityId == _selectedAgentId ? inspection.SelectedAgent : null;
         if (selectedAgent is null)
         {
             ImGui.Text("Select an agent to inspect its details.");
@@ -388,6 +575,13 @@ public sealed class DebugWindow
         ImGui.BulletText($"Intelligence role: {agent.IntelligenceRole}");
         ImGui.BulletText($"Occupation: {agent.OccupationName} ({agent.OccupationId})");
         ImGui.BulletText($"Faction: {agent.FactionName} ({agent.FactionId})");
+
+        ImGui.Separator();
+        ImGui.Text("LOD projection (debug only)");
+        ImGui.BulletText($"Materialized / desired tier: {agent.LodTier} / {agent.DesiredLodTier}");
+        ImGui.BulletText(agent.PendingDemotionMinute is null
+            ? "Pending demotion: None" : $"Pending demotion minute: {agent.PendingDemotionMinute}");
+        ImGui.BulletText($"Coarse profile: {agent.CoarseProfileId} (0x{agent.CoarseProfileFingerprint:X})");
 
         ImGui.Separator();
         ImGui.Text("Attributes");
