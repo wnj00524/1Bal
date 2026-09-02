@@ -1,0 +1,102 @@
+using System.Diagnostics;
+using Friflo.Engine.ECS;
+using Friflo.Engine.ECS.Systems;
+using ProxyState.Simulation;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace ProxyState.Tests;
+
+public sealed class Milestone17BaselineTests(ITestOutputHelper output)
+{
+    [Fact]
+    public void WorkCountersAndDecisionsRepeatForFixedSeed()
+    {
+        var first = RunDeterministicFixture();
+        var second = RunDeterministicFixture();
+
+        Assert.Equal(first.Work, second.Work);
+        Assert.Equal(first.Intentions, second.Intentions);
+        Assert.Equal(64, first.Work.DecisionPasses);
+        Assert.True(first.Work.CandidateEvaluations > 0);
+        Assert.True(first.Work.TargetPopulationVisits > 0);
+        Assert.True(first.Work.EdgeVisits > 0);
+        Assert.True(first.Work.TransientOperations > 0);
+    }
+
+    [Theory]
+    [Trait("Category", "Performance")]
+    [InlineData(1_000)]
+    [InlineData(10_000)]
+    [InlineData(100_000)]
+    public void PopulationGenerationAndDetailedLoopBenchmark(int population)
+    {
+        // Large cases are opt-in for ordinary test runs, but remain first-class
+        // Release fixtures for the explicitly documented baseline command.
+        if (population > 1_000 && Environment.GetEnvironmentVariable("PROXYSTATE_RUN_LARGE_BENCHMARKS") != "1")
+        {
+            output.WriteLine($"population={population}; notRun=true; set PROXYSTATE_RUN_LARGE_BENCHMARKS=1");
+            return;
+        }
+
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+        new AgentSpawner(catalog).Spawn(store, population, 17_001);
+        stopwatch.Stop();
+        var generationAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        output.WriteLine($"phase=generation; population={population}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={generationAllocated}; edges={store.Query<EdgeData>().Count}");
+
+        var clock = store.CreateEntity(new WorldTime
+        {
+            ElapsedSimulationSeconds = 600 * SimulationDefaults.SimulationSecondsPerMinute,
+            DeltaSimulationSeconds = SimulationDefaults.SimulationSecondsPerMinute
+        });
+        var diagnostics = new SimulationWorkDiagnostics();
+        var root = new SystemRoot(store)
+        {
+            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics)
+        };
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        stopwatch.Restart();
+        root.Update(default);
+        stopwatch.Stop();
+        var loopAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        var work = diagnostics.Snapshot();
+        output.WriteLine($"phase=detailed-loop; population={population}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={loopAllocated}; decisionPasses={work.DecisionPasses}; candidateEvaluations={work.CandidateEvaluations}; targetPopulationVisits={work.TargetPopulationVisits}; edgeVisits={work.EdgeVisits}; transientOperations={work.TransientOperations}");
+
+        Assert.Equal(population, work.DecisionPasses);
+        Assert.Equal(population * 3L, work.TargetPopulationVisits);
+        Assert.Equal(store.Query<EdgeData>().Count, work.EdgeVisits);
+    }
+
+    private static (SimulationWorkSnapshot Work, (int Action, int Target, int Location)[] Intentions)
+        RunDeterministicFixture()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        new AgentSpawner(catalog).Spawn(store, 64, 17_002);
+        var clock = store.CreateEntity(new WorldTime
+        {
+            ElapsedSimulationSeconds = 600 * SimulationDefaults.SimulationSecondsPerMinute
+        });
+        var diagnostics = new SimulationWorkDiagnostics();
+        new SystemRoot(store)
+        {
+            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics)
+        }.Update(default);
+
+        var intentions = store.Query<IntentionState>().Entities.OrderBy(entity => entity.Id).Select(entity =>
+        {
+            var state = entity.GetComponent<IntentionState>();
+            return (state.ActionHash, state.TargetEntityId, state.TargetLocationId);
+        }).ToArray();
+        return (diagnostics.Snapshot(), intentions);
+    }
+
+    private static ContentCatalog LoadCatalog() =>
+        ContentCatalog.Load(Path.Combine(AppContext.BaseDirectory, "data"));
+}

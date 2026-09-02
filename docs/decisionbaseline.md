@@ -130,3 +130,47 @@ a 63.1% reduction, showing that the dependency masks still avoid unrelated
 relationship work on same-minute mutations. Future optimization should reuse
 target snapshot storage before weakening deterministic selection or content
 generality.
+
+## Milestone 17.1 large-population and work-count baseline
+
+Measured on 2026-09-02 in an Ubuntu 24.04.4 LTS Linux x64 container with .NET
+SDK 8.0.424 and an Intel Xeon E5-2673 v4 virtual CPU allocation (17 logical
+processors). The container had 65 GiB RAM and no swap. Results use a Release
+build and seed `17001`; timing and allocation remain host observations, while
+the five work counters are deterministic assertions.
+
+```text
+PROXYSTATE_RUN_LARGE_BENCHMARKS=1 dotnet test ProxyState.sln -c Release \
+  --filter FullyQualifiedName~Milestone17BaselineTests.PopulationGenerationAndDetailedLoopBenchmark \
+  --logger "console;verbosity=detailed"
+```
+
+| Population | Generated edges | Generation elapsed | Generation allocated | One detailed minute | Loop allocated |
+|---:|---:|---:|---:|---:|---:|
+| 1,000 | 11,074 | 186.730 ms | 11,353,824 B | 38.338 ms | 17,072,992 B |
+| 10,000 | 111,428 | 1,243.621 ms | 111,595,392 B | 512.021 ms | 170,120,400 B |
+| 100,000 | 1,110,552 | 16,226.007 ms | 1,218,924,728 B | 8,340.040 ms | 1,678,236,600 B |
+
+| Population | Decision passes | Candidate evaluations | Target population visits | Edge visits | Transient operations |
+|---:|---:|---:|---:|---:|---:|
+| 1,000 | 1,000 | 8,000 | 3,000 | 11,074 | 47,555 |
+| 10,000 | 10,000 | 80,000 | 30,000 | 111,428 | 477,402 |
+| 100,000 | 100,000 | 800,000 | 300,000 | 1,110,552 | 4,761,556 |
+
+The fixture measures generation separately, then one full detailed decision
+minute. Ordinary test runs execute the 1,000-agent case; setting
+`PROXYSTATE_RUN_LARGE_BENCHMARKS=1` opts into the resource-intensive 10,000 and
+100,000 cases. `WorkCountersAndDecisionsRepeatForFixedSeed` independently
+asserts identical counters and selected action/target tuples across two worlds.
+
+The scans to remove in later Milestone 17 slices are explicitly:
+
+* `TargetResolver` visits every agent three times per update to copy locations,
+  attributes, and network memberships, and visits every directed social edge;
+* entity target ranking creates a rank array per visited candidate, while
+  network selection creates transient candidate sets and ordered iterators;
+* `IntentExecutionSystem` copies every agent location on every elapsed tick;
+* `InteractionSystem` visits every directed `EdgeData` entity on its interval;
+* `PlayerIntelligenceDB.Capture` and debug/dossier projections retain separate
+  full-population or relationship scans. Those presentation-boundary scans are
+  recorded here but remain explicitly outside Milestone 17 optimization scope.

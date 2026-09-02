@@ -357,3 +357,13 @@ dependency list is authored in JSON.
 Its parallel score, eligibility, and target arrays are indexed by the compiled
 intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
 is diagnostic Ground Truth state and is not copied into player intelligence.
+
+### 2.10 Simulation Work Diagnostics
+
+`SimulationWorkDiagnostics` is a mutable, system-owned measurement sink with
+64-bit counters for decision passes, candidate evaluations, target population
+visits, edge visits, and transient allocation-sensitive operations.
+`SimulationWorkSnapshot` is its immutable value projection for tests and
+benchmark output. Neither type is an ECS component, and neither is exposed to
+the UI or `PlayerIntelligenceDB`; instrumentation is opt-in at system
+construction and does not affect decision state.
