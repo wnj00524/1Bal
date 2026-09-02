@@ -69,7 +69,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
         _executors = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Executor);
         _activityTypes = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Activity.Hash);
-        Filter.AllTags(Tags.Get<Tier1LodTag>());
+        Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
     protected override void OnUpdate()
@@ -86,7 +86,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         {
             if (!_executors.TryGetValue(intention.ActionHash, out var executor))
             {
-                decision.Dirty = true;
+                DecisionInvalidation.SignalTargetLoss(ref decision);
                 SetActivity(ref activity, ActivityPhase.Blocked, 0, 0, minute);
                 return;
             }
@@ -157,17 +157,17 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                 return location.CurrentLocationId;
             case ExecutorKind.PerformAtLocation:
                 if (intention.TargetLocationId != 0) return intention.TargetLocationId;
-                DecisionInvalidation.SignalTargetAvailability(ref decision);
+                DecisionInvalidation.SignalTargetLoss(ref decision);
                 return null;
             case ExecutorKind.PerformWithEntity:
                 if (intention.TargetEntityId != 0 &&
                     _socialIndexes.TryGetAgent(intention.TargetEntityId, out var target) &&
                     !target.IsNull && target.TryGetComponent<AgentLocation>(out var targetLocation))
                     return targetLocation.CurrentLocationId;
-                DecisionInvalidation.SignalTargetAvailability(ref decision);
+                DecisionInvalidation.SignalTargetLoss(ref decision);
                 return null;
             default:
-                DecisionInvalidation.SignalTargetAvailability(ref decision);
+                DecisionInvalidation.SignalTargetLoss(ref decision);
                 return null;
         }
     }
@@ -184,7 +184,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         var route = _world.FindShortestRoute(start, destination);
         if (route is null)
         {
-            decision.Dirty = true;
+            DecisionInvalidation.SignalTargetLoss(ref decision);
             CancelTravel(ref travel);
             return;
         }

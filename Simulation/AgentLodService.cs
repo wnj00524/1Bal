@@ -75,6 +75,9 @@ public sealed class AgentLodService : IDisposable
         }
 
         ApplyClassification(agent);
+        if (agent.HasComponent<DecisionState>())
+            DecisionInvalidation.SignalCritical(ref agent.GetComponent<DecisionState>(), FactDependencyMask.All,
+                DecisionWakeReason.Investigation);
         _investigationEvents.Add(new InvestigationChangedEvent(agentId, enabled));
         return true;
     }
@@ -114,9 +117,15 @@ public sealed class AgentLodService : IDisposable
         if (!entity.HasComponent<AgentLodState>())
             throw new InvalidOperationException("Agent LOD state must be initialized before changing tier.");
         ref var state = ref entity.GetComponent<AgentLodState>();
+        var previousMaterializedTier = entity.Tags.Has<Tier1LodTag>() ? AgentLodTier.Tier1
+            : entity.Tags.Has<Tier2LodTag>() ? AgentLodTier.Tier2 : AgentLodTier.Tier3;
         state.DesiredTier = desiredTier;
-        SynchronizeTags(entity, desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
-            ? AgentLodTier.Tier2 : desiredTier);
+        var materializedTier = desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
+            ? AgentLodTier.Tier2 : desiredTier;
+        SynchronizeTags(entity, materializedTier);
+        if (materializedTier < previousMaterializedTier && entity.HasComponent<DecisionState>())
+            DecisionInvalidation.SignalCritical(ref entity.GetComponent<DecisionState>(), FactDependencyMask.All,
+                DecisionWakeReason.Promotion);
     }
 
     public static bool HasExactlyOneTierTag(Entity entity)

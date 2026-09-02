@@ -85,6 +85,11 @@ public sealed class AgentLodContractTests
         Assert.True(entity.Tags.Has<Tier2LodTag>());
         Assert.True(entity.Tags.Has<DetailedSimulationTag>());
 
+        entity.AddComponent(new DecisionState());
+        service.SetDesiredTier(entity, AgentLodTier.Tier1);
+        Assert.True((entity.GetComponent<DecisionState>().ImmediateWakeReasons &
+            DecisionWakeReason.Promotion) != 0);
+
         entity.AddTag<Tier3LodTag>();
         Assert.False(AgentLodService.HasExactlyOneTierTag(entity));
     }
