@@ -31,8 +31,9 @@ public static class Program
         var systems = new SystemRoot(store)
         {
             clock,
-            new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode),
-            new CoordinationSystem(store, catalog, clock.ClockEntity),
+            new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode,
+                socialIndexes: agentSocialIndexes),
+            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
             new IntentExecutionSystem(store, catalog, clock.ClockEntity),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
             new InteractionSystem(catalog, new Random())

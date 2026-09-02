@@ -16,8 +16,10 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     private readonly Dictionary<int, CompiledIntent> _intents;
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CompiledIntent _fallback;
+    private readonly AgentSocialIndexes _socialIndexes;
 
-    public CoordinationSystem(EntityStore store, ContentCatalog catalog, Entity clock)
+    public CoordinationSystem(EntityStore store, ContentCatalog catalog, Entity clock,
+        AgentSocialIndexes? socialIndexes = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -25,6 +27,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         _intents = catalog.Intents.All.ToDictionary(intent => intent.Hash);
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
+        _socialIndexes = socialIndexes ?? BuildIndexes(store);
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -35,10 +38,17 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         var agents = _store.Query<Identity>().Entities
             .Where(IsCoordinatable).OrderBy(entity => entity.Id).ToArray();
         var byId = agents.ToDictionary(entity => entity.Id);
-        var targets = new AgentDecisionSystem.TargetResolver(_store);
+        var targets = new AgentDecisionSystem.TargetResolver(_socialIndexes);
 
         MaintainExistingPairs(agents, byId, targets, time, minute);
         MatchInvitations(agents, byId, targets, time, minute);
+    }
+
+    private static AgentSocialIndexes BuildIndexes(EntityStore store)
+    {
+        var indexes = new AgentSocialIndexes();
+        indexes.Rebuild(store);
+        return indexes;
     }
 
     private static bool IsCoordinatable(Entity entity) =>

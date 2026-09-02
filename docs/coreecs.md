@@ -333,3 +333,21 @@ leaking ECS entities into ordinary presentation code.
   ECS IDs.
 * Indexes remain Ground Truth simulation infrastructure. They are not queried by
   ImGui and are never copied into `PlayerIntelligenceDB`.
+
+### 4.21 Indexed Decision Targeting (Milestone 17.3)
+
+* `AgentDecisionSystem` and `CoordinationSystem` share the bootstrap
+  `AgentSocialIndexes`. Target resolution reads an agent's current location and
+  attributes directly from the indexed entity rather than constructing
+  population-wide dictionaries on every update.
+* Social selectors traverse only the actor's packed outgoing span. Network
+  selectors traverse the actor's native memberships and the bounded incoming
+  membership links of matching networks; supervisor and direct-report checks
+  use the membership relation itself.
+* Requirements and ranking retain their compiled data-driven semantics. The
+  best candidate's rank is compared in place, avoiding per-candidate arrays,
+  sets, ordering iterators, and other transient target-enumeration allocations.
+  Equal ranks continue to select the lowest entity ID.
+* Work diagnostics now report zero population visits, edge scans, and transient
+  target-snapshot operations during a detailed decision update. The indexes
+  remain Ground Truth-only and do not alter the intelligence isolation layer.

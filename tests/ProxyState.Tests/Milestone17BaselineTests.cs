@@ -19,9 +19,9 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         Assert.Equal(first.Intentions, second.Intentions);
         Assert.Equal(64, first.Work.DecisionPasses);
         Assert.True(first.Work.CandidateEvaluations > 0);
-        Assert.True(first.Work.TargetPopulationVisits > 0);
-        Assert.True(first.Work.EdgeVisits > 0);
-        Assert.True(first.Work.TransientOperations > 0);
+        Assert.Equal(0, first.Work.TargetPopulationVisits);
+        Assert.Equal(0, first.Work.EdgeVisits);
+        Assert.Equal(0, first.Work.TransientOperations);
     }
 
     [Theory]
@@ -44,7 +44,8 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var stopwatch = Stopwatch.StartNew();
-        new AgentSpawner(catalog).Spawn(store, population, 17_001);
+        var spawner = new AgentSpawner(catalog);
+        spawner.Spawn(store, population, 17_001);
         stopwatch.Stop();
         var generationAllocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         output.WriteLine($"phase=generation; population={population}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={generationAllocated}; edges={store.Query<EdgeData>().Count}");
@@ -57,7 +58,8 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         var diagnostics = new SimulationWorkDiagnostics();
         var root = new SystemRoot(store)
         {
-            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics)
+            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics,
+                socialIndexes: spawner.Indexes)
         };
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
@@ -69,8 +71,9 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         output.WriteLine($"phase=detailed-loop; population={population}; elapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; allocatedBytes={loopAllocated}; decisionPasses={work.DecisionPasses}; candidateEvaluations={work.CandidateEvaluations}; targetPopulationVisits={work.TargetPopulationVisits}; edgeVisits={work.EdgeVisits}; transientOperations={work.TransientOperations}");
 
         Assert.Equal(population, work.DecisionPasses);
-        Assert.Equal(population * 3L, work.TargetPopulationVisits);
-        Assert.Equal(store.Query<EdgeData>().Count, work.EdgeVisits);
+        Assert.Equal(0, work.TargetPopulationVisits);
+        Assert.Equal(0, work.EdgeVisits);
+        Assert.Equal(0, work.TransientOperations);
     }
 
     private static (SimulationWorkSnapshot Work, (int Action, int Target, int Location)[] Intentions)
@@ -78,7 +81,8 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
     {
         var catalog = LoadCatalog();
         var store = new EntityStore();
-        new AgentSpawner(catalog).Spawn(store, 64, 17_002);
+        var spawner = new AgentSpawner(catalog);
+        spawner.Spawn(store, 64, 17_002);
         var clock = store.CreateEntity(new WorldTime
         {
             ElapsedSimulationSeconds = 600 * SimulationDefaults.SimulationSecondsPerMinute
@@ -86,7 +90,8 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
         var diagnostics = new SimulationWorkDiagnostics();
         new SystemRoot(store)
         {
-            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics)
+            new AgentDecisionSystem(store, catalog, clock, workDiagnostics: diagnostics,
+                socialIndexes: spawner.Indexes)
         }.Update(default);
 
         var intentions = store.Query<IntentionState>().Entities.OrderBy(entity => entity.Id).Select(entity =>

@@ -179,6 +179,7 @@ public sealed class DecisionBaselineTests
         private readonly AgentDecisionSystem _decisions;
         private readonly IntentExecutionSystem _execution;
         private readonly AgentNetworkService _networkService;
+        private readonly AgentSocialIndexes _indexes = new();
         private readonly Entity _friendNetwork;
         private readonly SystemRoot _decisionRoot;
         private readonly SystemRoot _executionRoot;
@@ -206,7 +207,7 @@ public sealed class DecisionBaselineTests
             _networkService = new AgentNetworkService(_store, _catalog.Networks);
             _friendNetwork = _networkService.CreateNetwork(_catalog.Networks.GetType("friend-group").Hash, 0, 0);
             _networkService.AddMembership(Agent, _friendNetwork, _catalog.Networks.GetRole("friend").Hash);
-            _decisions = new AgentDecisionSystem(_store, _catalog, _clock);
+            _decisions = new AgentDecisionSystem(_store, _catalog, _clock, socialIndexes: _indexes);
             _execution = new IntentExecutionSystem(_store, _catalog, _clock);
             _decisionRoot = new SystemRoot(_store) { _decisions };
             _executionRoot = new SystemRoot(_store) { _execution };
@@ -261,6 +262,9 @@ public sealed class DecisionBaselineTests
 
         public DecisionTrace Decide(bool runExecution = false)
         {
+            // This fixture mutates its tiny population between decisions; the
+            // production bootstrap instead builds the same snapshot once.
+            _indexes.Rebuild(_store);
             _decisionRoot.Update(default);
             if (runExecution) _executionRoot.Update(default);
             return DecisionTrace.Capture(Agent);

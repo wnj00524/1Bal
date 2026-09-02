@@ -232,6 +232,14 @@ dictionary or allocation. Construction uses fixed-pass integer radix sorting,
 so build work and retained storage are linear in generated entities and directed
 edges.
 
+Milestone 17.3 adds a persistent edge-entity directory beside the packed
+adjacency data. Decision targeting uses the packed edge ID to retrieve current
+affinity without rebuilding an affinity map, while target location and
+attribute arrays are read from the agent directory's resolved ECS entity.
+Network target enumeration deliberately remains in Friflo's native
+`AgentNetworkMembership` incoming-link and relation storage rather than adding
+a duplicate network-member snapshot.
+
 The snapshot is immutable between rebuilds in Milestone 17.2. Code that changes
 the population must call `NotifyPopulationChanged`; code that adds, removes, or
 retargets `EdgeData` must call `NotifySocialGraphChanged`. Lookups then fail
