@@ -16,6 +16,7 @@ public sealed class AgentLodService : IDisposable
     private readonly HashSet<int> _pointsOfInterest = [];
     private readonly Dictionary<int, int[]> _poiNeighbours = new();
     private readonly List<InvestigationChangedEvent> _investigationEvents = [];
+    private readonly Dictionary<int, int> _interactionPins = [];
     private bool _initialized;
 
     // Retained for isolated contract tests and bootstrap construction. Runtime
@@ -117,15 +118,104 @@ public sealed class AgentLodService : IDisposable
         if (!entity.HasComponent<AgentLodState>())
             throw new InvalidOperationException("Agent LOD state must be initialized before changing tier.");
         ref var state = ref entity.GetComponent<AgentLodState>();
+        var previousDesiredTier = state.DesiredTier;
         var previousMaterializedTier = entity.Tags.Has<Tier1LodTag>() ? AgentLodTier.Tier1
             : entity.Tags.Has<Tier2LodTag>() ? AgentLodTier.Tier2 : AgentLodTier.Tier3;
         state.DesiredTier = desiredTier;
-        var materializedTier = desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
+        var requestedMaterializedTier = desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
             ? AgentLodTier.Tier2 : desiredTier;
-        SynchronizeTags(entity, materializedTier);
+        // Pins constrain materialization, not classification: DesiredTier remains
+        // useful diagnostics while a coordinated activity temporarily needs detail.
+        var materializedTier = _interactionPins.ContainsKey(entity.Id) && requestedMaterializedTier > AgentLodTier.Tier2
+            ? AgentLodTier.Tier2 : requestedMaterializedTier;
+        if (!_initialized)
+        {
+            state.ScheduledDemotionMinute = -1;
+            SynchronizeTags(entity, materializedTier);
+            if (materializedTier < previousMaterializedTier && entity.HasComponent<DecisionState>())
+                DecisionInvalidation.SignalCritical(ref entity.GetComponent<DecisionState>(), FactDependencyMask.All,
+                    DecisionWakeReason.Promotion);
+            return;
+        }
+        if (desiredTier < previousDesiredTier || materializedTier < previousMaterializedTier)
+        {
+            state.ScheduledDemotionMinute = -1;
+            SynchronizeTags(entity, materializedTier);
+        }
+        else if (desiredTier > previousDesiredTier || materializedTier > previousMaterializedTier)
+        {
+            if (_interactionPins.ContainsKey(entity.Id)) return;
+            var boundary = NextDayBoundaryMinute(CurrentMinute());
+            if (state.ScheduledDemotionMinute < 0 || boundary < state.ScheduledDemotionMinute)
+                state.ScheduledDemotionMinute = boundary;
+        }
+        else
+        {
+            // An equivalent request must not push an already queued reduction
+            // to a later day boundary.
+            if (state.ScheduledDemotionMinute < 0) SynchronizeTags(entity, materializedTier);
+        }
         if (materializedTier < previousMaterializedTier && entity.HasComponent<DecisionState>())
             DecisionInvalidation.SignalCritical(ref entity.GetComponent<DecisionState>(), FactDependencyMask.All,
                 DecisionWakeReason.Promotion);
+    }
+
+    /// <summary>Keeps an active coordination participant at least Tier 2.</summary>
+    public void AcquireInteractionPin(Entity entity)
+    {
+        RequireManagedAgent(entity);
+        _interactionPins[entity.Id] = _interactionPins.GetValueOrDefault(entity.Id) + 1;
+        ref var state = ref entity.GetComponent<AgentLodState>();
+        state.InterestReasons |= AgentInterestReason.ActiveInteraction;
+        state.ScheduledDemotionMinute = -1;
+        if (entity.Tags.Has<Tier3LodTag>()) SynchronizeTags(entity, AgentLodTier.Tier2);
+    }
+
+    /// <summary>Releases one owner pin and starts normal grace after the final release.</summary>
+    public void ReleaseInteractionPin(Entity entity)
+    {
+        RequireManagedAgent(entity);
+        if (!_interactionPins.TryGetValue(entity.Id, out var count)) return;
+        if (count > 1) { _interactionPins[entity.Id] = count - 1; return; }
+        _interactionPins.Remove(entity.Id);
+        ref var state = ref entity.GetComponent<AgentLodState>();
+        state.InterestReasons &= ~AgentInterestReason.ActiveInteraction;
+        ApplyClassification(entity);
+    }
+
+    /// <summary>Applies due reductions. Call before detailed decision systems.</summary>
+    public void ProcessScheduledDemotions()
+    {
+        RequireInitialized();
+        var minute = CurrentMinute();
+        foreach (var agent in _agents.Values.OrderBy(agent => agent.Id))
+        {
+            if (!IsLiveAgent(agent)) continue;
+            ref var state = ref agent.GetComponent<AgentLodState>();
+            if (state.ScheduledDemotionMinute < 0 || minute < state.ScheduledDemotionMinute ||
+                _interactionPins.ContainsKey(agent.Id)) continue;
+            state.ScheduledDemotionMinute = -1;
+            var tier = state.DesiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
+                ? AgentLodTier.Tier2 : state.DesiredTier;
+            SynchronizeTags(agent, tier);
+        }
+    }
+
+    /// <summary>Refreshes POI edges touched by a supported hierarchy mutation.</summary>
+    public void NotifyNetworkMutation(params Entity[] affectedAgents)
+    {
+        if (!_initialized) return;
+        var affected = affectedAgents.Where(IsLiveAgent).Select(agent => agent.Id).ToHashSet();
+        foreach (var poiId in _pointsOfInterest.Order().ToArray())
+        {
+            if (!_agents.TryGetValue(poiId, out var poi) || !IsLiveAgent(poi)) continue;
+            var old = _poiNeighbours[poiId];
+            if (!affected.Contains(poiId) && !old.Any(affected.Contains)) continue;
+            var current = CollectDirectNeighbours(poi).Where(id => id != poiId).Order().ToArray();
+            foreach (var removed in old.Except(current)) ChangePoiReference(removed, -1);
+            foreach (var added in current.Except(old)) ChangePoiReference(added, 1);
+            _poiNeighbours[poiId] = current;
+        }
     }
 
     public static bool HasExactlyOneTierTag(Entity entity)
@@ -205,8 +295,38 @@ public sealed class AgentLodService : IDisposable
         var agent = deletion.Entity;
         if (_pointsOfInterest.Contains(agent.Id)) RemovePointOfInterest(agent);
         _agents.Remove(agent.Id);
+        _interactionPins.Remove(agent.Id);
         if ((agent.GetComponent<AgentLodState>().InterestReasons & AgentInterestReason.Investigation) != 0)
             _investigationEvents.Add(new InvestigationChangedEvent(agent.Id, false));
+    }
+
+    private void ChangePoiReference(int agentId, int delta)
+    {
+        if (!_agents.TryGetValue(agentId, out var agent) || !IsLiveAgent(agent)) return;
+        ref var state = ref agent.GetComponent<AgentLodState>();
+        state.DirectPoiReferenceCount = Math.Max(0, state.DirectPoiReferenceCount + delta);
+        if (state.DirectPoiReferenceCount > 0) state.InterestReasons |= AgentInterestReason.RelatedPointOfInterest;
+        else state.InterestReasons &= ~AgentInterestReason.RelatedPointOfInterest;
+        ApplyClassification(agent);
+    }
+
+    private long CurrentMinute()
+    {
+        if (_store is null) return 0;
+        var clocks = _store.Query<WorldTime>().Entities;
+        return clocks.Count == 1
+            ? (long)Math.Floor(clocks.First().GetComponent<WorldTime>().ElapsedSimulationSeconds /
+                SimulationDefaults.SimulationSecondsPerMinute)
+            : 0;
+    }
+
+    public static long NextDayBoundaryMinute(long minute) => checked((minute / 1440 + 1) * 1440);
+
+    private void RequireManagedAgent(Entity entity)
+    {
+        RequireInitialized();
+        if (!_agents.TryGetValue(entity.Id, out var managed) || managed != entity || !IsLiveAgent(entity))
+            throw new ArgumentException("The entity is not a managed live agent.", nameof(entity));
     }
 
     private bool IsLiveAgent(Entity entity) => !entity.IsNull && entity.Store == _store && entity.HasComponent<Identity>();

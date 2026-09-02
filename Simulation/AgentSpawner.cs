@@ -147,7 +147,7 @@ public sealed class AgentSpawner
         // before social edges, using independent streams for replay isolation.
         if (generateNetworks)
         {
-            var networkService = new AgentNetworkService(store, _catalog.Networks);
+            var networkService = new AgentNetworkService(store, _catalog.Networks, lodService);
             _networkBuilder.Populate(networkService, agents, SimulationRandomStreams.Networks(seed));
         }
         _socialGraphBuilder.Populate(store, agents, SimulationRandomStreams.SocialGraph(seed));

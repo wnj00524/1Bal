@@ -231,7 +231,7 @@ leaking ECS entities into ordinary presentation code.
 * Spawning initializes intention and activity state from the compiled fallback,
   eliminating the former dependency on a specifically named domain action.
 
-### 4.14a Agent LOD Classification and Cadence (Milestones 18.1–18.3)
+### 4.14a Agent LOD Classification and Cadence (Milestones 18.1–18.4)
 
 * `ContentCatalog` loads `data/lod.json` and compiles its relationship scopes
   and demotion policy to enums. Positive cadence/shard values and exact supported
@@ -257,6 +257,17 @@ leaking ECS entities into ordinary presentation code.
   promotion set explicit wake reasons. They force an immediate full Tier 2
   cache refresh, while ordinary dependency masks accumulate until the next
   cadence boundary. Scheduling is based only on elapsed simulation minutes.
+* Promotions materialize immediately. Reductions retain the earliest queued
+  next-day boundary and are applied before the detailed decision pass. The
+  desired tier remains visible while grace is pending; disabled Tier 3 still
+  materializes as Tier 2 after that boundary.
+* Coordination owns reference-counted interaction pins for both members of an
+  accepted pair. A pin keeps an agent at least Tier 2 across day boundaries;
+  releasing the final pin starts a fresh normal demotion grace period.
+* `AgentNetworkService` notifies the LOD boundary after supported hierarchy
+  additions, supervisor changes, removals, and deletion cleanup. The service
+  diffs only affected cached POI neighbourhoods, preserving overlap reference
+  counts without treating ordinary shared network membership as interest.
 
 ### 4.15 Dependency-Driven Reevaluation (Milestone 13)
 

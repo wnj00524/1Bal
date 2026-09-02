@@ -143,6 +143,10 @@ or investigated direct neighbour, preventing an agent from leaving Tier 2 while
 another POI still references it. Its drained `InvestigationChangedEvent` values
 contain only `AgentId` and `Enabled`; the copied records can cross into a later
 player-intelligence projection without leaking ECS `Entity` handles or LOD state.
+`ScheduledDemotionMinute` is `-1` when no reduction is pending and otherwise
+stores the earliest next-day boundary computed from elapsed simulation minutes.
+`ActiveInteraction` is backed by service-owned reference counts so overlapping
+owners cannot clear one another's pins; the flag is removed only on final release.
 
 `AgentAttributeSchema` loads the ordered numeric definitions from
 `data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores

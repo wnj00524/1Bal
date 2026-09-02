@@ -80,9 +80,11 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly SimulationWorkDiagnostics? _workDiagnostics;
     private readonly AgentSocialIndexes _socialIndexes;
     private readonly int _tier2DecisionIntervalMinutes;
+    private readonly AgentLodService? _lodService;
 
     public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock, bool captureDiagnostics = false,
-        SimulationWorkDiagnostics? workDiagnostics = null, AgentSocialIndexes? socialIndexes = null)
+        SimulationWorkDiagnostics? workDiagnostics = null, AgentSocialIndexes? socialIndexes = null,
+        AgentLodService? lodService = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         ArgumentNullException.ThrowIfNull(catalog);
@@ -93,6 +95,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _workDiagnostics = workDiagnostics;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
         _tier2DecisionIntervalMinutes = catalog.Lod.Tier2DecisionIntervalMinutes;
+        _lodService = lodService;
         _candidateIndex = catalog.Intents.Candidates;
         _candidatesByIndex = new CandidateEvaluator?[catalog.Intents.Count];
         _candidatesByHash = new();
@@ -107,6 +110,8 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
 
     protected override void OnUpdate()
     {
+        // Due reductions must change query membership before this decision pass.
+        _lodService?.ProcessScheduledDemotions();
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
         var targets = new TargetResolver(_socialIndexes);

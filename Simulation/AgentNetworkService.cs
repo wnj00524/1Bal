@@ -11,12 +11,14 @@ public sealed class AgentNetworkService : IDisposable
 {
     private readonly EntityStore _store;
     private readonly AgentNetworkCatalog _catalog;
+    private readonly AgentLodService? _lodService;
     private bool _handlingDeletion;
 
-    public AgentNetworkService(EntityStore store, AgentNetworkCatalog catalog)
+    public AgentNetworkService(EntityStore store, AgentNetworkCatalog catalog, AgentLodService? lodService = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _lodService = lodService;
         _store.OnEntityDelete += HandleEntityDelete;
     }
 
@@ -59,6 +61,7 @@ public sealed class AgentNetworkService : IDisposable
         ValidateSupervisor(agent, network, type, supervisor, adding: true);
         agent.AddRelation(new AgentNetworkMembership { Network = network, RoleHash = roleHash, Supervisor = supervisor });
         InvalidateNetworkMembers(network, agent);
+        NotifyLodNetworkMembers(network, agent, supervisor);
     }
 
     public AgentNetworkMembership GetMembership(Entity agent, Entity network)
@@ -104,8 +107,10 @@ public sealed class AgentNetworkService : IDisposable
         GetMembershipReference(agent, network);
         ValidateSupervisor(agent, network, type, supervisor, adding: false);
         ref var membership = ref GetMembershipReference(agent, network);
+        var previousSupervisor = membership.Supervisor;
         membership.Supervisor = supervisor;
         InvalidateNetworkMembers(network, agent);
+        NotifyLodNetworkMembers(network, agent, previousSupervisor, supervisor);
     }
 
     /// <summary>
@@ -130,6 +135,7 @@ public sealed class AgentNetworkService : IDisposable
         {
             agent.RemoveRelation<AgentNetworkMembership>(network);
             InvalidateNetworkMembers(network, agent);
+            NotifyLodNetworkMembers(network, agent);
             return;
         }
 
@@ -155,6 +161,7 @@ public sealed class AgentNetworkService : IDisposable
         }
         agent.RemoveRelation<AgentNetworkMembership>(network);
         InvalidateNetworkMembers(network, agent);
+        NotifyLodNetworkMembers(network, members.Select(item => item.Agent).Append(agent).ToArray());
     }
 
     private void ValidateSupervisor(Entity agent, Entity network, NetworkTypeDefinition type, Entity supervisor, bool adding)
@@ -227,6 +234,7 @@ public sealed class AgentNetworkService : IDisposable
         foreach (var link in network.GetIncomingLinks<AgentNetworkMembership>()) agents.Add(link.Entity);
         foreach (var agent in agents) agent.RemoveRelation<AgentNetworkMembership>(network);
         InvalidateAgents(agents);
+        NotifyLodNetworkMembers(network, agents.ToArray());
     }
 
     // Network membership, role, and hierarchy mutations can change both target
@@ -246,6 +254,15 @@ public sealed class AgentNetworkService : IDisposable
             ref var decision = ref agent.GetComponent<DecisionState>();
             DecisionInvalidation.SignalTargetAvailability(ref decision);
         }
+    }
+
+    private void NotifyLodNetworkMembers(Entity network, params Entity[] additionalAgents)
+    {
+        if (_lodService is null) return;
+        var affected = new HashSet<Entity>(additionalAgents.Where(entity => !entity.IsNull));
+        if (!network.IsNull)
+            foreach (var link in network.GetIncomingLinks<AgentNetworkMembership>()) affected.Add(link.Entity);
+        _lodService.NotifyNetworkMutation(affected.ToArray());
     }
 
     private void HandleEntityDelete(EntityDelete deletion)
