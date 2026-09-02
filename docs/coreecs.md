@@ -1,5 +1,25 @@
 # 4. Core ECS Systems (Logic)
 
+### 4.0 Tier 3 shared routine profiles
+
+`CoarseRoutineProfileCache` is simulation-owned immutable schedule storage. It
+keys profiles by occupation, trait mask, and commute duration (with its
+catalog/topology cache lifetime acting as the revision boundary) and expands
+the compiled workday/non-workday templates into one contiguous seven-day
+sequence. Job intervals and exact route duration reserve work and commute
+blocks; authored fixed blocks use stable order and `fillRemaining` owns every
+unreserved minute. Agents retain only an ID and fingerprint in `AgentLodState`;
+profiles and their interval arrays are never copied per agent.
+
+`CoarseRoutineSystem` owns 24 stable agent-ID shards. Each simulated hour it
+updates one shard and integrates resolved intent effect rates over exact
+profile overlaps, including week wrap and long jumps. It clamps attributes to
+the schema range, sets the current symbolic location, and records a watermark.
+`AgentLodService` is the only representation-transition boundary: Tier 3
+removes decision, activity, coordination, and route-array components; a
+promotion catches up first and recreates those components from shared route
+data before the detailed systems can read them.
+
 ### 4.1 Utility AI System
 
 **Goal:** Decide an intention from Ground Truth on simulation time.

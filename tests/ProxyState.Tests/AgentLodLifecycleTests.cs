@@ -115,7 +115,9 @@ public sealed class AgentLodLifecycleTests
         var agents = Enumerable.Range(0, count)
             .Select(index => store.CreateEntity(new Identity { NameId = index + 1 }))
             .ToArray();
-        var service = new AgentLodService(store, LoadCatalog().Lod, new AgentSocialIndexes());
+        // These tests isolate M18's grace contract; production Tier 3 enablement
+        // is covered by the M19 lifecycle tests.
+        var service = new AgentLodService(store, LoadCatalog().Lod with { Tier3Enabled = false }, new AgentSocialIndexes());
         service.InitializeClassification();
         return (store, clock, agents, service);
     }

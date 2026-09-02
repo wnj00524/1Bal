@@ -497,8 +497,8 @@ public sealed class SimulationTests
         Assert.Equal(SimulationDefaults.AgentCount, store.Query<AgentState>().Count);
         Assert.Equal(SimulationDefaults.OperativeCount,
             store.Query<AgentAttributes>().AllTags(Tags.Get<Tier1LodTag>()).Count);
-        Assert.Equal(SimulationDefaults.AgentCount,
-            store.Query<AgentAttributes>().AllTags(Tags.Get<DetailedSimulationTag>()).Count);
+        Assert.InRange(store.Query<AgentAttributes>().AllTags(Tags.Get<DetailedSimulationTag>()).Count,
+            SimulationDefaults.OperativeCount, SimulationDefaults.AgentCount - 1);
     }
 
     [Fact]
@@ -513,7 +513,7 @@ public sealed class SimulationTests
             var identity = entity.GetComponent<Identity>();
             var job = Assert.Single(catalog.Jobs, candidate => candidate.Hash == identity.OccupationId);
             var location = entity.GetComponent<AgentLocation>();
-            var travel = entity.GetComponent<AgentTravel>();
+            var commute = entity.GetComponent<AgentCommute>();
 
             Assert.Equal(location.HomeLocationId, location.CurrentLocationId);
             Assert.Equal(SimulationDefaults.ResidentialLocationType,
@@ -521,9 +521,14 @@ public sealed class SimulationTests
             Assert.Equal(job.WorkplaceType,
                 catalog.World.GetLocation(location.WorkLocationId).Type,
                 StringComparer.OrdinalIgnoreCase);
-            Assert.Equal(location.HomeLocationId, travel.RouteLocationIds[0]);
-            Assert.Equal(location.WorkLocationId, travel.RouteLocationIds[^1]);
-            Assert.Equal(AgentTravelMode.Stationary, travel.Mode);
+            Assert.True(commute.TravelMinutes > 0);
+            if (entity.HasComponent<AgentTravel>())
+            {
+                var travel = entity.GetComponent<AgentTravel>();
+                Assert.Equal(location.HomeLocationId, travel.RouteLocationIds[0]);
+                Assert.Equal(location.WorkLocationId, travel.RouteLocationIds[^1]);
+                Assert.Equal(AgentTravelMode.Stationary, travel.Mode);
+            }
         }
     }
 
@@ -776,8 +781,9 @@ public sealed class SimulationTests
 
             var psychology = entity.GetComponent<Psychology>();
             Assert.Equal(0L, psychology.TraitMask & ~catalog.AllTraitBits);
-            Assert.Contains(entity.GetComponent<ActivityState>().ActionHash,
-                catalog.Actions.Select(action => action.Hash));
+            if (entity.HasComponent<ActivityState>())
+                Assert.Contains(entity.GetComponent<ActivityState>().ActionHash,
+                    catalog.Actions.Select(action => action.Hash));
         }
     }
 

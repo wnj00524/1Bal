@@ -17,7 +17,7 @@ public sealed class Milestone17BaselineTests(ITestOutputHelper output)
 
         Assert.Equal(first.Work, second.Work);
         Assert.Equal(first.Intentions, second.Intentions);
-        Assert.Equal(64, first.Work.DecisionPasses);
+        Assert.Equal(43, first.Work.DecisionPasses);
         Assert.True(first.Work.CandidateEvaluations > 0);
         Assert.Equal(0, first.Work.TargetPopulationVisits);
         Assert.Equal(0, first.Work.EdgeVisits);

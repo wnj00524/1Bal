@@ -17,6 +17,8 @@ public sealed class AgentLodService : IDisposable
     private readonly Dictionary<int, int[]> _poiNeighbours = new();
     private readonly List<InvestigationChangedEvent> _investigationEvents = [];
     private readonly Dictionary<int, int> _interactionPins = [];
+    private ContentCatalog? _catalog;
+    private CoarseRoutineSystem? _coarse;
     private bool _initialized;
 
     // Retained for isolated contract tests and bootstrap construction. Runtime
@@ -30,6 +32,20 @@ public sealed class AgentLodService : IDisposable
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _indexes = indexes ?? throw new ArgumentNullException(nameof(indexes));
         _store.OnEntityDelete += HandleEntityDelete;
+    }
+
+    /// <summary>Connects LOD transitions to the shared Tier 3 routine store.</summary>
+    public void ConfigureCoarseRuntime(ContentCatalog catalog)
+    {
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _coarse = new CoarseRoutineSystem(catalog);
+    }
+
+    /// <summary>Advances the scheduled coarse shard before detailed systems run.</summary>
+    public void UpdateCoarse(long currentMinute)
+    {
+        _coarse?.UpdateHour(currentMinute);
+        ProcessScheduledDemotions();
     }
 
     /// <summary>Classifies the completed population after all relationship indexes exist.</summary>
@@ -341,8 +357,9 @@ public sealed class AgentLodService : IDisposable
         if (!_initialized) throw new InvalidOperationException("Agent LOD classification has not been initialized.");
     }
 
-    private static void SynchronizeTags(Entity entity, AgentLodTier tier)
+    private void SynchronizeTags(Entity entity, AgentLodTier tier)
     {
+        MaterializeRepresentation(entity, tier);
         entity.RemoveTag<Tier1LodTag>(); entity.RemoveTag<Tier2LodTag>();
         entity.RemoveTag<Tier3LodTag>(); entity.RemoveTag<DetailedSimulationTag>();
         switch (tier)
@@ -354,4 +371,39 @@ public sealed class AgentLodService : IDisposable
         }
         if (RequiresDetailedSimulation(tier)) entity.AddTag<DetailedSimulationTag>();
     }
+
+    private void MaterializeRepresentation(Entity entity, AgentLodTier tier)
+    {
+        if (_catalog is null || _coarse is null || !entity.HasComponent<Identity>()) return;
+        if (tier == AgentLodTier.Tier3)
+        {
+            _coarse.Add(entity, CurrentMinute());
+            if (entity.HasComponent<IntentionState>()) entity.RemoveComponent<IntentionState>();
+            if (entity.HasComponent<ActivityState>()) entity.RemoveComponent<ActivityState>();
+            if (entity.HasComponent<DecisionState>()) entity.RemoveComponent<DecisionState>();
+            if (entity.HasComponent<CoordinationState>()) entity.RemoveComponent<CoordinationState>();
+            if (entity.HasComponent<AgentTravel>()) entity.RemoveComponent<AgentTravel>();
+            return;
+        }
+        if (!entity.Tags.Has<Tier3LodTag>()) return;
+        _coarse.CatchUp(entity, CurrentMinute());
+        _coarse.Remove(entity);
+        var fallback = _catalog.Intents.Fallback;
+        if (!entity.HasComponent<IntentionState>()) entity.AddComponent(new IntentionState { ActionHash = fallback.Hash });
+        if (!entity.HasComponent<ActivityState>()) entity.AddComponent(new ActivityState { ActionHash = fallback.Hash, ActivityTypeHash = fallback.Activity.Hash, Phase = ActivityPhase.Performing });
+        if (!entity.HasComponent<DecisionState>()) entity.AddComponent(CreateDecisionState(_catalog.Intents.Count));
+        if (!entity.HasComponent<CoordinationState>()) entity.AddComponent<CoordinationState>();
+        if (!entity.HasComponent<AgentTravel>())
+        {
+            var location = entity.GetComponent<AgentLocation>();
+            var route = _catalog.World.FindShortestRoute(location.HomeLocationId, location.WorkLocationId) ?? throw new InvalidOperationException("A promoted agent has no route.");
+            entity.AddComponent(new AgentTravel { RouteLocationIds = route.LocationIds.ToArray(), TotalTravelMinutes = route.TravelMinutes });
+        }
+    }
+
+    private static DecisionState CreateDecisionState(int count) => new()
+    {
+        Dirty = true, ChangedFacts = FactDependencyMask.All, CachedScores = new float[count], CachedEligibility = new bool[count],
+        CachedTargetEntityIds = new int[count], CachedTargetLocationIds = new int[count], CooldownActionHashes = new int[count], CooldownUntilMinutes = new long[count]
+    };
 }

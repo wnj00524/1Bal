@@ -37,6 +37,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     {
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
+        PromoteTier3InvitationTargets();
         var agents = _store.Query<Identity>().Entities
             .Where(IsCoordinatable).OrderBy(entity => entity.Id).ToArray();
         var byId = agents.ToDictionary(entity => entity.Id);
@@ -44,6 +45,19 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
 
         MaintainExistingPairs(agents, byId, targets, time, minute);
         MatchInvitations(agents, byId, targets, time, minute);
+    }
+
+    private void PromoteTier3InvitationTargets()
+    {
+        if (_lodService is null) return;
+        var byId = _store.Query<Identity>().Entities.ToDictionary(entity => entity.Id);
+        foreach (var initiator in _store.Query<IntentionState>().Entities.Where(entity => entity.Tags.Has<Tier1LodTag>()))
+        {
+            var intention = initiator.GetComponent<IntentionState>();
+            if (_intents.TryGetValue(intention.ActionHash, out var intent) && intent.Participation is not null &&
+                byId.TryGetValue(intention.TargetEntityId, out var target) && target.Tags.Has<Tier3LodTag>())
+                _lodService.AcquireInteractionPin(target);
+        }
     }
 
     private static AgentSocialIndexes BuildIndexes(EntityStore store)

@@ -63,6 +63,7 @@ public sealed class AgentSpawner
         var fallback = _catalog.Intents.Fallback;
         LodService?.Dispose();
         var lodService = new AgentLodService(store, _catalog.Lod, Indexes);
+        lodService.ConfigureCoarseRuntime(_catalog);
         LodService = lodService;
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
@@ -128,6 +129,7 @@ public sealed class AgentSpawner
                     Mode = AgentTravelMode.Stationary
                 });
 
+            entity.AddComponent(new AgentCommute { TravelMinutes = assignment.Route.TravelMinutes });
             lodService.InitializeTierOne(entity,
                 isOperative ? AgentInterestReason.Operative : AgentInterestReason.None);
 
