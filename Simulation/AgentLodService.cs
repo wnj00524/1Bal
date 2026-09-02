@@ -21,6 +21,8 @@ public sealed class AgentLodService : IDisposable
     private CoarseRoutineSystem? _coarse;
     private bool _initialized;
 
+    public long CoarseAgentVisits => _coarse?.AgentVisits ?? 0;
+
     // Retained for isolated contract tests and bootstrap construction. Runtime
     // classification requires the store/index overload below.
     public AgentLodService(AgentLodSettings settings) =>
@@ -403,7 +405,13 @@ public sealed class AgentLodService : IDisposable
 
     private static DecisionState CreateDecisionState(int count) => new()
     {
-        Dirty = true, ChangedFacts = FactDependencyMask.All, CachedScores = new float[count], CachedEligibility = new bool[count],
-        CachedTargetEntityIds = new int[count], CachedTargetLocationIds = new int[count], CooldownActionHashes = new int[count], CooldownUntilMinutes = new long[count]
+        Dirty = true,
+        ChangedFacts = FactDependencyMask.All,
+        CachedScores = new float[count],
+        CachedEligibility = new bool[count],
+        CachedTargetEntityIds = new int[count],
+        CachedTargetLocationIds = new int[count],
+        CooldownActionHashes = new int[count],
+        CooldownUntilMinutes = new long[count]
     };
 }

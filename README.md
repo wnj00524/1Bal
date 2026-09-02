@@ -12,6 +12,17 @@ and relationship-driven family, friendship, and employment activities.
 dotnet run --project ProxyState.csproj
 ```
 
+The ordinary launch creates 1,000 agents. Use the validated population option
+to run any population from 1 through the supported 100,000-agent maximum:
+
+```text
+dotnet run --project ProxyState.csproj -- --agents 100000
+```
+
+Missing, nonnumeric, nonpositive, duplicate, and excessive values fail before
+content is loaded or a Raylib window is opened. `--agents` can be combined with
+`-debug`; debug and dossier lists remain clipped to visible rows.
+
 To enable the development-only agent inspector, pass `-debug`:
 
 ```text
@@ -89,6 +100,15 @@ dotnet test ProxyState.sln
 Milestone 6 also provides deterministic decision-behaviour fixtures and a
 repeatable 1,000-agent performance test. Its recorded Release baseline and
 measurement procedure are documented in `docs/decisionbaseline.md`.
+
+The final LOD acceptance fixture repeats generation, classification, projection,
+a simulated week, promotion/demotion, and UI work-count checks at 1,000, 10,000,
+and 100,000 agents. The two larger cases are opt-in:
+
+```text
+PROXYSTATE_RUN_LARGE_BENCHMARKS=1 dotnet test ProxyState.sln -c Release \
+  --filter FullyQualifiedName~Milestone20AcceptanceTests --logger "console;verbosity=detailed"
+```
 
 Milestone 7 replaces named utility sources with data-defined numeric
 expressions. Content loading validates fact references and compiles each bounded

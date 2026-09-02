@@ -12,7 +12,7 @@ Proxy State currently creates 1,000 agents and simulates every one at full detai
 | **Tier 2 — reduced decisions** | Direct social neighbours of Tier 1, direct supervisors/reports, and temporary interaction partners. | Reconsider intentions every 60 simulated minutes. Continue movement, effects, coordination, and critical event wake-ups continuously. |
 | **Tier 3 — coarse routine** | Everyone else. | Reuse a shared deterministic weekly itinerary compiled from JSON, job, traits, and commute time. Apply effects in bulk without utility decisions or coordination. |
 
-The complete application—not only a headless benchmark—must support 100,000 agents. The ordinary launch remains at 1,000 agents. Milestone 20 adds the explicit --agents 100000 option.
+The complete application—not only a headless benchmark—supports 100,000 agents. The ordinary launch remains at 1,000 agents; use the validated `--agents 100000` option for the maximum supported population. The reproducible Release evidence is recorded in `docs/decisionbaseline.md`.
 
 ## 2. Non-negotiable rules
 

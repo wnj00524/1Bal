@@ -482,3 +482,16 @@ rules are compiled from trait IDs and segment IDs into a trait bit and segment
 index. The catalog rejects unknown references, duplicate IDs, invalid roles,
 negative or missing fixed durations, bad fill counts, invalid routine kinds,
 and infeasible job commute windows with `lod.json` paths for content authors.
+
+### 2.12 Launch Options and Coarse Work Count
+
+`ApplicationOptions` is an immutable startup value containing `AgentCount` and
+`DebugMode`. Its pure parser preserves the 1,000-agent default and accepts a
+single invariant-culture positive integer after `--agents`, bounded by
+`MaximumAgentCount` (100,000). It is not an ECS component or content structure.
+
+`CoarseRoutineSystem.AgentVisits` is a monotonic 64-bit diagnostic counter. It
+increments only when a registered coarse agent enters `CatchUp`, including
+scheduled shard work and promotion catch-up. `AgentLodService.CoarseAgentVisits`
+exposes the value read-only for scale verification; presentation projections do
+not contain it.

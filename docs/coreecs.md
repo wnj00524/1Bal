@@ -414,3 +414,22 @@ leaking ECS entities into ordinary presentation code.
 * Work diagnostics now report zero population visits, edge scans, and transient
   target-snapshot operations during a detailed decision update. The indexes
   remain Ground Truth-only and do not alter the intelligence isolation layer.
+
+### 4.22 Supported Population Launch and Scale Audit (Milestone 20.3)
+
+* Interactive startup parses `--agents <count>` before loading simulation
+  content or initializing Raylib. The default remains 1,000; the supported
+  inclusive range is 1–100,000, and invalid or duplicate values return a
+  command-line error rather than partially constructing a world.
+* `AgentSpawner` receives the selected count through the same deterministic
+  bootstrap path used by tests. LOD classification leaves only Tier 1 and Tier
+  2 agents in detailed decision, coordination, activity, and route storage;
+  Tier 3 continues through shared profiles and hourly shards.
+* The final Release acceptance fixture measures generation/classification,
+  initial intelligence and debug projections, a complete simulated week,
+  investigation promotion and next-day demotion, and clipped visible-row work
+  at 1,000, 10,000, and 100,000 agents. Structural assertions—not
+  platform-specific timing limits—are the pass/fail contract.
+* `CoarseRoutineSystem.AgentVisits`, surfaced read-only by `AgentLodService`, is
+  a deterministic diagnostic count of actual shard/catch-up visits. It remains
+  Ground Truth instrumentation and never crosses into player intelligence.

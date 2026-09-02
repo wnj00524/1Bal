@@ -14,7 +14,12 @@ public static class Program
     {
         if (ContentValidation.IsRequested(args))
             return ContentValidation.Run(args, Console.Out, Console.Error);
-        var debugMode = DebugMode.IsEnabled(args);
+        if (!ApplicationOptions.TryParse(args, out var options, out var optionError))
+        {
+            Console.Error.WriteLine(optionError);
+            return 2;
+        }
+        var debugMode = options.DebugMode;
         var contentDirectory = Path.Combine(AppContext.BaseDirectory, "data");
         var catalog = ContentCatalog.Load(contentDirectory);
         var store = new EntityStore();
@@ -22,7 +27,7 @@ public static class Program
 
         // A fresh seed gives each interactive run a new population. The spawner
         // accepts Random explicitly so tests and future replay tools can inject one.
-        spawner.Spawn(store, SimulationDefaults.AgentCount, new Random());
+        spawner.Spawn(store, options.AgentCount, new Random());
         var lodService = spawner.LodService ?? throw new InvalidOperationException("Agent LOD service was not initialized.");
         // Retain the immutable bootstrap indexes for indexed simulation systems
         // introduced by subsequent Milestone 17 slices.
