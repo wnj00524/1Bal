@@ -152,6 +152,9 @@ public struct DecisionState : IComponent
     public long LastConsideredMinute;
     public bool Dirty;
     public FactDependencyMask ChangedFacts;
+    // Ordinary dependency changes may wait for a Tier 2 cadence boundary.
+    // Wake reasons identify lifecycle changes that require an immediate pass.
+    public DecisionWakeReason ImmediateWakeReasons;
     public long EvaluationCount;
     public float[] CachedScores;
     public bool[] CachedEligibility;
@@ -166,6 +169,16 @@ public struct DecisionState : IComponent
     // three candidates in this first slice.
     public int[] CooldownActionHashes;
     public long[] CooldownUntilMinutes;
+}
+
+[Flags]
+public enum DecisionWakeReason : byte
+{
+    None = 0,
+    TargetLoss = 1 << 0,
+    CoordinationLifecycle = 1 << 1,
+    Investigation = 1 << 2,
+    Promotion = 1 << 3
 }
 
 public struct WorldTime : IComponent

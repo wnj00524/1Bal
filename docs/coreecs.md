@@ -231,7 +231,7 @@ leaking ECS entities into ordinary presentation code.
 * Spawning initializes intention and activity state from the compiled fallback,
   eliminating the former dependency on a specifically named domain action.
 
-### 4.14a Agent LOD Classification (Milestones 18.1–18.2)
+### 4.14a Agent LOD Classification and Cadence (Milestones 18.1–18.3)
 
 * `ContentCatalog` loads `data/lod.json` and compiles its relationship scopes
   and demotion policy to enums. Positive cadence/shard values and exact supported
@@ -249,6 +249,14 @@ leaking ECS entities into ordinary presentation code.
   Deleting a POI releases its contribution to every surviving neighbour.
 * Tier 3 remains disabled in the transitional content. A desired Tier 3 request
   is retained in state but materializes as detailed Tier 2 until rollout.
+* Both detailed tiers continue executing movement, activity effects, and
+  coordination on every elapsed simulation update. Tier 1 deliberation retains
+  its minute and dependency-driven behavior; Tier 2 deliberates on its
+  data-defined 60-minute cadence instead of on ordinary dirty signals.
+* Target loss, coordination lifecycle changes, investigation changes, and
+  promotion set explicit wake reasons. They force an immediate full Tier 2
+  cache refresh, while ordinary dependency masks accumulate until the next
+  cadence boundary. Scheduling is based only on elapsed simulation minutes.
 
 ### 4.15 Dependency-Driven Reevaluation (Milestone 13)
 

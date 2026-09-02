@@ -7,10 +7,18 @@ namespace ProxyState.Simulation;
 // about which decision facts an ECS field represents.
 public static class DecisionInvalidation
 {
+    // Ordinary facts remain dirty until the owning tier's next scheduled pass.
     public static void Signal(ref DecisionState state, FactDependencyMask changed)
     {
         state.ChangedFacts |= changed;
         state.Dirty = true;
+    }
+
+    public static void SignalCritical(ref DecisionState state, FactDependencyMask changed,
+        DecisionWakeReason reason)
+    {
+        Signal(ref state, changed);
+        state.ImmediateWakeReasons |= reason;
     }
 
     public static void SignalAttribute(ref DecisionState state, int attributeIndex) => Signal(ref state,
@@ -21,6 +29,13 @@ public static class DecisionInvalidation
         new(FactDependencyCategory.SocialTargets | FactDependencyCategory.NetworkTargets |
             FactDependencyCategory.TargetAffinity | FactDependencyCategory.TargetAttributes |
             FactDependencyCategory.TargetLocation | FactDependencyCategory.Coordination));
+    public static void SignalTargetLoss(ref DecisionState state) => SignalCritical(ref state,
+        new(FactDependencyCategory.SocialTargets | FactDependencyCategory.NetworkTargets |
+            FactDependencyCategory.TargetAffinity | FactDependencyCategory.TargetAttributes |
+            FactDependencyCategory.TargetLocation | FactDependencyCategory.Coordination),
+        DecisionWakeReason.TargetLoss);
+    public static void SignalCoordinationLifecycle(ref DecisionState state) => SignalCritical(ref state,
+        new(FactDependencyCategory.Coordination), DecisionWakeReason.CoordinationLifecycle);
 }
 
 internal static class DecisionUtility
@@ -64,6 +79,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
     private readonly bool _captureDiagnostics;
     private readonly SimulationWorkDiagnostics? _workDiagnostics;
     private readonly AgentSocialIndexes _socialIndexes;
+    private readonly int _tier2DecisionIntervalMinutes;
 
     public AgentDecisionSystem(EntityStore store, ContentCatalog catalog, Entity clock, bool captureDiagnostics = false,
         SimulationWorkDiagnostics? workDiagnostics = null, AgentSocialIndexes? socialIndexes = null)
@@ -76,6 +92,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
         _captureDiagnostics = captureDiagnostics;
         _workDiagnostics = workDiagnostics;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
+        _tier2DecisionIntervalMinutes = catalog.Lod.Tier2DecisionIntervalMinutes;
         _candidateIndex = catalog.Intents.Candidates;
         _candidatesByIndex = new CandidateEvaluator?[catalog.Intents.Count];
         _candidatesByHash = new();
@@ -85,7 +102,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             _candidatesByIndex[intent.RuntimeIndex] = evaluator;
             _candidatesByHash.Add(intent.Hash, evaluator);
         }
-        Filter.AllTags(Tags.Get<Tier1LodTag>());
+        Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
     protected override void OnUpdate()
@@ -110,14 +127,24 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
             {
                 var selected = targets.Resolve(entity.Id, active.Definition.Target, context);
                 if (selected.EntityId != intention.TargetEntityId || selected.LocationId != intention.TargetLocationId)
-                    DecisionInvalidation.Signal(ref decision, new(FactDependencyCategory.SocialTargets |
-                        FactDependencyCategory.TargetLocation));
+                    DecisionInvalidation.SignalTargetLoss(ref decision);
             }
-            if (!decision.Dirty && decision.LastConsideredMinute >= minute) return;
+            var tier2 = entity.Tags.Has<Tier2LodTag>();
+            var cadenceDue = decision.LastConsideredMinute < 0 ||
+                minute - decision.LastConsideredMinute >= _tier2DecisionIntervalMinutes;
+            var immediateWake = decision.ImmediateWakeReasons != DecisionWakeReason.None;
+            if (tier2)
+            {
+                if (!cadenceDue && !immediateWake) return;
+            }
+            else if (!decision.Dirty && decision.LastConsideredMinute >= minute) return;
 
             EnsureCache(ref decision);
             if (_captureDiagnostics) EnsureDiagnosticCache(ref decision);
-            var fullPass = decision.LastConsideredMinute < minute || decision.ChangedFacts == FactDependencyMask.None;
+            // Tier 2 always refreshes the complete cache: both an hourly pass and
+            // a critical lifecycle wake are authoritative reconsiderations.
+            var fullPass = tier2 || decision.LastConsideredMinute < minute ||
+                decision.ChangedFacts == FactDependencyMask.None;
             var changed = fullPass ? FactDependencyMask.All : decision.ChangedFacts;
             _workDiagnostics?.RecordDecisionPass();
             var candidateContext = new IntentCandidateContext(true, location.HomeLocationId != 0,
@@ -125,6 +152,7 @@ public sealed class AgentDecisionSystem : QuerySystem<Identity, AgentAttributes,
                 targets.HasNetworkRelations(entity.Id));
             decision.Dirty = false;
             decision.ChangedFacts = FactDependencyMask.None;
+            decision.ImmediateWakeReasons = DecisionWakeReason.None;
             decision.LastConsideredMinute = minute;
             foreach (var runtimeIndex in _candidateIndex.EnumerateCandidates(candidateContext))
             {
@@ -437,7 +465,7 @@ public sealed class ActivityEffectsSystem : QuerySystem<AgentAttributes, Activit
         _schema = catalog.AgentAttributes;
         _effects = catalog.Intents.All.ToDictionary(intent => (intent.Hash, intent.Activity.Hash), intent => intent.Effects
             .Select(effect => (effect.AttributeIndex, effect.PerMinute, effect.Subject)).ToArray());
-        Filter.AllTags(Tags.Get<Tier1LodTag>());
+        Filter.AnyTags(Tags.Get<Tier1LodTag, Tier2LodTag>());
     }
 
     protected override void OnUpdate()

@@ -99,6 +99,8 @@ public struct CoordinationState : IComponent {
 public struct DecisionState : IComponent {
     public long LastConsideredMinute;
     public bool Dirty;
+    public FactDependencyMask ChangedFacts;
+    public DecisionWakeReason ImmediateWakeReasons;
     public int[] CooldownActionHashes;
     public long[] CooldownUntilMinutes;
     public float[][] CachedUtilityContributions; // Allocated in debug mode only.
@@ -419,6 +421,11 @@ targets, target attributes, target location/affinity, and coordination. No
 dependency list is authored in JSON.
 
 `DecisionState.ChangedFacts` accumulates mutation signals until consideration.
+`Dirty` records that ordinary dependencies changed, while the flagged
+`DecisionWakeReason` distinguishes target loss, coordination lifecycle,
+investigation, and promotion events that cannot wait for a Tier 2 cadence
+boundary. Both are cleared only after a decision pass; ordinary Tier 2 changes
+therefore remain accumulated for the next data-defined interval.
 Its parallel score, eligibility, and target arrays are indexed by the compiled
 intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
 is diagnostic Ground Truth state and is not copied into player intelligence.
