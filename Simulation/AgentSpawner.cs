@@ -13,6 +13,7 @@ public sealed class AgentSpawner
     // The same snapshot owner is retained across explicit population rebuilds;
     // downstream systems can safely keep this reference for later milestones.
     public AgentSocialIndexes Indexes { get; } = new();
+    public AgentLodService? LodService { get; private set; }
 
     public AgentSpawner(
         ContentCatalog catalog,
@@ -60,7 +61,9 @@ public sealed class AgentSpawner
 
         var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
         var fallback = _catalog.Intents.Fallback;
-        var lodService = new AgentLodService(_catalog.Lod);
+        LodService?.Dispose();
+        var lodService = new AgentLodService(store, _catalog.Lod, Indexes);
+        LodService = lodService;
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -152,6 +155,7 @@ public sealed class AgentSpawner
         // Networks can contribute social edges, so indexing is deliberately the
         // final bootstrap step after every generated graph input is complete.
         Indexes.Rebuild(store);
+        lodService.InitializeClassification();
 
         return count;
     }
