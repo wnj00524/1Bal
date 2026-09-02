@@ -5,6 +5,12 @@ using Friflo.Engine.ECS.Systems;
 namespace ProxyState.Simulation;
 
 /// <summary>
+/// A copied discovery notification. Only discoveries made by an Operative are
+/// published, so consumers never need an ECS entity or the target's Psychology.
+/// </summary>
+public readonly record struct OperativeTraitDiscoveryEvent(int TargetAgentId, long KnownTraitMask);
+
+/// <summary>
 /// Creates a randomized simple undirected graph and stores each pair as two
 /// directed edge entities. A shuffled circulant graph gives every agent the
 /// requested degree without retry-based random matching getting stuck.
@@ -132,6 +138,7 @@ public sealed class InteractionSystem : QuerySystem<Identity>
     private readonly long _allTraitBits;
     private readonly long _paranoidBit;
     private readonly IReadOnlyList<TraitDefinition> _traits;
+    private readonly List<OperativeTraitDiscoveryEvent> _operativeDiscoveries = [];
     private int _ticks;
 
     public InteractionSystem(
@@ -162,6 +169,14 @@ public sealed class InteractionSystem : QuerySystem<Identity>
             .FirstOrDefault(trait => string.Equals(trait.Id, "paranoid", StringComparison.OrdinalIgnoreCase))
             ?.Bit ?? 0L;
         Filter.AllTags(Tags.Get<Tier1LodTag>());
+    }
+
+    /// <summary>Returns copied Operative discoveries and clears the pending buffer.</summary>
+    public OperativeTraitDiscoveryEvent[] DrainOperativeDiscoveries()
+    {
+        var result = _operativeDiscoveries.ToArray();
+        _operativeDiscoveries.Clear();
+        return result;
     }
 
     protected override void OnUpdate()
@@ -198,6 +213,7 @@ public sealed class InteractionSystem : QuerySystem<Identity>
 
     private void Interact(ref EdgeData edge)
     {
+        var previousKnownTraitMask = edge.KnownTraitMask;
         var sourceAttributes = edge.Source.GetComponent<AgentAttributes>();
         var targetAttributes = edge.Target.GetComponent<AgentAttributes>();
         var targetPsychology = edge.Target.GetComponent<Psychology>();
@@ -228,6 +244,14 @@ public sealed class InteractionSystem : QuerySystem<Identity>
                 var discovered = availableTraits[_random.Next(availableTraits.Count)];
                 edge.KnownTraitMask |= discovered.Bit;
             }
+        }
+
+
+        if (edge.KnownTraitMask != previousKnownTraitMask && edge.Source.Tags.Has<OperativeTag>())
+        {
+            _operativeDiscoveries.Add(new OperativeTraitDiscoveryEvent(
+                edge.Target.Id,
+                edge.KnownTraitMask & _allTraitBits));
         }
 
         var previousAffinity = edge.Affinity;

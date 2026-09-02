@@ -147,8 +147,10 @@ The system is configured with an optional positive per-tick increase so simulati
 
 * The spawner marks five distinct randomly selected agents with `OperativeTag`, or marks every agent when the population is smaller than five.
 * Each selected Operative receives `Identity.IntelligenceRole = Officer`; all other spawned agents receive `IntelligenceRole = None`. `Agent` and `Informant` remain available for future assignment systems.
-* `PlayerIntelligenceDB.Capture` copies all agent identity metadata and combines outgoing `EdgeData.KnownTraitMask` values from Operatives with bitwise `OR` for each target.
-* The `Surveillance Terminal` consumes only the immutable database and static trait definitions. It never reads `Entity`, `Psychology`, or another Ground Truth component; intelligence roles are copied into the database at the ECS/UI boundary.
+* `PlayerIntelligenceDB.Create` performs one bootstrap copy of stable agent identity metadata and combines outgoing `EdgeData.KnownTraitMask` values from Operatives with bitwise `OR` for each target. The database retains a sorted array and uses binary lookup rather than rebuilding an ID dictionary during rendering.
+* `InteractionSystem` publishes copied `OperativeTraitDiscoveryEvent` values only when an Operative's outgoing mask gains a known trait. The long-lived database applies those events with bitwise `OR`; ordinary frames neither enumerate agents nor scan relationship edges for intelligence.
+* Presentation queues stable-ID `InvestigationCommand` values. `InvestigationCommandQueue` is the simulation-owned adapter that safely rejects missing IDs, invokes `AgentLodService` before lifecycle updates, and applies its sanitized `InvestigationChangedEvent` output to the projection.
+* The `Surveillance Terminal` consumes only the long-lived copied database and static trait definitions. It never reads `Entity`, `Psychology`, LOD tiers/reasons, or another Ground Truth component; intelligence roles and investigation status are copied across the ECS/UI boundary.
 * Dossier trait visibility is resolved with `(knownMask & trait.Bit) != 0`; hidden traits render `Trait: ???`, while known traits render their configured names.
 
 ### 4.10 Agent Secret States

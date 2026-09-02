@@ -28,6 +28,9 @@ public static class Program
         // introduced by subsequent Milestone 17 slices.
         var agentSocialIndexes = spawner.Indexes;
 
+        var intelligence = PlayerIntelligenceDB.Create(store, catalog);
+        var investigationCommands = new InvestigationCommandQueue();
+        var interactionSystem = new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes);
         var clock = new WorldClockSystem(store);
         var systems = new SystemRoot(store)
         {
@@ -37,7 +40,7 @@ public static class Program
             new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes, lodService),
             new IntentExecutionSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
-            new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes)
+            interactionSystem
         };
 
         Raylib.InitWindow(1280, 720, "Proxy State - Applications");
@@ -56,10 +59,12 @@ public static class Program
                 // Simulation runs before rendering so the frame presents the
                 // state produced by the current ECS tick.
                 clock.Advance(Raylib.GetFrameTime());
+                // Commands cross the stable-ID adapter before LOD lifecycle work.
+                investigationCommands.Process(lodService, intelligence);
                 lodService.UpdateCoarse((long)(clock.ClockEntity.GetComponent<WorldTime>().ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute));
                 systems.Update(default);
+                foreach (var discovery in interactionSystem.DrainOperativeDiscoveries()) intelligence.Apply(discovery);
                 var worldTime = WorldTimeSnapshot.From(clock.ClockEntity.GetComponent<WorldTime>());
-                var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
 
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(new Color(15, 15, 15, 255));
