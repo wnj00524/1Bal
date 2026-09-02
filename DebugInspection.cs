@@ -45,6 +45,34 @@ public sealed record DebugNetworkSnapshot(
     DebugLocationSnapshot? Anchor,
     int MemberCount);
 
+public sealed record DebugCoordinationSnapshot(
+    int PartnerEntityId,
+    CoordinationRole Role,
+    CoordinationStatus Status,
+    long AcceptedAtMinute,
+    long StartedAtMinute,
+    int MinimumDurationMinutes,
+    int MaximumDurationMinutes,
+    float Utility,
+    bool ReleaseRequested);
+
+public sealed record DebugDecisionContributionSnapshot(string Label, float Value);
+
+public sealed record DebugDecisionCandidateSnapshot(
+    string IntentId,
+    string IntentName,
+    bool Eligible,
+    string? RejectedPredicate,
+    int TargetEntityId,
+    int TargetLocationId,
+    float BaseUtility,
+    IReadOnlyList<DebugDecisionContributionSnapshot> UtilityContributions,
+    IReadOnlyList<DebugDecisionContributionSnapshot> TraitModifiers,
+    long CooldownUntilMinute,
+    bool CommitmentBlocked,
+    float FinalScore,
+    bool SelectedWinner);
+
 public sealed record DebugInspectionSnapshot(
     IReadOnlyList<DebugAgentSnapshot> Agents,
     IReadOnlyList<DebugNetworkSnapshot> Networks);
@@ -64,12 +92,17 @@ public sealed record DebugAgentSnapshot(
     long TraitMask,
     int CurrentActionHash,
     string CurrentActionName,
+    int ActivityTypeHash,
+    string ActivityTypeName,
+    ActivityPhase ActivityPhase,
     int SecretStateHash,
     string SecretStateName,
     DebugLocationSnapshot Home,
     DebugLocationSnapshot Workplace,
     DebugLocationSnapshot CurrentLocation,
     DebugTravelSnapshot Travel,
+    DebugCoordinationSnapshot? Coordination,
+    IReadOnlyList<DebugDecisionCandidateSnapshot> Decisions,
     IReadOnlyList<DebugNetworkMembershipSnapshot> Networks)
 {
     public string DisplayName => $"Agent {EntityId} (Name ID {NameId})";
@@ -129,8 +162,13 @@ public static class DebugSnapshotBuilder
             var attributes = entity.GetComponent<AgentAttributes>();
             var psychology = entity.GetComponent<Psychology>();
             var state = entity.GetComponent<AgentState>();
+            var activity = entity.GetComponent<ActivityState>();
             var location = entity.GetComponent<AgentLocation>();
             var travel = entity.GetComponent<AgentTravel>();
+            var intention = entity.HasComponent<IntentionState>()
+                ? entity.GetComponent<IntentionState>() : default;
+            var decision = entity.HasComponent<DecisionState>()
+                ? entity.GetComponent<DecisionState>() : default;
 
             var jobName = jobsByHash.TryGetValue(identity.OccupationId, out var job)
                 ? job.Name
@@ -138,9 +176,12 @@ public static class DebugSnapshotBuilder
             var factionName = factionsById.TryGetValue(faction.FactionId, out var factionDefinition)
                 ? factionDefinition.Name
                 : $"Unknown ({faction.FactionId})";
-            var actionName = actionsByHash.TryGetValue(state.CurrentActionHash, out var action)
+            var actionName = actionsByHash.TryGetValue(activity.ActionHash, out var action)
                 ? action.Name
-                : $"Unknown ({state.CurrentActionHash})";
+                : $"Unknown ({activity.ActionHash})";
+            string activityName;
+            try { activityName = catalog.GetActivity(activity.ActivityTypeHash).Name; }
+            catch (KeyNotFoundException) { activityName = $"Unknown ({activity.ActivityTypeHash})"; }
             var secretStateName = secretStatesByHash.TryGetValue(state.SecretStateHash, out var secretState)
                 ? secretState.Name
                 : $"Unknown ({state.SecretStateHash})";
@@ -156,8 +197,11 @@ public static class DebugSnapshotBuilder
                 CopyAttributes(attributes, catalog.AgentAttributes),
                 CopyTraits(psychology.TraitMask, catalog.Traits),
                 psychology.TraitMask,
-                state.CurrentActionHash,
+                activity.ActionHash,
                 actionName,
+                activity.ActivityTypeHash,
+                activityName,
+                activity.Phase,
                 state.SecretStateHash,
                 secretStateName,
                 DescribeLocation(location.HomeLocationId, catalog.World),
@@ -172,6 +216,8 @@ public static class DebugSnapshotBuilder
                     travel.RoutePosition,
                     travel.RemainingTravelMinutes,
                     travel.Mode),
+                CopyCoordination(entity),
+                CopyDecisions(catalog, intention, decision),
                 (networkMembershipsByAgent.TryGetValue(entity.Id, out var memberships)
                     ? memberships.OrderBy(item => item.NetworkEntityId).ToArray()
                     : Array.Empty<DebugNetworkMembershipSnapshot>()).AsReadOnly()));
@@ -180,6 +226,48 @@ public static class DebugSnapshotBuilder
         return new DebugInspectionSnapshot(
             snapshots.AsReadOnly(),
             networkSnapshots.OrderBy(network => network.EntityId).ToArray().AsReadOnly());
+    }
+
+    private static DebugCoordinationSnapshot? CopyCoordination(Entity entity)
+    {
+        if (!entity.HasComponent<CoordinationState>()) return null;
+        var coordination = entity.GetComponent<CoordinationState>();
+        return !coordination.Active ? null : new DebugCoordinationSnapshot(
+            coordination.PartnerEntityId, coordination.Role, coordination.Status,
+            coordination.AcceptedAtMinute, coordination.StartedAtMinute,
+            coordination.MinimumDurationMinutes, coordination.MaximumDurationMinutes,
+            coordination.Utility, coordination.ReleaseRequested);
+    }
+
+    private static IReadOnlyList<DebugDecisionCandidateSnapshot> CopyDecisions(
+        ContentCatalog catalog, IntentionState intention, DecisionState decision)
+    {
+        if (decision.CachedScores is null) return Array.Empty<DebugDecisionCandidateSnapshot>();
+        var snapshots = new List<DebugDecisionCandidateSnapshot>();
+        foreach (var intent in catalog.Intents.All.Where(intent => !intent.Fallback))
+        {
+            var index = intent.RuntimeIndex;
+            var utility = decision.CachedUtilityContributions?.ElementAtOrDefault(index) ?? Array.Empty<float>();
+            var traits = decision.CachedTraitContributions?.ElementAtOrDefault(index) ?? Array.Empty<float>();
+            var cooldownUntil = 0L;
+            if (decision.CooldownActionHashes is not null && decision.CooldownUntilMinutes is not null)
+            {
+                var cooldownIndex = Array.IndexOf(decision.CooldownActionHashes, intent.Hash);
+                if (cooldownIndex >= 0) cooldownUntil = decision.CooldownUntilMinutes[cooldownIndex];
+            }
+            snapshots.Add(new DebugDecisionCandidateSnapshot(
+                intent.Id, intent.Name, decision.CachedEligibility[index],
+                string.IsNullOrEmpty(decision.CachedRejectedPredicates?.ElementAtOrDefault(index))
+                    ? null : decision.CachedRejectedPredicates[index],
+                decision.CachedTargetEntityIds[index], decision.CachedTargetLocationIds[index], intent.BaseUtility,
+                utility.Select((value, i) => new DebugDecisionContributionSnapshot($"utilityInputs[{i}]", value)).ToArray(),
+                traits.Select((value, i) => new DebugDecisionContributionSnapshot(
+                    catalog.Traits.FirstOrDefault(trait => trait.Bit == intent.TraitModifiers[i].TraitBit)?.Id ?? $"traitModifiers[{i}]", value)).ToArray(),
+                cooldownUntil,
+                intention.ActionHash == intent.Hash && decision.LastConsideredMinute - intention.SelectedAtMinute < intent.Controls.MinimumCommitmentMinutes,
+                decision.CachedScores[index], intention.ActionHash == intent.Hash));
+        }
+        return snapshots.AsReadOnly();
     }
 
     private static IReadOnlyList<DebugAttributeSnapshot> CopyAttributes(
@@ -318,10 +406,47 @@ public sealed class DebugWindow
         ImGui.Separator();
         ImGui.Text("State");
         ImGui.BulletText($"Current action: {agent.CurrentActionName} ({agent.CurrentActionHash})");
+        ImGui.BulletText($"Activity: {agent.ActivityTypeName} ({agent.ActivityTypeHash})");
+        ImGui.BulletText($"Activity phase: {agent.ActivityPhase}");
         ImGui.BulletText($"Secret state: {agent.SecretStateName} ({agent.SecretStateHash})");
         ImGui.BulletText($"Home: {FormatLocation(agent.Home)}");
         ImGui.BulletText($"Workplace: {FormatLocation(agent.Workplace)}");
         ImGui.BulletText($"Current location: {FormatLocation(agent.CurrentLocation)}");
+
+        ImGui.Separator();
+        ImGui.Text("Coordination");
+        if (agent.Coordination is null)
+        {
+            ImGui.BulletText("None");
+        }
+        else
+        {
+            ImGui.BulletText($"Partner entity: {agent.Coordination.PartnerEntityId}");
+            ImGui.BulletText($"Role/status: {agent.Coordination.Role} / {agent.Coordination.Status}");
+            ImGui.BulletText($"Accepted/start minute: {agent.Coordination.AcceptedAtMinute} / {agent.Coordination.StartedAtMinute}");
+            ImGui.BulletText($"Duration window: {agent.Coordination.MinimumDurationMinutes}-{agent.Coordination.MaximumDurationMinutes} minutes");
+            ImGui.BulletText($"Coordination utility: {agent.Coordination.Utility:0.###}");
+            ImGui.BulletText($"Release requested: {agent.Coordination.ReleaseRequested}");
+        }
+
+        ImGui.Separator();
+        ImGui.Text("Decision inspector");
+        if (agent.Decisions.Count == 0) ImGui.BulletText("No diagnostic evaluation captured.");
+        foreach (var candidate in agent.Decisions)
+        {
+            if (!ImGui.TreeNode($"{candidate.IntentName}##decision-{candidate.IntentId}")) continue;
+            ImGui.BulletText($"Eligible: {candidate.Eligible}");
+            if (candidate.RejectedPredicate is not null) ImGui.BulletText($"Rejected: {candidate.RejectedPredicate}");
+            ImGui.BulletText($"Target: entity {candidate.TargetEntityId}, location {candidate.TargetLocationId}");
+            ImGui.BulletText($"Base utility: {candidate.BaseUtility:0.###}");
+            foreach (var item in candidate.UtilityContributions) ImGui.BulletText($"{item.Label}: {item.Value:+0.###;-0.###;0}");
+            foreach (var item in candidate.TraitModifiers) ImGui.BulletText($"Trait {item.Label}: {item.Value:+0.###;-0.###;0}");
+            ImGui.BulletText($"Cooldown until minute: {candidate.CooldownUntilMinute}");
+            ImGui.BulletText($"Commitment block: {candidate.CommitmentBlocked}");
+            ImGui.BulletText($"Final score: {candidate.FinalScore:0.###}");
+            ImGui.BulletText($"Selected winner: {candidate.SelectedWinner}");
+            ImGui.TreePop();
+        }
 
         ImGui.Separator();
         ImGui.Text("Travel");

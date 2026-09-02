@@ -5,18 +5,29 @@
       "name": "Family",
       "hierarchyMode": "flat",
       "maxNetworksPerAgent": 1,
+      "seedsSocialGraph": true,
       "roles": ["family-member"]
+    },
+    {
+      "id": "friend-group",
+      "name": "Friend Group",
+      "hierarchyMode": "flat",
+      "maxNetworksPerAgent": 1,
+      "seedsSocialGraph": true,
+      "roles": ["friend"]
     },
     {
       "id": "company",
       "name": "Company",
       "hierarchyMode": "single-supervisor",
       "maxNetworksPerAgent": 1,
+      "seedsSocialGraph": false,
       "roles": ["company-head", "company-manager", "company-employee"]
     }
   ],
   "roles": [
     { "id": "family-member", "name": "Member", "networkType": "family" },
+    { "id": "friend", "name": "Friend", "networkType": "friend-group" },
     { "id": "company-head", "name": "Head", "networkType": "company" },
     { "id": "company-manager", "name": "Manager", "networkType": "company" },
     { "id": "company-employee", "name": "Employee", "networkType": "company" }
@@ -37,6 +48,27 @@
       ],
       "remainderHandling": "create-undersized",
       "memberRole": "family-member",
+      "rootRole": null,
+      "managerRole": null,
+      "leafRole": null,
+      "targetSpanOfControl": 0,
+      "maximumSpanOfControl": 0,
+      "maximumDepth": 0
+    },
+    {
+      "id": "town-wide-friend-groups",
+      "networkType": "friend-group",
+      "partitionKey": "global",
+      "minimumSize": 3,
+      "maximumSize": 6,
+      "sizeWeights": [
+        { "size": 3, "weight": 25 },
+        { "size": 4, "weight": 40 },
+        { "size": 5, "weight": 25 },
+        { "size": 6, "weight": 10 }
+      ],
+      "remainderHandling": "merge-into-previous",
+      "memberRole": "friend",
       "rootRole": null,
       "managerRole": null,
       "leafRole": null,

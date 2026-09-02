@@ -18,7 +18,7 @@
 * **Paradigm:** 100% Code-First, Data-Oriented Design. No visual editor is used.
 * **UI Aesthetic:** Windows 3.1 style GUI and a terminal with Raylib 2D canvas.
 * **ECS Usage:** Utilize `Friflo.Engine.ECS` native features. Use pure `struct` implementations for `IComponent` and `ITag`.
-* **Data-Driven:** Content (traits, actions, factions) must be serialized via JSON.
+* **Data-Driven:** ALL Content (traits, actions, factions) MUST be serialized via JSON. Avoid hard coding anything that could be data driven. 
 * **The Intelligence Isolation Layer:** The ImGui UI must NEVER query the Ground Truth ECS data. It only queries the `PlayerIntelligenceDB` or the specific `KnowledgeMask` of an active player-controlled entity.
 
 
@@ -30,6 +30,7 @@ Make sure that design principles/data structures/GUI rules are documented in the
 
 ** Core ECS Systems (Logic):** can be found in docs/coreecs.md. When updating ECS logic, update this document to reflect the changes. 
 ** Data Structures: ** See docs/datastructs.md for data structures. When editing, adding or removing a data structure make sure to update this file to reflect the change.
+** Agent LOD Roadmap: ** See docs/agent-lod-roadmap.md for the decision-complete Milestones 17–20 implementation sequence, issue task cards, testing matrix, and agent workflow.
 
 ### Core ECS Systems
 

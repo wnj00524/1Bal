@@ -16,6 +16,7 @@ public enum NetworkRemainderHandling
 
 public enum NetworkPartitionStrategy
 {
+    Global,
     HomeLocation,
     WorkLocation
 }
@@ -28,6 +29,7 @@ public sealed record NetworkTypeDefinition(
     int Hash,
     NetworkHierarchyMode HierarchyMode,
     int MaxNetworksPerAgent,
+    bool SeedsSocialGraph,
     IReadOnlyList<int> RoleHashes);
 
 public sealed record NetworkSizeWeight(int Size, int Weight);
@@ -122,6 +124,7 @@ internal sealed record NetworkTypeDocument(
     string? Name,
     string? HierarchyMode,
     int MaxNetworksPerAgent,
+    bool SeedsSocialGraph,
     List<string>? Roles);
 internal sealed record NetworkRoleDocument(string? Id, string? Name, string? NetworkType);
 internal sealed record NetworkSizeWeightDocument(int Size, int Weight);
@@ -193,7 +196,8 @@ internal static class NetworkCatalogValidator
                     throw Invalid($"Role '{roleId}' belongs to a different network type than '{type.Id}'.");
                 return roleHashes[roleId];
             }).ToArray();
-            types.Add(new(type.Id!, type.Name!, typeHashes[type.Id!], mode, type.MaxNetworksPerAgent, hashes));
+            types.Add(new(type.Id!, type.Name!, typeHashes[type.Id!], mode, type.MaxNetworksPerAgent,
+                type.SeedsSocialGraph, hashes));
         }
 
         var rolesById = roles.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
@@ -213,6 +217,7 @@ internal static class NetworkCatalogValidator
             throw Invalid($"Network generator '{generator.Id}' references unknown network type '{generator.NetworkType}'.");
         var partition = generator.PartitionKey?.ToLowerInvariant() switch
         {
+            "global" => NetworkPartitionStrategy.Global,
             "home-location" => NetworkPartitionStrategy.HomeLocation,
             "work-location" => NetworkPartitionStrategy.WorkLocation,
             _ => throw Invalid($"Network generator '{generator.Id}' has unknown partition key '{generator.PartitionKey}'.")

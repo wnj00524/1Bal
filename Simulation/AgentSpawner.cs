@@ -10,6 +10,11 @@ public sealed class AgentSpawner
     private readonly SocialGraphBuilder _socialGraphBuilder;
     private readonly AgentNetworkBuilder _networkBuilder;
 
+    // The same snapshot owner is retained across explicit population rebuilds;
+    // downstream systems can safely keep this reference for later milestones.
+    public AgentSocialIndexes Indexes { get; } = new();
+    public AgentLodService? LodService { get; private set; }
+
     public AgentSpawner(
         ContentCatalog catalog,
         SocialGraphBuilder? socialGraphBuilder = null)
@@ -17,7 +22,7 @@ public sealed class AgentSpawner
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _schema = catalog.AgentAttributes;
         _world = catalog.World;
-        _socialGraphBuilder = socialGraphBuilder ?? new SocialGraphBuilder();
+        _socialGraphBuilder = socialGraphBuilder ?? new SocialGraphBuilder(catalog.Networks);
         _networkBuilder = new AgentNetworkBuilder(catalog.Networks);
     }
 
@@ -55,6 +60,10 @@ public sealed class AgentSpawner
         }
 
         var operativeIndexes = SelectOperativeIndexes(count, operativeRandom);
+        var fallback = _catalog.Intents.Fallback;
+        LodService?.Dispose();
+        var lodService = new AgentLodService(store, _catalog.Lod, Indexes);
+        LodService = lodService;
         var agents = new List<Entity>(count);
         for (var index = 0; index < assignments.Count; index++)
         {
@@ -83,8 +92,26 @@ public sealed class AgentSpawner
                 },
                 new AgentState
                 {
-                    CurrentActionHash = _catalog.Actions[populationRandom.Next(_catalog.Actions.Count)].Hash,
                     SecretStateHash = 0
+                },
+                new IntentionState { ActionHash = fallback.Hash },
+                new ActivityState
+                {
+                    ActionHash = fallback.Hash,
+                    ActivityTypeHash = fallback.Activity.Hash,
+                    Phase = ActivityPhase.Performing
+                },
+                new DecisionState
+                {
+                    LastConsideredMinute = -1,
+                    Dirty = true,
+                    ChangedFacts = FactDependencyMask.All,
+                    CachedScores = new float[_catalog.Intents.Count],
+                    CachedEligibility = new bool[_catalog.Intents.Count],
+                    CachedTargetEntityIds = new int[_catalog.Intents.Count],
+                    CachedTargetLocationIds = new int[_catalog.Intents.Count],
+                    CooldownActionHashes = new int[_catalog.Intents.Count],
+                    CooldownUntilMinutes = new long[_catalog.Intents.Count]
                 },
                 new AgentLocation
                 {
@@ -98,9 +125,13 @@ public sealed class AgentSpawner
                     TotalTravelMinutes = assignment.Route.TravelMinutes,
                     RoutePosition = 0,
                     RemainingTravelMinutes = 0f,
-                    Mode = AgentTravelMode.AtHome
-                },
-                Tags.Get<Tier1LodTag>());
+                    Mode = AgentTravelMode.Stationary
+                });
+
+            lodService.InitializeTierOne(entity,
+                isOperative ? AgentInterestReason.Operative : AgentInterestReason.None);
+
+            entity.AddComponent<CoordinationState>();
 
             if (isOperative)
             {
@@ -120,6 +151,11 @@ public sealed class AgentSpawner
             _networkBuilder.Populate(networkService, agents, SimulationRandomStreams.Networks(seed));
         }
         _socialGraphBuilder.Populate(store, agents, SimulationRandomStreams.SocialGraph(seed));
+
+        // Networks can contribute social edges, so indexing is deliberately the
+        // final bootstrap step after every generated graph input is complete.
+        Indexes.Rebuild(store);
+        lodService.InitializeClassification();
 
         return count;
     }

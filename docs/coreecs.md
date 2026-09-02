@@ -2,22 +2,54 @@
 
 ### 4.1 Utility AI System
 
-**Goal:** Determine what an agent does this tick.
+**Goal:** Decide an intention from Ground Truth on simulation time.
 
-* Query all entities with `AgentAttributes` and `Tier1LodTag`.
-* Iterate through available actions (Work, Rest, Socialize) loaded from `actions.json`.
-* Resolve numeric values by name through `AgentAttributeSchema`.
-* Score formula: `BaseScore + (TraitModifiers) - (Fatigue/Stress Penalties)`.
-* Assign highest-scoring action to `AgentState.CurrentActionHash`.
-* Leave `AgentState.SecretStateHash` unchanged; covert activity is independent
-  of the public action and is assigned by a future secret-state system.
+* Content loading compiles every utility expression in `actions.json` to a
+  bounded postfix opcode program. Fact strings are resolved once to typed
+  `FactId` handles, including direct schema indexes for agent attributes.
+  Eligibility predicates are likewise compiled from boolean facts, boolean
+  combinators, and numeric comparisons. `AgentDecisionSystem` evaluates only
+  these pre-resolved programs; it contains no named eligibility-gate switch.
+  Current data preserves schedule/workday, home-route, and co-located-peer rules.
+* Eligible utility is weighted-additive: base utility plus each compiled numeric
+  expression passed through its piecewise-linear response curve, plus applicable
+  trait modifiers. Low wealth, schedule pressure, night time, and peer affinity
+  are compositions in data rather than semantic source cases in runtime code.
+  Numeric and predicate evaluation use fixed stack spans and direct fact access with no runtime
+  parsing, casing, string comparison, or expression allocation.
+* Every action declares a `none`, `location`, or `entity` target. Direct location
+  values resolve home, work, or current location without action-ID branches.
+  Entity queries traverse a compiled social, network-member, network-supervisor,
+  or network-direct-report relation, evaluate compiled target requirements,
+  rank candidates lexicographically, and break exact ties by ascending entity
+  ID. Target attribute facts use schema indexes; affinity comes from the
+  directional edge or is neutral for network members without an edge.
+* The highest score wins. Exact ties use ascending stable action hash, never
+  JSON or query order. A switch additionally pays the configured switching
+  threshold unless its score reaches the urgent-preemption threshold.
+* Per-action minimum commitment, cooldown-on-exit, and urgent preemption
+  controls prevent oscillation. Decisions run at most once per simulated
+  minute; `DecisionState.Dirty` permits earlier event-driven reconsideration.
+  Travel arrival marks the decision dirty.
+* Deliberation writes `IntentionState`. `IntentExecutionSystem` translates each
+  content-defined executor into generic travelling, performing, or idle state,
+  and `ActivityEffectsSystem`
+  applies data-defined attribute rates using elapsed simulation minutes.
+* `AgentState.SecretStateHash` is neither read nor written by this pipeline, so
+  covert state remains independent of public intentions and activities.
+* Milestone 6 locks the original semantics with deterministic Ground Truth fixtures and
+  a test-only immutable decision trace. The measured 1,000-agent Release
+  baseline, allocation method, and current intent-ID architectural debt are
+  recorded in `docs/decisionbaseline.md`. Milestone 9 preserves that baseline
+  while representing score, eligibility, entity target, and location target in
+  one candidate result whose winner is copied without domain-specific branches.
 
 ### 4.2 Interaction & Discovery System
 
 **Goal:** Handle target interrogation/surveillance based on Perception vs Willpower.
 
-* `SocialGraphBuilder` creates a randomized simple graph with five peers per agent (or the largest valid degree for smaller populations), storing each pair as two directed `EdgeData` entities.
-* `InteractionSystem` runs on every 60th ECS update by default. The interval is injectable for tests and future tuning.
+* `SocialGraphBuilder` creates a randomized simple graph with at least five peers per agent (or the largest valid degree for smaller populations), then adds reciprocal clique edges for every family and friend group whose type enables `seedsSocialGraph`. Duplicate directed pairs are suppressed.
+* `InteractionSystem` runs on every 60th ECS update by default. The interval is injectable for tests and future tuning. On an interval it queries eligible detailed source agents and enumerates only each source's packed outgoing adjacency range; it no longer scans every `EdgeData` entity.
 * Each edge performs an opposed d100 contest: `Source` rolls d100 plus schema-defined `perception`; `Target` rolls d100 plus schema-defined `willpower`, with a 20-point bonus when the target has the `Paranoid` trait.
 * On a source victory, one present and not-yet-known target trait is selected and revealed with bitwise `OR` on `EdgeData.KnownTraitMask` (for example, `KnownTraitMask |= 0x0004`).
 * Reciprocal edges discover independently because each direction owns a separate knowledge mask.
@@ -46,16 +78,23 @@ The system is configured with an optional positive per-tick increase so simulati
 * Keep the last simulation delta on `WorldTime` so time-based systems consume the same elapsed interval.
 * Job schedules use Monday as day `1`, integer minutes from midnight, and non-overnight intervals.
 
-### 4.5 Commuting System (Milestone 2)
+### 4.5 Intent Execution System (Milestones 2, 10, and 11)
 
-**Goal:** Move Tier 1 agents between assigned homes and workplaces according to their job schedules.
+**Goal:** Execute any Tier 1 intention through reusable movement and performance mechanics.
 
-* Query `AgentLocation`, `AgentTravel`, `Identity`, and `AgentState` together.
-* Use the assigned job hash in `Identity.OccupationId` to resolve workdays and work interval data.
-* Begin travel early enough for the agent to arrive at the scheduled work start.
-* Traverse the precomputed shortest-travel-time route, using each network edge's duration.
-* Begin the reverse route at the scheduled work end and set the agent to rest when home.
-* Agents remain home on non-workdays. Missing routes fail during assignment or raise a clear topology error rather than creating partial agent state.
+* Each action declares `performHere`, `performAtLocation`, `performWithEntity`,
+  or `wait`; loading resolves that string to `ExecutorKind` and validates that
+  its target type and `intent.target` destination are compatible.
+* Location and entity executors share deterministic shortest-route traversal;
+  the movement path contains no action IDs.
+* Execution copies the action's data-defined activity hash into `ActivityState`.
+  `ActivityPhase` contains only generic Idle, Moving, Waiting, Performing, and
+  Blocked engine phases. Waiting reserves a mutual participant in place while
+  the initiator travels; arrival changes both partners to Performing.
+  A missing entity or unreachable destination blocks the actor and dirties its
+  decision for reconsideration.
+* `ActivityEffectsSystem` applies effects only for a Performing state whose
+  action/activity hash pair matches the loaded content definition.
 
 ### 4.6 Debug Agent Inspector
 
@@ -63,7 +102,7 @@ The system is configured with an optional positive per-tick increase so simulati
 
 * Debug mode is enabled only when the process receives the `-debug` command-line argument (case-insensitive).
 * `DebugSnapshotBuilder` copies the current agent component values into immutable, UI-facing snapshots once per frame.
-* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, secret state, locations, and travel state.
+* The `Debug` ImGui window lists every agent and lets the user select one to inspect identity, faction, job, attributes, all trait states, current action, catalog-resolved activity identity and execution phase, secret state, locations, and travel state.
 * The ImGui layer consumes snapshots only; it never queries or mutates the Ground Truth ECS store.
 
 ### 4.7 World-Time Status Bar
@@ -125,6 +164,8 @@ runtime mutation boundary.
 * The service subscribes to ECS entity deletion events because Friflo cleans up
   the keyed `Network` link but cannot clean the non-key `Supervisor` field.
   Network deletion first removes all incoming membership relations.
+* Every membership, role, supervisor, or network deletion mutation invalidates
+  target availability and active coordination for all affected members.
 
 ### 4.12 Deterministic Agent Network Generation
 
@@ -137,13 +178,16 @@ without coupling unrelated replay outcomes.
   social peers.
 * Network generation runs after every agent has home and work assignments and
   before `SocialGraphBuilder` creates interpersonal edges.
-* `AgentNetworkBuilder` buckets agents by the generator's registered home- or
-  work-location strategy, sorts buckets by location hash, shuffles each bucket,
+* `AgentNetworkBuilder` buckets agents by the generator's registered home-,
+  work-, or global-partition strategy, sorts buckets by location hash, shuffles each bucket,
   samples configured weighted sizes, and consumes every member exactly once.
   Each resulting network is anchored to its bucket location.
 * Families are flat synthetic groupings whose members all use the configured
   member role and have no supervisor. Generation intentionally adds no inferred
   genealogy, ages, or surnames.
+* Friend groups are flat, town-wide partitions anchored at location `0`.
+  Weighted target sizes are redistributed deterministically so the final group
+  remains within the authored three-to-six-member bounds.
 * Companies are built breadth-first. Children are distributed evenly across a
   level up to the configured target span; validated size capacity guarantees
   the maximum depth is sufficient. The root is the only head, non-root agents
@@ -174,4 +218,155 @@ leaking ECS entities into ordinary presentation code.
   anchor names, supervisor display names, and counts are resolved at the
   Ground Truth boundary; `PlayerIntelligenceDB` and dossiers remain unchanged.
 
+### 4.14 Intent Compilation and Fallback (Milestone 12)
+
+* `ContentCatalog.Load` validates authoring data and invokes `IntentCompiler`
+  before constructing the runtime catalog. String references never reach the
+  decision, target-resolution, execution, or effects hot paths.
+* Dense runtime indexes follow deterministic JSON order while stable hashes
+  remain the ECS, persistence, debug, and content identity.
+* Decision evaluation excludes the fallback from normal scoring and selects it
+  only when no ordinary intent is eligible. The fallback is structurally
+  constrained to a target-free `Wait`, so every agent always has a safe result.
+* Spawning initializes intention and activity state from the compiled fallback,
+  eliminating the former dependency on a specifically named domain action.
+
+### 4.14a Agent LOD Classification (Milestones 18.1–18.2)
+
+* `ContentCatalog` loads `data/lod.json` and compiles its relationship scopes
+  and demotion policy to enums. Positive cadence/shard values and exact supported
+  tokens are rejected with JSON-path-specific validation errors.
+* The spawner initializes every agent's LOD state, then invokes classification
+  only after networks, social edges, and the packed relationship indexes exist.
+  Operatives and investigated agents are Tier 1. Their direct social neighbours,
+  supervisors, and reports are Tier 2; coworkers and two-hop contacts do not
+  expand the frontier.
+* Exactly one of the three tier tags is valid. `AgentLodService` is the sole tag
+  mutation boundary and synchronizes `DetailedSimulationTag` for Tier 1/2.
+* The service reference-counts overlapping POI neighbourhoods. Investigation
+  commands are ID-based and idempotent, update affected neighbours immediately,
+  and emit copied `InvestigationChangedEvent` values without exposing entities.
+  Deleting a POI releases its contribution to every surviving neighbour.
+* Tier 3 remains disabled in the transitional content. A desired Tier 3 request
+  is retained in state but materializes as detailed Tier 2 until rollout.
+
+### 4.15 Dependency-Driven Reevaluation (Milestone 13)
+
+* Compilation unions every fact read by eligibility predicates, utility
+  expressions, trait modifiers, and target queries into each intent's
+  `FactDependencyMask`. Attribute dependencies retain their schema index bits.
+* Mutation boundaries signal categories through `DecisionInvalidation`.
+  Effects report precise attribute indexes, movement reports location/travel,
+  and social-affinity or network mutations report target availability and
+  coordination dependencies.
+* `DecisionState` caches each candidate result. A same-minute dirty update only
+  resolves and scores candidates whose dependency masks overlap changed facts;
+  cached unaffected results still participate in deterministic score/hash
+  ordering. Advancing to a new minute deliberately performs a full safety pass.
+* `EvaluationCount` supplies a deterministic workload measure independent of
+  wall-clock noise. CPU and allocation comparisons are recorded in
+  `docs/decisionbaseline.md`.
+
+### 4.16 Candidate Indexing (Milestone 14)
+
+* `IntentCompiler` assigns the bit position as part of its existing dense
+  runtime indexing. `CompiledIntentCatalog` constructs candidate bitsets once
+  during content loading and excludes the fallback from ordinary candidates.
+* Static indexes conservatively remove intents whose required home, workplace,
+  social relation, or universal job context is absent. Runtime context is
+  reduced to booleans before bitset intersection; no authored strings are read.
+* `AgentDecisionSystem` enumerates the intersected set bits for reevaluation and
+  cached winner selection. Its struct enumerator avoids catalogue scans,
+  per-agent candidate arrays, LINQ sorting, and hot-path iterator allocation.
+  Final ordering remains score descending then stable action hash ascending.
+* The safe fallback is applied only when no indexed ordinary candidate remains
+  eligible. Dependency masks continue to decide which members of that candidate
+  set must be rescored on a same-minute update.
+
 ---
+
+### 4.17 Decision Diagnostics and Content Safety (Milestone 15)
+
+* `AgentDecisionSystem` allocates contribution and rejection caches only when
+  launched with `-debug`. `DebugSnapshotBuilder` copies them into immutable
+  candidate snapshots; player-facing intelligence remains unchanged.
+* The decision inspector shows every candidate's eligibility, rejection path,
+  target, score contributions, trait modifiers, cooldown, commitment state,
+  final score, and selected-winner status.
+* `--validate-content [directory]` loads and compiles content without Raylib.
+  CI runs the test suite and this command so malformed intent content fails with
+  its file, intent ID, and JSON path.
+
+### 4.18 Mutual Activity Coordination (Milestone 16)
+
+* `CoordinationSystem` runs after deliberation and before execution. Mutual
+  winners produce invitations; participant eligibility and utility are evaluated
+  from separately compiled content with the invitee as agent and initiator as
+  target.
+* Invitations are sorted by participant utility, initiator utility, action hash,
+  initiator ID, and target ID. Greedy disjoint acceptance makes pairing
+  deterministic and prevents double booking. Rejected initiators receive the
+  authored cooldown and are dirtied for reconsideration.
+* Normal minimum-commitment, switching, and urgent-preemption controls protect
+  the invitee. The participant waits in place while the initiator follows the
+  generic route; both begin Performing only when colocated.
+* Before the mutual minimum duration both remain committed. After it, either
+  partner's better alternative releases the pair under normal switching rules;
+  the authored maximum duration releases them unconditionally. Missing partners,
+  invalidated relations, and impossible travel release immediately.
+* Effects declare `subject: initiator|participant` and are applied independently
+  only while both partners are Performing. Release clears both coordination
+  components, applies the safe fallback, and dirties both decisions.
+* Debug snapshots copy partner, role, status, timing, duration, utilities, and
+  release state. These coordination and network facts never enter
+  `PlayerIntelligenceDB`.
+
+### 4.19 Deterministic Work Diagnostics (Milestone 17.1)
+
+* `SimulationWorkDiagnostics` is an optional observer injected into
+  `AgentDecisionSystem`. Production behavior and the player-intelligence
+  boundary are unchanged when it is absent.
+* A snapshot separates five deterministic counts: actual decision passes,
+  scored candidate evaluations, target-snapshot population visits, social-edge
+  visits, and allocation-sensitive transient collection/rank operations.
+  Counters never read elapsed wall time and can be reset between measured
+  phases.
+* The baseline deliberately instruments the existing population scans rather
+  than optimizing them. Milestones 17.2–17.4 use these counts to prove that
+  persistent indexes remove unrelated visits without changing decisions.
+
+### 4.20 Agent and Social Lookup Bootstrap (Milestone 17.2)
+
+* `AgentSpawner` owns one persistent `AgentSocialIndexes` instance and rebuilds
+  it only after agents, network memberships, and all network-seeded and baseline
+  social edges have been generated. Existing decision, execution, interaction,
+  and intelligence behavior does not consume the indexes in this slice.
+* The agent directory provides constant-time integer-ID lookup. Directed edges
+  are radix-ordered by source, target, and edge entity ID into one packed array;
+  source ranges provide allocation-free neighbour spans and binary search for a
+  particular target without visiting unrelated agents or edges.
+* The generated social graph is immutable after bootstrap for this milestone.
+  Explicit population/social mutation notifications invalidate the relevant
+  lookups, which throw until a full rebuild makes the snapshot current again.
+  This guards future mutation entry points rather than silently serving stale
+  ECS IDs.
+* Indexes remain Ground Truth simulation infrastructure. They are not queried by
+  ImGui and are never copied into `PlayerIntelligenceDB`.
+
+### 4.21 Indexed Decision Targeting (Milestone 17.3)
+
+* `AgentDecisionSystem` and `CoordinationSystem` share the bootstrap
+  `AgentSocialIndexes`. Target resolution reads an agent's current location and
+  attributes directly from the indexed entity rather than constructing
+  population-wide dictionaries on every update.
+* Social selectors traverse only the actor's packed outgoing span. Network
+  selectors traverse the actor's native memberships and the bounded incoming
+  membership links of matching networks; supervisor and direct-report checks
+  use the membership relation itself.
+* Requirements and ranking retain their compiled data-driven semantics. The
+  best candidate's rank is compared in place, avoiding per-candidate arrays,
+  sets, ordering iterators, and other transient target-enumeration allocations.
+  Equal ranks continue to select the lowest entity ID.
+* Work diagnostics now report zero population visits, edge scans, and transient
+  target-snapshot operations during a detailed decision update. The indexes
+  remain Ground Truth-only and do not alter the intelligence isolation layer.

@@ -10,8 +10,10 @@ namespace ProxyState;
 public static class Program
 {
     [STAThread]
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
+        if (ContentValidation.IsRequested(args))
+            return ContentValidation.Run(args, Console.Out, Console.Error);
         var debugMode = DebugMode.IsEnabled(args);
         var contentDirectory = Path.Combine(AppContext.BaseDirectory, "data");
         var catalog = ContentCatalog.Load(contentDirectory);
@@ -21,14 +23,20 @@ public static class Program
         // A fresh seed gives each interactive run a new population. The spawner
         // accepts Random explicitly so tests and future replay tools can inject one.
         spawner.Spawn(store, SimulationDefaults.AgentCount, new Random());
+        // Retain the immutable bootstrap indexes for indexed simulation systems
+        // introduced by subsequent Milestone 17 slices.
+        var agentSocialIndexes = spawner.Indexes;
 
         var clock = new WorldClockSystem(store);
         var systems = new SystemRoot(store)
         {
             clock,
-            new CommutingSystem(catalog, clock.ClockEntity),
-            new FatigueStressSystem(catalog.AgentAttributes),
-            new InteractionSystem(catalog, new Random())
+            new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode,
+                socialIndexes: agentSocialIndexes),
+            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
+            new IntentExecutionSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
+            new ActivityEffectsSystem(catalog, clock.ClockEntity),
+            new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes)
         };
 
         Raylib.InitWindow(1280, 720, "Proxy State - Applications");
@@ -74,5 +82,6 @@ public static class Program
             rlImGui.Shutdown();
             Raylib.CloseWindow();
         }
+        return 0;
     }
 }

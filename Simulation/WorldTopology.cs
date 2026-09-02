@@ -71,70 +71,11 @@ public sealed class WorldTopology
             throw new KeyNotFoundException("A route endpoint is not defined in the world topology.");
         }
 
-        if (startLocationId == destinationLocationId)
-        {
-            return new WorldRoute(new[] { startLocationId }, 0);
-        }
-
-        var distances = _locationsByHash.Keys.ToDictionary(locationId => locationId, _ => int.MaxValue);
-        var previous = new Dictionary<int, int>();
-        var unvisited = _locationsByHash.Keys.ToHashSet();
-        distances[startLocationId] = 0;
-
-        while (unvisited.Count > 0)
-        {
-            int? current = null;
-            foreach (var candidate in unvisited)
-            {
-                if (current is null || distances[candidate] < distances[current.Value] ||
-                    (distances[candidate] == distances[current.Value] && candidate < current.Value))
-                {
-                    current = candidate;
-                }
-            }
-
-            if (current is null || distances[current.Value] == int.MaxValue)
-            {
-                break;
-            }
-
-            unvisited.Remove(current.Value);
-            if (current.Value == destinationLocationId)
-            {
-                break;
-            }
-
-            foreach (var neighbor in _neighbors[current.Value])
-            {
-                if (!unvisited.Contains(neighbor.Destination))
-                {
-                    continue;
-                }
-
-                var candidateDistance = distances[current.Value] + neighbor.TravelMinutes;
-                if (candidateDistance < distances[neighbor.Destination])
-                {
-                    distances[neighbor.Destination] = candidateDistance;
-                    previous[neighbor.Destination] = current.Value;
-                }
-            }
-        }
-
-        if (!previous.ContainsKey(destinationLocationId))
-        {
-            return null;
-        }
-
-        var route = new List<int> { destinationLocationId };
-        var cursor = destinationLocationId;
-        while (cursor != startLocationId)
-        {
-            cursor = previous[cursor];
-            route.Add(cursor);
-        }
-
-        route.Reverse();
-        return new WorldRoute(route, distances[destinationLocationId]);
+        return WorldPathfinder.FindShortestRoute(
+            startLocationId,
+            destinationLocationId,
+            _locationsByHash.Keys,
+            _neighbors);
     }
 
     private void AddConnection(int from, int to, int travelMinutes)

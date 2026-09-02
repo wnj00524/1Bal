@@ -3,7 +3,62 @@ using System.Text.Json;
 namespace ProxyState.Simulation;
 
 public sealed record TraitDefinition(string Id, string Name, long Bit, float Prevalence);
-public sealed record ActionDefinition(string Id, string Name, int Hash);
+public sealed record ResponsePoint(float X, float Y);
+public sealed record UtilityInputDefinition(NumericExpressionDefinition Expression, float Weight, List<ResponsePoint> Curve)
+;
+public sealed record TraitUtilityModifier(string Trait, float Modifier);
+public sealed record ActionControlDefinition(
+    int MinimumCommitmentMinutes,
+    float SwitchingThreshold,
+    int CooldownMinutes,
+    float UrgentPreemptionThreshold,
+    bool CooldownOnExit = true);
+public sealed record ActionEffectDefinition(string Attribute, float PerMinute, string? Subject = null);
+public sealed record ActivityDefinition(string Id, string Name, int Hash);
+public sealed record TargetRankDefinition(NumericExpressionDefinition Value, string Order)
+;
+public sealed record TargetQueryDefinition(
+    string Relation,
+    List<PredicateDefinition> Requirements,
+    List<TargetRankDefinition> RankBy,
+    int? Limit,
+    string? NetworkType = null);
+public sealed record TargetDefinition(string Kind, string? Value, TargetQueryDefinition? Query);
+public enum ExecutorKind : byte
+{
+    PerformHere,
+    PerformAtLocation,
+    PerformWithEntity,
+    Wait
+}
+public sealed record ExecutorDefinition(string Executor, string? Destination)
+;
+public sealed record ParticipantAcceptanceDefinition(
+    float BaseUtility,
+    PredicateDefinition Eligibility,
+    List<UtilityInputDefinition> UtilityInputs,
+    List<TraitUtilityModifier> TraitModifiers);
+public sealed record ParticipationDefinition(
+    string Mode,
+    int MinimumDurationMinutes,
+    int MaximumDurationMinutes,
+    int RejectionCooldownMinutes,
+    ParticipantAcceptanceDefinition Acceptance);
+public sealed record ActionDefinition(
+    string Id,
+    string Name,
+    int Hash,
+    ActivityDefinition Activity,
+    float BaseUtility,
+    PredicateDefinition Eligibility,
+    List<UtilityInputDefinition> UtilityInputs,
+    List<TraitUtilityModifier> TraitModifiers,
+    ActionControlDefinition Controls,
+    List<ActionEffectDefinition> Effects,
+    TargetDefinition Target,
+    ExecutorDefinition Execution,
+    bool Fallback = false,
+    ParticipationDefinition? Participation = null);
 public sealed record SecretStateDefinition(string Id, string Name, int Hash);
 public sealed record FactionDefinition(string Id, string Name, byte FactionId);
 public sealed record AgentAttributeDefinition(string Id, float Min, float Max, float Average);
@@ -17,6 +72,48 @@ public sealed record JobDefinition(
     string WorkplaceType);
 public sealed record WorldLocationDefinition(string Id, string Name, int Hash, string Type);
 public sealed record WorldConnectionDefinition(string From, string To, int TravelMinutes);
+
+public sealed class LodDocument
+{
+    public bool Enabled { get; init; }
+    public bool Tier3Enabled { get; init; }
+    public Tier2LodDocument? Tier2 { get; init; }
+    public string? DemotionPolicy { get; init; }
+    public Tier3LodDocument? Tier3 { get; init; }
+}
+
+public sealed class Tier2LodDocument
+{
+    public int DecisionIntervalMinutes { get; init; }
+    public List<string>? RelatedBy { get; init; }
+}
+
+public sealed class Tier3LodDocument
+{
+    public int ShardCount { get; init; }
+}
+
+public enum AgentRelationKind : byte
+{
+    Social,
+    NetworkSupervisor,
+    NetworkDirectReport
+}
+
+public enum AgentDemotionPolicy : byte
+{
+    EndOfDay
+}
+
+// Runtime settings contain enums rather than authoring strings, so simulation
+// code cannot silently acquire a second interpretation of the JSON contract.
+public sealed record AgentLodSettings(
+    bool Enabled,
+    bool Tier3Enabled,
+    int Tier2DecisionIntervalMinutes,
+    IReadOnlyList<AgentRelationKind> RelatedBy,
+    AgentDemotionPolicy DemotionPolicy,
+    int Tier3ShardCount);
 
 public sealed class AgentAttributeSchema
 {
@@ -59,33 +156,44 @@ public sealed class ContentCatalog
     private ContentCatalog(
         IReadOnlyList<TraitDefinition> traits,
         IReadOnlyList<ActionDefinition> actions,
+        CompiledIntentCatalog intents,
         IReadOnlyList<SecretStateDefinition> secretStates,
         IReadOnlyList<FactionDefinition> factions,
         AgentAttributeSchema agentAttributes,
         IReadOnlyList<JobDefinition> jobs,
         WorldTopology world,
-        AgentNetworkCatalog networks)
+        AgentNetworkCatalog networks,
+        AgentLodSettings lod)
     {
         Traits = traits;
         Actions = actions;
+        Intents = intents;
         SecretStates = secretStates;
         Factions = factions;
         AgentAttributes = agentAttributes;
         Jobs = jobs;
         World = world;
         Networks = networks;
+        Lod = lod;
         AllTraitBits = traits.Aggregate(0L, (mask, trait) => mask | trait.Bit);
     }
 
     public IReadOnlyList<TraitDefinition> Traits { get; }
     public IReadOnlyList<ActionDefinition> Actions { get; }
+    public CompiledIntentCatalog Intents { get; }
     public IReadOnlyList<SecretStateDefinition> SecretStates { get; }
     public IReadOnlyList<FactionDefinition> Factions { get; }
     public AgentAttributeSchema AgentAttributes { get; }
     public IReadOnlyList<JobDefinition> Jobs { get; }
     public WorldTopology World { get; }
     public AgentNetworkCatalog Networks { get; }
+    public AgentLodSettings Lod { get; }
     public long AllTraitBits { get; }
+
+    public ActivityDefinition GetActivity(int hash) => Actions
+        .Select(action => action.Activity)
+        .FirstOrDefault(activity => activity.Hash == hash)
+        ?? throw new KeyNotFoundException($"Activity type hash '{hash}' is not defined in the content catalog.");
 
     public static ContentCatalog Load(string directory)
     {
@@ -99,6 +207,7 @@ public sealed class ContentCatalog
         var schemaDocument = LoadObject<AgentSchemaDocument>(directory, "agent-schema.json", options);
         var jobs = LoadFile<JobDefinition>(directory, "jobs.json", options);
         var worldDocument = LoadObject<WorldDocument>(directory, "world.json", options);
+        var lodDocument = LoadObject<LodDocument>(directory, "lod.json", options);
         var networksPath = Path.Combine(directory, "networks.json");
         if (!File.Exists(networksPath))
             throw new FileNotFoundException($"Required content file was not found: {networksPath}", networksPath);
@@ -107,7 +216,53 @@ public sealed class ContentCatalog
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
-        return new ContentCatalog(traits, actions, secretStates, factions, agentAttributes, jobs, world, networks);
+        var lod = ValidateLod(lodDocument);
+        var intents = IntentCompiler.Compile(actions, traits, agentAttributes, networks);
+        return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks, lod);
+    }
+
+    private static AgentLodSettings ValidateLod(LodDocument document)
+    {
+        if (document.Tier2 is null)
+            throw new InvalidDataException("lod.json:tier2 is required.");
+        if (document.Tier2.DecisionIntervalMinutes <= 0)
+            throw new InvalidDataException("lod.json:tier2.decisionIntervalMinutes must be positive.");
+        if (document.Tier2.RelatedBy is null || document.Tier2.RelatedBy.Count == 0)
+            throw new InvalidDataException("lod.json:tier2.relatedBy must contain the supported relationship scopes.");
+
+        var relations = new List<AgentRelationKind>(document.Tier2.RelatedBy.Count);
+        for (var index = 0; index < document.Tier2.RelatedBy.Count; index++)
+        {
+            var relation = document.Tier2.RelatedBy[index];
+            relations.Add(relation switch
+            {
+                "social" => AgentRelationKind.Social,
+                "networkSupervisor" => AgentRelationKind.NetworkSupervisor,
+                "networkDirectReport" => AgentRelationKind.NetworkDirectReport,
+                _ => throw new InvalidDataException(
+                    $"lod.json:tier2.relatedBy[{index}] has unsupported relationship '{relation}'.")
+            });
+        }
+
+        if (relations.Count != 3 || relations.Distinct().Count() != 3)
+            throw new InvalidDataException(
+                "lod.json:tier2.relatedBy must contain each of social, networkSupervisor, and networkDirectReport exactly once.");
+
+        var demotionPolicy = document.DemotionPolicy switch
+        {
+            "endOfDay" => AgentDemotionPolicy.EndOfDay,
+            _ => throw new InvalidDataException(
+                $"lod.json:demotionPolicy has unsupported policy '{document.DemotionPolicy}'.")
+        };
+
+        if (document.Tier3 is null)
+            throw new InvalidDataException("lod.json:tier3 is required.");
+        if (document.Tier3.ShardCount <= 0)
+            throw new InvalidDataException("lod.json:tier3.shardCount must be positive.");
+
+        return new AgentLodSettings(document.Enabled, document.Tier3Enabled,
+            document.Tier2.DecisionIntervalMinutes, relations.AsReadOnly(), demotionPolicy,
+            document.Tier3.ShardCount);
     }
 
     private static IReadOnlyList<T> LoadFile<T>(
@@ -188,6 +343,8 @@ public sealed class ContentCatalog
             throw new InvalidDataException("Action hashes must be unique.");
         }
 
+        ValidateActions(actions, traits, attributeDefinitions);
+
         var attributeIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var attribute in attributeDefinitions)
         {
@@ -212,6 +369,57 @@ public sealed class ContentCatalog
         _ = schema.GetIndex("stress");
         return schema;
     }
+
+    private static void ValidateActions(
+        IReadOnlyList<ActionDefinition> actions,
+        IReadOnlyList<TraitDefinition> traits,
+        IReadOnlyList<AgentAttributeDefinition> attributes)
+    {
+        var activityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activityHashes = new HashSet<int>();
+        foreach (var action in actions)
+        {
+            if (string.IsNullOrWhiteSpace(action.Id) || string.IsNullOrWhiteSpace(action.Name) ||
+                !float.IsFinite(action.BaseUtility) || action.Activity is null || action.Eligibility is null ||
+                action.UtilityInputs is null || action.TraitModifiers is null || action.Controls is null || action.Effects is null || action.Target is null || action.Execution is null)
+                throw new InvalidDataException($"Action '{action.Id}' has an invalid decision definition.");
+            if (string.IsNullOrWhiteSpace(action.Activity.Id) || string.IsNullOrWhiteSpace(action.Activity.Name) ||
+                action.Activity.Hash == 0 || !activityIds.Add(action.Activity.Id) || !activityHashes.Add(action.Activity.Hash))
+                throw new InvalidDataException($"Action '{action.Id}' must define a unique, non-zero activity ID and hash with a display name.");
+            if (action.Controls.MinimumCommitmentMinutes < 0 || action.Controls.CooldownMinutes < 0 ||
+                !float.IsFinite(action.Controls.SwitchingThreshold) || action.Controls.SwitchingThreshold < 0 ||
+                !float.IsFinite(action.Controls.UrgentPreemptionThreshold))
+                throw new InvalidDataException($"Action '{action.Id}' has invalid controls.");
+            foreach (var input in action.UtilityInputs)
+            {
+                if (input.Expression is null || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                    input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
+                    input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid utility input.");
+            }
+            if (action.TraitModifiers.Any(modifier => !float.IsFinite(modifier.Modifier)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite trait modifier.");
+            if (action.Effects.Any(effect => !float.IsFinite(effect.PerMinute)))
+                throw new InvalidDataException($"Action '{action.Id}' has a non-finite effect rate.");
+            if (action.Participation is { } participation)
+            {
+                var acceptance = participation.Acceptance;
+                if (acceptance is null || acceptance.Eligibility is null || acceptance.UtilityInputs is null ||
+                    acceptance.TraitModifiers is null || !float.IsFinite(acceptance.BaseUtility))
+                    throw new InvalidDataException($"Action '{action.Id}' has an invalid participation definition.");
+                foreach (var input in acceptance.UtilityInputs)
+                {
+                    if (input.Expression is null || !float.IsFinite(input.Weight) || input.Curve is null || input.Curve.Count < 2 ||
+                        input.Curve.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)) ||
+                        input.Curve.Select(point => point.X).Zip(input.Curve.Skip(1), (x, next) => next.X > x).Any(increasing => !increasing))
+                        throw new InvalidDataException($"Action '{action.Id}' has an invalid participant utility input.");
+                }
+                if (acceptance.TraitModifiers.Any(modifier => !float.IsFinite(modifier.Modifier)))
+                    throw new InvalidDataException($"Action '{action.Id}' has a non-finite participant trait modifier.");
+            }
+        }
+    }
+
 
     private static void ValidateSecretStates(IReadOnlyList<SecretStateDefinition> secretStates)
     {

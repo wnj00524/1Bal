@@ -100,3 +100,114 @@ Tracked by [#22: Add data-driven agent networks with flat and hierarchical membe
 - [ ] Generated company hierarchies are deterministic, bounded, connected, and acyclic, with exactly one root.
 - [ ] Network generation does not alter population assignments, operative selection, or social edges for the same root seed.
 - [ ] Debug inspection uses copied snapshots, while player-facing intelligence remains isolated and unchanged.
+
+## Milestones 6–15: Data-Defined Intent Roadmap
+
+The detailed architecture, sequencing, constraints, and acceptance criteria for
+Milestones 6–15 are maintained in [`docs/datadrivenintents.md`](datadrivenintents.md).
+The linked GitHub milestones and issues below are the canonical delivery records;
+each issue also records its dependencies and verification expectations.
+
+## [Milestone 6: Baseline and Behavioural Lock](https://github.com/wnj00524/proxystate/milestone/7)
+
+- [x] [M6.1 — Add deterministic decision fixtures](https://github.com/wnj00524/proxystate/issues/39)
+- [x] [M6.2 — Add decision trace test helper](https://github.com/wnj00524/proxystate/issues/40)
+- [x] [M6.3 — Record decision performance baseline](https://github.com/wnj00524/proxystate/issues/41)
+
+## [Milestone 7: Fact and Numeric Expression IR](https://github.com/wnj00524/proxystate/milestone/8)
+
+- [x] [M7.1 — Introduce `FactId` and fact registry](https://github.com/wnj00524/proxystate/issues/42)
+- [x] [M7.2 — Introduce numeric expression model](https://github.com/wnj00524/proxystate/issues/43)
+- [x] [M7.3 — Add compiled numeric evaluator](https://github.com/wnj00524/proxystate/issues/44)
+- [x] [M7.4 — Migrate `actions.json`](https://github.com/wnj00524/proxystate/issues/45)
+
+## [Milestone 8: Predicate IR](https://github.com/wnj00524/proxystate/milestone/9)
+
+- [x] [M8.1 — Define predicate authoring schema](https://github.com/wnj00524/proxystate/issues/46)
+- [x] [M8.2 — Add compiled predicate evaluator](https://github.com/wnj00524/proxystate/issues/47)
+- [x] [M8.3 — Remove `ActionEligibilityDefinition.Gate`](https://github.com/wnj00524/proxystate/issues/48)
+- [x] [M8.4 — Migrate existing action eligibility](https://github.com/wnj00524/proxystate/issues/49)
+
+## [Milestone 9: Data-Defined Targeting](https://github.com/wnj00524/proxystate/milestone/10)
+
+- [x] [M9.1 — Introduce target definition model](https://github.com/wnj00524/proxystate/issues/50)
+- [x] [M9.2 — Build generic social-relation target query](https://github.com/wnj00524/proxystate/issues/51)
+- [x] [M9.3 — Move destination resolution into intent data](https://github.com/wnj00524/proxystate/issues/52)
+- [x] [M9.4 — Generalise decision result structure](https://github.com/wnj00524/proxystate/issues/53)
+
+## [Milestone 10: Generic Execution](https://github.com/wnj00524/proxystate/milestone/11)
+
+- [x] [M10.1 — Introduce executor definition](https://github.com/wnj00524/proxystate/issues/54)
+- [x] [M10.2 — Extract generic movement execution](https://github.com/wnj00524/proxystate/issues/55)
+- [x] [M10.3 — Implement `performAtLocation`](https://github.com/wnj00524/proxystate/issues/56)
+- [x] [M10.4 — Implement `performWithEntity`](https://github.com/wnj00524/proxystate/issues/57)
+- [x] [M10.5 — Replace or rename `CommutingSystem`](https://github.com/wnj00524/proxystate/issues/58)
+
+## [Milestone 11: Data-Defined Activity Identity](https://github.com/wnj00524/proxystate/milestone/12)
+
+- [x] [M11.1 — Introduce `ActivityPhase`](https://github.com/wnj00524/proxystate/issues/59)
+- [x] [M11.2 — Add data-defined activity identity](https://github.com/wnj00524/proxystate/issues/60)
+- [x] [M11.3 — Migrate existing consumers](https://github.com/wnj00524/proxystate/issues/61)
+
+## [Milestone 12: Intent Compiler and Structural Validation](https://github.com/wnj00524/proxystate/milestone/13)
+
+- [x] [M12.1 — Introduce `IntentCompiler`](https://github.com/wnj00524/proxystate/issues/62)
+- [x] [M12.2 — Add dense runtime indexes](https://github.com/wnj00524/proxystate/issues/63)
+- [x] [M12.3 — Replace semantic validation](https://github.com/wnj00524/proxystate/issues/64)
+- [x] [M12.4 — Introduce fallback intent](https://github.com/wnj00524/proxystate/issues/65)
+
+## [Milestone 13: Dependency-Driven Reevaluation](https://github.com/wnj00524/proxystate/milestone/14)
+
+- [x] [M13.1 — Introduce `FactDependencyMask`](https://github.com/wnj00524/proxystate/issues/66)
+- [x] [M13.2 — Track changed fact categories](https://github.com/wnj00524/proxystate/issues/67)
+- [x] [M13.3 — Selective intent reevaluation](https://github.com/wnj00524/proxystate/issues/68)
+- [x] [M13.4 — Benchmark dependency-driven decisions](https://github.com/wnj00524/proxystate/issues/69)
+
+## [Milestone 14: Candidate Indexing](https://github.com/wnj00524/proxystate/milestone/15)
+
+- [x] [M14.1 — Add intent candidate bitsets](https://github.com/wnj00524/proxystate/issues/70)
+- [x] [M14.2 — Build static intent indexes](https://github.com/wnj00524/proxystate/issues/71)
+- [x] [M14.3 — Add scaling benchmark](https://github.com/wnj00524/proxystate/issues/72)
+
+## [Milestone 15: Tooling, Diagnostics, and Content Safety](https://github.com/wnj00524/proxystate/milestone/16)
+
+- [x] [M15.1 — Add decision inspector](https://github.com/wnj00524/proxystate/issues/73)
+- [x] [M15.2 — Add content validation command/test](https://github.com/wnj00524/proxystate/issues/74)
+- [x] [M15.3 — Add intent authoring documentation](https://github.com/wnj00524/proxystate/issues/75)
+- [x] [M15.4 — Add data-only extensibility test](https://github.com/wnj00524/proxystate/issues/76)
+
+## Milestones 17–20: Agent LOD and 100,000-Agent Roadmap
+
+The decision-complete implementation sequence, architectural invariants, test
+matrix, and agent handoff rules are maintained in
+[`docs/agent-lod-roadmap.md`](agent-lod-roadmap.md). The work is tracked by
+[Epic #106](https://github.com/wnj00524/proxystate/issues/106) and the four
+sequential milestones below.
+
+## [Milestone 17: Scalable Agent Lookup Foundation](https://github.com/wnj00524/proxystate/milestone/18)
+
+- [ ] [M17.1 — Record LOD and large-population baselines](https://github.com/wnj00524/proxystate/issues/107)
+- [ ] [M17.2 — Build compact agent and social relationship indexes](https://github.com/wnj00524/proxystate/issues/108)
+- [ ] [M17.3 — Refactor decision targeting to indexed direct lookup](https://github.com/wnj00524/proxystate/issues/109)
+- [ ] [M17.4 — Remove population scans from execution and interaction](https://github.com/wnj00524/proxystate/issues/110)
+
+## [Milestone 18: Dynamic Agent LOD Lifecycle](https://github.com/wnj00524/proxystate/milestone/19)
+
+- [ ] [M18.1 — Add LOD configuration and runtime contracts](https://github.com/wnj00524/proxystate/issues/111)
+- [ ] [M18.2 — Implement POI classification and investigation service](https://github.com/wnj00524/proxystate/issues/112)
+- [ ] [M18.3 — Implement Tier 2 cadence and critical wake-ups](https://github.com/wnj00524/proxystate/issues/113)
+- [ ] [M18.4 — Add demotion grace, interaction pins, and network notifications](https://github.com/wnj00524/proxystate/issues/114)
+
+## [Milestone 19: Data-Driven Coarse Agent Routines](https://github.com/wnj00524/proxystate/milestone/20)
+
+- [ ] [M19.1 — Compile and validate Tier 3 routine definitions](https://github.com/wnj00524/proxystate/issues/115)
+- [ ] [M19.2 — Build shared deterministic weekly routine profiles](https://github.com/wnj00524/proxystate/issues/116)
+- [ ] [M19.3 — Implement sharded Tier 3 effect integration](https://github.com/wnj00524/proxystate/issues/117)
+- [ ] [M19.4 — Materialize promotion and demotion state](https://github.com/wnj00524/proxystate/issues/118)
+- [ ] [M19.5 — Enable Tier 3 and verify cross-tier coordination](https://github.com/wnj00524/proxystate/issues/119)
+
+## [Milestone 20: Interactive 100,000-Agent Delivery](https://github.com/wnj00524/proxystate/milestone/21)
+
+- [ ] [M20.1 — Add incremental player-intelligence projection and investigation commands](https://github.com/wnj00524/proxystate/issues/120)
+- [ ] [M20.2 — Virtualize dossier and debug inspection](https://github.com/wnj00524/proxystate/issues/121)
+- [ ] [M20.3 — Add population CLI and complete 100k verification](https://github.com/wnj00524/proxystate/issues/122)

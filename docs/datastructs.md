@@ -9,10 +9,32 @@ contain behavior. The namespace for Milestone 1 types is `ProxyState.Simulation`
 ```csharp
 using Friflo.Engine.ECS;
 
-public struct Tier1LodTag : ITag { } // Updated every simulation tick.
-public struct Tier2LodTag : ITag { } // Reserved for hourly updates.
-public struct Tier3LodTag : ITag { } // Reserved for daily updates.
+public struct Tier1LodTag : ITag { } // Full-detail decisions.
+public struct Tier2LodTag : ITag { } // Reduced decision cadence.
+public struct Tier3LodTag : ITag { } // Coarse routine simulation.
+public struct DetailedSimulationTag : ITag { } // Present on Tier 1 and Tier 2.
 public struct OperativeTag : ITag { } // Player-controlled intelligence source.
+
+public enum AgentLodTier : byte { Tier1 = 1, Tier2 = 2, Tier3 = 3 }
+
+[Flags]
+public enum AgentInterestReason : byte {
+    None = 0,
+    Operative = 1,
+    Investigation = 2,
+    RelatedPointOfInterest = 4,
+    ActiveInteraction = 8
+}
+
+public struct AgentLodState : IComponent {
+    public AgentLodTier DesiredTier;
+    public int DirectPoiReferenceCount;
+    public AgentInterestReason InterestReasons;
+    public long ScheduledDemotionMinute;
+    public int CoarseProfileId;
+    public ulong CoarseProfileFingerprint;
+    public long LastCoarseSimulatedMinute;
+}
 
 public enum IntelligenceRole : byte {
     None,       // Zero/default value for unassigned agents.
@@ -40,8 +62,48 @@ public struct Psychology : IComponent {
 }
 
 public struct AgentState : IComponent {
-    public int CurrentActionHash;  // Hash supplied by data/actions.json.
     public int SecretStateHash;    // Hash supplied by data/secret-states.json; 0 is None.
+}
+
+public struct IntentionState : IComponent {
+    public int ActionHash;          // Goal selected by utility deliberation.
+    public int TargetEntityId;     // Social or network target, or 0.
+    public int TargetLocationId;   // Destination for location-bound goals.
+    public long SelectedAtMinute;
+    public float Utility;
+}
+
+public struct ActivityState : IComponent {
+    public int ActionHash;          // Content action responsible for the activity.
+    public int ActivityTypeHash;    // Data-defined identity from the selected action.
+    public ActivityPhase Phase;     // Idle, Moving, Waiting, Performing, or Blocked mechanics.
+    public long StartedAtMinute;
+}
+
+public enum CoordinationRole : byte { None, Initiator, Participant }
+public enum CoordinationStatus : byte { None, Reserved, Travelling, Waiting, Performing }
+
+public struct CoordinationState : IComponent {
+    public int PartnerEntityId;
+    public int ActionHash;
+    public CoordinationRole Role;
+    public CoordinationStatus Status;
+    public long AcceptedAtMinute;
+    public long StartedAtMinute;
+    public int MinimumDurationMinutes;
+    public int MaximumDurationMinutes;
+    public float Utility;          // This agent's utility for the coordinated action.
+    public bool ReleaseRequested;
+}
+
+public struct DecisionState : IComponent {
+    public long LastConsideredMinute;
+    public bool Dirty;
+    public int[] CooldownActionHashes;
+    public long[] CooldownUntilMinutes;
+    public float[][] CachedUtilityContributions; // Allocated in debug mode only.
+    public float[][] CachedTraitContributions;   // Allocated in debug mode only.
+    public string[] CachedRejectedPredicates;    // Allocated in debug mode only.
 }
 
 public struct WorldTime : IComponent {
@@ -55,18 +117,30 @@ public struct AgentLocation : IComponent {
     public int CurrentLocationId;
 }
 
-public enum AgentTravelMode : byte {
-    AtHome, TravellingToWork, AtWork, TravellingHome
-}
+public enum AgentTravelMode : byte { Stationary, Travelling }
 
 public struct AgentTravel : IComponent {
     public int[] RouteLocationIds;
     public int TotalTravelMinutes;
     public int RoutePosition;
     public float RemainingTravelMinutes;
+    public int DestinationLocationId;
     public AgentTravelMode Mode;
 }
 ```
+
+Every agent owns `AgentLodState` and exactly one tier tag. `AgentLodService` is
+the exclusive mutation boundary for that state and for `DetailedSimulationTag`.
+Tier 1 and Tier 2 are detailed; Tier 3 is not. During the Milestone 18 rollout,
+a desired Tier 3 assignment is materialized as Tier 2 because Tier 3 remains
+disabled. The coarse-profile fields are reserved contracts for Milestone 19.
+
+`AgentLodService` owns a stable-ID POI set and a cached, sorted direct-neighbour
+list per POI. `DirectPoiReferenceCount` is incremented once for each operative
+or investigated direct neighbour, preventing an agent from leaving Tier 2 while
+another POI still references it. Its drained `InvestigationChangedEvent` values
+contain only `AgentId` and `Enabled`; the copied records can cross into a later
+player-intelligence projection without leaking ECS `Entity` handles or LOD state.
 
 `AgentAttributeSchema` loads the ordered numeric definitions from
 `data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores
@@ -74,12 +148,64 @@ one floating-point value per definition, so adding an attribute requires only a
 data-file change. Values are sampled from a bounded normal distribution centered
 on the configured average and constrained to the configured range.
 
-Public activity and covert activity are independent. `AgentState.CurrentActionHash`
-is the visible action, while `AgentState.SecretStateHash` identifies a separate
-secret activity such as `Surveillance`. Secret states are loaded from
+Intention, activity, effects, and covert state are distinct. `IntentionState`
+stores what was selected, `ActivityState` stores what is happening now, and
+JSON effect definitions describe attribute changes. Each action declares an
+activity ID, display name, and stable hash in `data/actions.json`; execution copies
+that identity into `ActivityState` while `ActivityPhase` contains only generic
+engine states. Debug snapshots resolve the display name through `ContentCatalog`.
+`AgentState.SecretStateHash`
+identifies a separate secret activity such as `Surveillance`. Secret states are loaded from
 `data/secret-states.json`; the required `none` definition uses hash `0`, making a
-default-initialized `AgentState` safe. Agents are spawned with `None`, and future
-simulation systems may change the secret hash without changing the public action.
+default-initialized `AgentState` safe. Agents are spawned with `None`, and a
+covert system may change the secret hash without changing intention or activity.
+
+`data/actions.json` owns each candidate's eligibility predicate, base utility,
+weighted numeric expressions, piecewise-linear response curves, trait modifiers,
+minimum commitment, switching margin, cooldown, urgent-preemption threshold,
+per-minute effects, activity identity, target definition, and optional mutual
+participation. `TargetDefinition` selects `none`, a
+direct agent `location`, or an `entity` query. Entity queries contain a relation,
+compiled predicate requirements, ordered compiled numeric rankings, and an
+optional positive candidate limit; the runtime result carries both entity and
+location IDs alongside eligibility and score. Runtime cooldowns and candidate
+caches use parallel fixed-size arrays indexed by the compiled catalogue and do
+not need per-agent dictionaries.
+
+`ParticipationDefinition` owns the mutual minimum and maximum duration,
+rejection cooldown, and a separately compiled participant acceptance predicate,
+utility inputs, and trait modifiers. `CoordinationState` is pure ECS ground
+truth describing the accepted pair and lifecycle; it stores hashes, IDs,
+scalars, and enums rather than behavior-specific roles or strings. Effect
+definitions compile an optional subject enum; omission means the initiator and
+participant effects are accepted only on mutual entity actions.
+
+Every action also declares an `ExecutorDefinition`. Loading compiles its
+`executor` string to `ExecutorKind` (`performHere`, `performAtLocation`,
+`performWithEntity`, or `wait`) and validates the required target type.
+Target-bound executors use `destination: "intent.target"`. Generic travel stores
+the active destination and shortest route in `AgentTravel`, so execution does
+not branch on work, rest, or socialize identity.
+
+Numeric facts use stable `FactId` values composed of a `FactKind` and an optional
+schema index. `FactRegistry` resolves authoring references such as
+`agent.attribute.fatigue`, `time.minuteOfDay`, `job.workStartMinute`, and
+`target.affinity` and `target.attribute.<id>` during catalog loading. Network
+targets without a directional social edge receive normalized affinity `0.5`.
+`NumericExpressionDefinition` is the
+JSON authoring tree; the loader compiles it to a bounded postfix instruction
+array containing opcodes, fact handles, and numeric operands. The runtime stack
+evaluator uses `stackalloc`, performs no string lookup, and supports `fact`,
+`constant`, `normalize`, `normalizeRange`, arithmetic, `min`, `max`, `clamp`,
+`oneMinus`, and `abs`. Trees are limited to 16 levels and 64 instructions.
+
+`PredicateDefinition` is the eligibility authoring tree. It composes typed
+boolean facts with `and`, `or`, and `not`, or compares numeric expressions with
+`equal`, `notEqual`, `less`, `lessOrEqual`, `greater`, and `greaterOrEqual`.
+`CompiledPredicate` stores bounded postfix boolean instructions and
+precompiled numeric operands. Boolean/numeric type mismatches and malformed
+arity fail during catalog loading; runtime evaluation uses a stack-allocated
+boolean span and performs no string parsing or per-agent allocation.
 
 Binary attributes are traits defined in `data/traits.json`. Their unique positive
 single-bit values are combined in `Psychology.TraitMask`; `prevalence` controls the
@@ -122,8 +248,9 @@ entities, one in each direction, with independent knowledge masks. Populations
 smaller than six receive the largest valid graph degree for their size. Self-links
 and duplicate peers are not created.
 
-`InteractionSystem` processes every edge on the configured interval (60 ECS
-ticks by default). A source's d100 plus `perception` competes with the target's
+`InteractionSystem` processes the packed outgoing edges of eligible detailed
+sources on the configured interval (60 ECS ticks by default), rather than
+scanning the entire edge population. A source's d100 plus `perception` competes with the target's
 d100 plus `willpower`; a target with the `paranoid` trait receives a 20-point
 willpower bonus. A successful contest reveals one present, previously unknown
 trait by OR-ing its bit into `KnownTraitMask`. The mask records confirmed
@@ -131,9 +258,43 @@ present traits only, so confirmed absence is not represented. Affinity is the
 normalized percentage of configured traits shared by the target and the
 source's known mask.
 
+`AgentSocialIndexes` is the persistent, non-ECS lookup snapshot created after
+agent, network, and social-edge generation. Its direct agent directory is
+indexed by integer entity ID. Outgoing relationships are stored in one packed
+array of `SocialEdgeIndexEntry(TargetAgentId, EdgeEntityId)` values, ordered by
+source agent ID, target agent ID, and edge entity ID; a compact source-range
+table provides a `ReadOnlySpan<SocialEdgeIndexEntry>` for one agent without a
+dictionary or allocation. Construction uses fixed-pass integer radix sorting,
+so build work and retained storage are linear in generated entities and directed
+edges.
+
+Milestone 17.3 adds a persistent edge-entity directory beside the packed
+adjacency data. Decision targeting uses the packed edge ID to retrieve current
+affinity without rebuilding an affinity map, while target location and
+attribute arrays are read from the agent directory's resolved ECS entity.
+Network target enumeration deliberately remains in Friflo's native
+`AgentNetworkMembership` incoming-link and relation storage rather than adding
+a duplicate network-member snapshot.
+
+Milestone 17.4 also uses the direct agent directory to resolve a moving
+intention target's current `AgentLocation`; execution no longer builds a
+full-population location dictionary on every tick. Deleted or component-missing
+targets follow the ordinary target-availability invalidation path.
+
+The snapshot is immutable between rebuilds in Milestone 17.2. Code that changes
+the population must call `NotifyPopulationChanged`; code that adds, removes, or
+retargets `EdgeData` must call `NotifySocialGraphChanged`. Lookups then fail
+explicitly until `Rebuild(EntityStore)` is called, preventing stale entity IDs
+from being consumed. Dynamic social mutation itself remains out of scope.
+
 ### 2.3 Debug Inspection Snapshots
 
-Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, and resolved network memberships. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values.
+Debug inspection uses immutable copies rather than exposing `Entity` instances to ImGui. `DebugAgentSnapshot` contains the scalar identity, occupation, faction, public action, secret-state, and trait-mask values plus read-only collections for schema-defined attributes, every configured trait's present/absent state, named locations, travel state, resolved network memberships, and an optional copied coordination snapshot. `DebugCoordinationSnapshot` contains partner, role, status, acceptance/performance times, duration bounds, current utilities, and release request. `DebugNetworkMembershipSnapshot` copies a network ID/display name/type, role hash/name, and optional supervisor ID/display name. `DebugNetworkSnapshot` copies a network's identity, resolved type, optional named anchor, and member count. `DebugInspectionSnapshot` groups the agent and network collections passed to the debug UI. `DebugSnapshotBuilder` is the ECS boundary that creates these snapshots; `DebugWindow` renders only the copied values. None of the network or coordination projections enter `PlayerIntelligenceDB`.
+
+`DebugDecisionCandidateSnapshot` copies candidate eligibility, rejection path,
+target IDs, utility and trait contributions, cooldown, commitment state, final
+score, and winner status. These ground-truth diagnostics exist only in debug
+inspection snapshots and are not fields of `PlayerIntelligenceDB`.
 
 ### 2.4 World-Time Presentation Snapshot
 
@@ -190,20 +351,22 @@ to stable FNV-1a integer hashes during loading; lookups by either ID or hash are
 cached dictionaries and do not perform runtime string searches.
 
 Hierarchy is deliberately limited to `Flat` and `SingleSupervisor`. Partitioning
-is also a registered set (`HomeLocation` and `WorkLocation`), rather than a
+is also a registered set (`HomeLocation`, `WorkLocation`, and `Global`), rather than a
 content-supplied query language. A generator contains bounded weighted sizes,
 an explicit remainder policy, data-driven role hashes, and (only for a
 single-supervisor hierarchy) span-of-control and depth limits. Runtime ECS
 network instances use `AgentNetworkData` ECS entities. `TypeHash` selects their
 validated type, `AnchorLocationId` is the partition location (or zero for an
 unanchored network), and `Ordinal` provides deterministic identity within a
-generated series.
+generated series. Global partitions use anchor `0`. `SeedsSocialGraph` allows a
+type to request reciprocal clique edges after generation; it is enabled for
+families and friend groups and disabled for companies.
 
 Agent membership is an `AgentNetworkMembership : ILinkRelation` stored on the
 agent and keyed by its `Network` entity. It carries the data-driven `RoleHash`
 and an optional `Supervisor` entity. The relation key guarantees at most one
-membership per agent/network pair while still allowing unrelated family and
-company memberships. The supervisor is intentionally not another relation key,
+membership per agent/network pair while still allowing unrelated family,
+friend-group, and company memberships. The supervisor is intentionally not another relation key,
 so deletion cleanup must update it explicitly.
 
 `AgentNetworkService` is the only supported mutation boundary. It validates
@@ -217,6 +380,55 @@ entity. Its type, anchor, and ordinal are immutable after creation.
 
 Persistent network storage remains linear in population. ECS data contains no
 display strings, member arrays, dictionaries, descendant closures, or redundant
-supervisor indexes: each generated agent contributes approximately one family
+supervisor indexes: each generated agent contributes one family, one friend-group,
 and one company relation. Resolved names and summary collections are transient
 debug projections and are discarded after presentation.
+
+### 2.8 Compiled Intent Catalog
+
+`ActionDefinition` remains the JSON authoring model. `IntentCompiler` resolves
+its fact, trait, attribute, target, and executor strings once at catalog load.
+The resulting `CompiledIntent` stores compiled predicate/numeric programs,
+trait bits, attribute indexes, compact target/executor enums, stable content
+hashes, and a dense `ushort RuntimeIndex`. `CompiledIntentCatalog` owns the
+index-ordered array and a hash-to-index map; simulation systems consume this
+catalog rather than mutable authoring trees.
+
+`IntentBitSet` maps the same dense runtime index to one bit in a packed
+`ulong[]`. `IntentCandidateIndex`, built by `CompiledIntentCatalog`, owns the
+global non-fallback set and the sets that remain available without a job, home,
+workplace, social relation, or network relation. Public immutable intersections support tooling
+and tests. The decision hot path instead intersects words through a struct
+enumerator, visiting set bits without allocating or scanning the compiled
+intent array. Target/executor contracts are the source of these conservative
+prerequisites; content authors do not maintain a second set of flags.
+
+Exactly one authoring definition must set `fallback: true`. Compilation requires
+that fallback to use target kind `none` and executor `wait`, producing a safe
+no-op decision when ordinary candidates are unavailable. Compiler failures use
+`actions.json:actions[index].field` paths so content authors can locate invalid
+references and incompatible structures directly.
+
+### 2.9 Decision Dependencies and Cache
+
+`FactDependencyMask` combines a flagged `FactDependencyCategory` with a 64-bit
+schema-attribute bitset. `CompiledNumericExpression` and `CompiledPredicate`
+derive masks from their pre-resolved instructions; `CompiledIntent` adds trait
+and target-query dependencies. Categories include social targets, network
+targets, target attributes, target location/affinity, and coordination. No
+dependency list is authored in JSON.
+
+`DecisionState.ChangedFacts` accumulates mutation signals until consideration.
+Its parallel score, eligibility, and target arrays are indexed by the compiled
+intent's dense runtime index, avoiding dictionaries per agent. `EvaluationCount`
+is diagnostic Ground Truth state and is not copied into player intelligence.
+
+### 2.10 Simulation Work Diagnostics
+
+`SimulationWorkDiagnostics` is a mutable, system-owned measurement sink with
+64-bit counters for decision passes, candidate evaluations, target population
+visits, edge visits, and transient allocation-sensitive operations.
+`SimulationWorkSnapshot` is its immutable value projection for tests and
+benchmark output. Neither type is an ECS component, and neither is exposed to
+the UI or `PlayerIntelligenceDB`; instrumentation is opt-in at system
+construction and does not affect decision state.

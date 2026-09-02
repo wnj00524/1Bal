@@ -43,13 +43,13 @@ public sealed class AgentNetworkCatalogTests
             root["generators"]![0]!["remainderHandling"] = "create-undersized";
         });
         yield return Case("invalid cardinality", root => root["networkTypes"]![0]!["maxNetworksPerAgent"] = 0);
-        yield return Case("invalid span", root => root["generators"]![1]!["targetSpanOfControl"] = 8);
-        yield return Case("invalid depth", root => root["generators"]![1]!["maximumDepth"] = 0);
+        yield return Case("invalid span", root => root["generators"]![2]!["targetSpanOfControl"] = 8);
+        yield return Case("invalid depth", root => root["generators"]![2]!["maximumDepth"] = 0);
         yield return Case("unknown partition", root => root["generators"]![0]!["partitionKey"] = "json-query");
         yield return Case("capacity exceeded", root =>
         {
-            root["generators"]![1]!["maximumSize"] = 401;
-            root["generators"]![1]!["sizeWeights"]![0]!["size"] = 401;
+            root["generators"]![2]!["maximumSize"] = 401;
+            root["generators"]![2]!["sizeWeights"]![0]!["size"] = 401;
         });
     }
 

@@ -12,8 +12,15 @@ namespace ProxyState.Simulation;
 public sealed class SocialGraphBuilder
 {
     private readonly int _relationshipsPerAgent;
+    private readonly HashSet<int> _socialNetworkTypes;
 
     public SocialGraphBuilder(int relationshipsPerAgent = SimulationDefaults.SocialRelationshipsPerAgent)
+        : this(null, relationshipsPerAgent)
+    {
+    }
+
+    public SocialGraphBuilder(AgentNetworkCatalog? networks,
+        int relationshipsPerAgent = SimulationDefaults.SocialRelationshipsPerAgent)
     {
         if (relationshipsPerAgent < 0)
         {
@@ -21,6 +28,8 @@ public sealed class SocialGraphBuilder
         }
 
         _relationshipsPerAgent = relationshipsPerAgent;
+        _socialNetworkTypes = networks?.Types.Where(type => type.SeedsSocialGraph)
+            .Select(type => type.Hash).ToHashSet() ?? new HashSet<int>();
     }
 
     public void Populate(EntityStore store, IReadOnlyList<Entity> agents, Random random)
@@ -30,10 +39,12 @@ public sealed class SocialGraphBuilder
         ArgumentNullException.ThrowIfNull(random);
 
         var count = agents.Count;
-        if (count < 2 || _relationshipsPerAgent == 0)
+        if (count < 2)
         {
             return;
         }
+
+        var pairs = new HashSet<(int First, int Second)>();
 
         // An undirected regular graph requires an even degree*vertex count.
         // This also gives sensible behavior for small test populations.
@@ -41,11 +52,6 @@ public sealed class SocialGraphBuilder
         if ((degree * count) % 2 != 0)
         {
             degree--;
-        }
-
-        if (degree <= 0)
-        {
-            return;
         }
 
         var shuffled = agents.ToArray();
@@ -56,7 +62,7 @@ public sealed class SocialGraphBuilder
         {
             for (var index = 0; index < count; index++)
             {
-                CreatePair(store, shuffled[index], shuffled[(index + offset) % count]);
+                CreatePair(store, shuffled[index], shuffled[(index + offset) % count], pairs);
             }
         }
 
@@ -65,13 +71,30 @@ public sealed class SocialGraphBuilder
             var opposite = count / 2;
             for (var index = 0; index < opposite; index++)
             {
-                CreatePair(store, shuffled[index], shuffled[index + opposite]);
+                CreatePair(store, shuffled[index], shuffled[index + opposite], pairs);
             }
+        }
+
+        // Content can mark bounded networks as interpersonal groups. Their
+        // cliques are unioned with the baseline graph, preserving minimum
+        // random degree while avoiding duplicate directional edge entities.
+        foreach (var network in store.Query<AgentNetworkData>().Entities.OrderBy(entity => entity.Id))
+        {
+            var data = network.GetComponent<AgentNetworkData>();
+            if (!_socialNetworkTypes.Contains(data.TypeHash)) continue;
+            var members = network.GetIncomingLinks<AgentNetworkMembership>()
+                .Select(link => link.Entity).OrderBy(entity => entity.Id).ToArray();
+            for (var first = 0; first < members.Length; first++)
+                for (var second = first + 1; second < members.Length; second++)
+                    CreatePair(store, members[first], members[second], pairs);
         }
     }
 
-    private static void CreatePair(EntityStore store, Entity first, Entity second)
+    private static void CreatePair(EntityStore store, Entity first, Entity second,
+        HashSet<(int First, int Second)> pairs)
     {
+        var key = first.Id < second.Id ? (first.Id, second.Id) : (second.Id, first.Id);
+        if (!pairs.Add(key)) return;
         store.CreateEntity(new EdgeData
         {
             Source = first,
@@ -98,8 +121,10 @@ public sealed class SocialGraphBuilder
 /// Periodically lets every directed relationship attempt to discover one
 /// currently hidden, present trait on its target.
 /// </summary>
-public sealed class InteractionSystem : QuerySystem<EdgeData>
+public sealed class InteractionSystem : QuerySystem<Identity>
 {
+    private readonly AgentSocialIndexes _socialIndexes;
+    private readonly SimulationWorkDiagnostics? _workDiagnostics;
     private readonly Random _random;
     private readonly int _intervalTicks;
     private readonly int _perceptionIndex;
@@ -110,10 +135,14 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
     private int _ticks;
 
     public InteractionSystem(
+        EntityStore store,
         ContentCatalog catalog,
         Random random,
-        int intervalTicks = SimulationDefaults.InteractionIntervalTicks)
+        int intervalTicks = SimulationDefaults.InteractionIntervalTicks,
+        AgentSocialIndexes? socialIndexes = null,
+        SimulationWorkDiagnostics? workDiagnostics = null)
     {
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(random);
         if (intervalTicks <= 0)
@@ -122,6 +151,8 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
         }
 
         _random = random;
+        _socialIndexes = socialIndexes ?? BuildIndexes(store);
+        _workDiagnostics = workDiagnostics;
         _intervalTicks = intervalTicks;
         _perceptionIndex = catalog.AgentAttributes.GetIndex("perception");
         _willpowerIndex = catalog.AgentAttributes.GetIndex("willpower");
@@ -130,6 +161,7 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
         _paranoidBit = _traits
             .FirstOrDefault(trait => string.Equals(trait.Id, "paranoid", StringComparison.OrdinalIgnoreCase))
             ?.Bit ?? 0L;
+        Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
     protected override void OnUpdate()
@@ -140,7 +172,28 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
             return;
         }
 
-        Query.ForEachEntity((ref EdgeData edge, Entity _) => Interact(ref edge));
+        // Iterate detailed sources, then only their packed adjacency ranges.
+        // Unrelated edges therefore never enter the interval's hot path.
+        Query.ForEachEntity((ref Identity identity, Entity source) =>
+        {
+            foreach (var indexedEdge in _socialIndexes.GetOutgoingEdges(source.Id))
+            {
+                _workDiagnostics?.RecordEdgeVisit();
+                if (_socialIndexes.TryGetEdge(indexedEdge.EdgeEntityId, out var edgeEntity) &&
+                    !edgeEntity.IsNull && edgeEntity.TryGetComponent<EdgeData>(out _))
+                {
+                    ref var edge = ref edgeEntity.GetComponent<EdgeData>();
+                    Interact(ref edge);
+                }
+            }
+        });
+    }
+
+    private static AgentSocialIndexes BuildIndexes(EntityStore store)
+    {
+        var indexes = new AgentSocialIndexes();
+        indexes.Rebuild(store);
+        return indexes;
     }
 
     private void Interact(ref EdgeData edge)
@@ -177,11 +230,17 @@ public sealed class InteractionSystem : QuerySystem<EdgeData>
             }
         }
 
+        var previousAffinity = edge.Affinity;
         edge.Affinity = CalculateAffinity(
             targetPsychology.TraitMask,
             edge.KnownTraitMask,
             _allTraitBits,
             _traits.Count);
+        if (edge.Affinity != previousAffinity && edge.Source.HasComponent<DecisionState>())
+        {
+            ref var decision = ref edge.Source.GetComponent<DecisionState>();
+            DecisionInvalidation.SignalTargetAvailability(ref decision);
+        }
     }
 
     private static float CalculateAffinity(long targetTraitMask, long knownTraitMask, long allTraitBits, int traitCount)
