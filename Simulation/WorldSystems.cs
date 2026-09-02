@@ -53,18 +53,20 @@ public sealed class WorldClockSystem : QuerySystem<WorldTime>
 // identifies an action by name or hash; executor definitions supply all semantics.
 public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTravel, IntentionState, ActivityState, DecisionState>
 {
-    private readonly EntityStore _store;
     private readonly WorldTopology _world;
     private readonly Entity _clockEntity;
+    private readonly AgentSocialIndexes _socialIndexes;
     private readonly Dictionary<int, ExecutorKind> _executors;
     private readonly Dictionary<int, int> _activityTypes;
 
-    public IntentExecutionSystem(EntityStore store, ContentCatalog catalog, Entity clockEntity)
+    public IntentExecutionSystem(EntityStore store, ContentCatalog catalog, Entity clockEntity,
+        AgentSocialIndexes? socialIndexes = null)
     {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(catalog);
         _world = catalog.World;
         _clockEntity = clockEntity;
+        _socialIndexes = socialIndexes ?? BuildIndexes(store);
         _executors = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Executor);
         _activityTypes = catalog.Intents.All.ToDictionary(intent => intent.Hash, intent => intent.Activity.Hash);
         Filter.AllTags(Tags.Get<Tier1LodTag>());
@@ -76,10 +78,6 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         var elapsedMinutes = time.DeltaSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute;
         if (elapsedMinutes <= 0d) return;
 
-        // A snapshot avoids repeated ECS lookups and remains stable throughout
-        // this execution tick when several agents target one another.
-        var entityLocations = _store.Query<AgentLocation>().Entities.ToDictionary(
-            entity => entity.Id, entity => entity.GetComponent<AgentLocation>().CurrentLocationId);
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
 
         Query.ForEachEntity((ref AgentLocation location, ref AgentTravel travel,
@@ -107,7 +105,7 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                 }
             }
 
-            var destination = ResolveDestination(executor, intention, location, entityLocations, ref decision);
+            var destination = ResolveDestination(executor, intention, location, ref decision);
             if (destination is null)
             {
                 CancelTravel(ref travel);
@@ -149,8 +147,8 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
         });
     }
 
-    private static int? ResolveDestination(ExecutorKind executor, IntentionState intention,
-        AgentLocation location, IReadOnlyDictionary<int, int> entityLocations, ref DecisionState decision)
+    private int? ResolveDestination(ExecutorKind executor, IntentionState intention,
+        AgentLocation location, ref DecisionState decision)
     {
         switch (executor)
         {
@@ -162,14 +160,23 @@ public sealed class IntentExecutionSystem : QuerySystem<AgentLocation, AgentTrav
                 DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
             case ExecutorKind.PerformWithEntity:
-                if (intention.TargetEntityId != 0 && entityLocations.TryGetValue(intention.TargetEntityId, out var targetLocation))
-                    return targetLocation;
+                if (intention.TargetEntityId != 0 &&
+                    _socialIndexes.TryGetAgent(intention.TargetEntityId, out var target) &&
+                    !target.IsNull && target.TryGetComponent<AgentLocation>(out var targetLocation))
+                    return targetLocation.CurrentLocationId;
                 DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
             default:
                 DecisionInvalidation.SignalTargetAvailability(ref decision);
                 return null;
         }
+    }
+
+    private static AgentSocialIndexes BuildIndexes(EntityStore store)
+    {
+        var indexes = new AgentSocialIndexes();
+        indexes.Rebuild(store);
+        return indexes;
     }
 
     private void BeginTravel(int start, int destination, ref AgentTravel travel, ref DecisionState decision)

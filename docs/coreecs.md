@@ -49,7 +49,7 @@
 **Goal:** Handle target interrogation/surveillance based on Perception vs Willpower.
 
 * `SocialGraphBuilder` creates a randomized simple graph with at least five peers per agent (or the largest valid degree for smaller populations), then adds reciprocal clique edges for every family and friend group whose type enables `seedsSocialGraph`. Duplicate directed pairs are suppressed.
-* `InteractionSystem` runs on every 60th ECS update by default. The interval is injectable for tests and future tuning.
+* `InteractionSystem` runs on every 60th ECS update by default. The interval is injectable for tests and future tuning. On an interval it queries eligible detailed source agents and enumerates only each source's packed outgoing adjacency range; it no longer scans every `EdgeData` entity.
 * Each edge performs an opposed d100 contest: `Source` rolls d100 plus schema-defined `perception`; `Target` rolls d100 plus schema-defined `willpower`, with a 20-point bonus when the target has the `Paranoid` trait.
 * On a source victory, one present and not-yet-known target trait is selected and revealed with bitwise `OR` on `EdgeData.KnownTraitMask` (for example, `KnownTraitMask |= 0x0004`).
 * Reciprocal edges discover independently because each direction owns a separate knowledge mask.

@@ -342,7 +342,7 @@ public sealed class SimulationTests
         var source = CreateAgent(store, catalog, perception: 100f, willpower: 1f, traitMask: 0L);
         var target = CreateAgent(store, catalog, perception: 1f, willpower: 1f, traitMask: 1L);
         var edgeEntity = store.CreateEntity(new EdgeData { Source = source, Target = target });
-        var system = new InteractionSystem(catalog, new SequenceRandom(100, 1, 0), intervalTicks: 2);
+        var system = new InteractionSystem(store, catalog, new SequenceRandom(100, 1, 0), intervalTicks: 2);
         var root = new SystemRoot(store) { system };
 
         root.Update(default);
@@ -363,7 +363,7 @@ public sealed class SimulationTests
         var reverse = store.CreateEntity(new EdgeData { Source = target, Target = source });
         var root = new SystemRoot(store)
         {
-            new InteractionSystem(catalog, new SequenceRandom(100, 1, 0), intervalTicks: 1)
+            new InteractionSystem(store, catalog, new SequenceRandom(100, 1, 0), intervalTicks: 1)
         };
 
         root.Update(default);
@@ -389,7 +389,7 @@ public sealed class SimulationTests
         });
         var root = new SystemRoot(store)
         {
-            new InteractionSystem(catalog, new SequenceRandom(100, 1), intervalTicks: 1)
+            new InteractionSystem(store, catalog, new SequenceRandom(100, 1), intervalTicks: 1)
         };
 
         root.Update(default);
@@ -410,7 +410,7 @@ public sealed class SimulationTests
         var edgeEntity = store.CreateEntity(new EdgeData { Source = source, Target = target });
         var root = new SystemRoot(store)
         {
-            new InteractionSystem(catalog, new SequenceRandom(2, 100), intervalTicks: 1)
+            new InteractionSystem(store, catalog, new SequenceRandom(2, 100), intervalTicks: 1)
         };
 
         root.Update(default);
@@ -620,7 +620,9 @@ public sealed class SimulationTests
         var catalog = LoadCatalog();
         var store = new EntityStore();
         var clock = new WorldClockSystem(store);
-        var target = store.CreateEntity(new AgentLocation { CurrentLocationId = 3004 });
+        var target = store.CreateEntity(
+            new Identity { NameId = 2 },
+            new AgentLocation { CurrentLocationId = 3004 });
         var actor = store.CreateEntity(
             new AgentLocation { CurrentLocationId = 3001 },
             new AgentTravel { RouteLocationIds = Array.Empty<int>() },
@@ -636,11 +638,39 @@ public sealed class SimulationTests
         Assert.Equal(3004, actor.GetComponent<AgentLocation>().CurrentLocationId);
         Assert.Equal(ActivityPhase.Performing, actor.GetComponent<ActivityState>().Phase);
 
-        actor.GetComponent<IntentionState>().TargetEntityId = int.MaxValue;
+        target.DeleteEntity();
         actor.GetComponent<DecisionState>().Dirty = false;
         AdvanceMinutes(clock, root, 1);
         Assert.True(actor.GetComponent<DecisionState>().Dirty);
         Assert.Equal(ActivityPhase.Blocked, actor.GetComponent<ActivityState>().Phase);
+    }
+
+    [Fact]
+    public void InteractionWorkOnlyVisitsEdgesOfDetailedSources()
+    {
+        var catalog = LoadCatalog();
+        var store = new EntityStore();
+        var source = CreateAgent(store, catalog, perception: 100f, willpower: 1f, traitMask: 0L);
+        var target = CreateAgent(store, catalog, perception: 1f, willpower: 1f, traitMask: 1L);
+        store.CreateEntity(new EdgeData { Source = source, Target = target });
+        for (var index = 0; index < 100; index++)
+        {
+            var unrelatedSource = store.CreateEntity(new Identity { NameId = 1000 + index });
+            var unrelatedTarget = store.CreateEntity(new Identity { NameId = 2000 + index });
+            store.CreateEntity(new EdgeData { Source = unrelatedSource, Target = unrelatedTarget });
+        }
+        var indexes = new AgentSocialIndexes();
+        indexes.Rebuild(store);
+        var diagnostics = new SimulationWorkDiagnostics();
+        var root = new SystemRoot(store)
+        {
+            new InteractionSystem(store, catalog, new SequenceRandom(100, 1, 0), intervalTicks: 1,
+                socialIndexes: indexes, workDiagnostics: diagnostics)
+        };
+
+        root.Update(default);
+
+        Assert.Equal(1, diagnostics.Snapshot().EdgeVisits);
     }
 
     [Fact]
@@ -1005,8 +1035,10 @@ public sealed class SimulationTests
         values[catalog.AgentAttributes.GetIndex("perception")] = perception;
         values[catalog.AgentAttributes.GetIndex("willpower")] = willpower;
         return store.CreateEntity(
+            new Identity { NameId = 1 },
             new AgentAttributes { Values = values },
-            new Psychology { TraitMask = traitMask });
+            new Psychology { TraitMask = traitMask },
+            Tags.Get<Tier1LodTag>());
     }
 
     private static string[] RelationshipShape(EntityStore store)

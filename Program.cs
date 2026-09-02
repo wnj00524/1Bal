@@ -34,9 +34,9 @@ public static class Program
             new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode,
                 socialIndexes: agentSocialIndexes),
             new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
-            new IntentExecutionSystem(store, catalog, clock.ClockEntity),
+            new IntentExecutionSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
-            new InteractionSystem(catalog, new Random())
+            new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes)
         };
 
         Raylib.InitWindow(1280, 720, "Proxy State - Applications");
