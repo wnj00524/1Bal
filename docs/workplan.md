@@ -208,6 +208,6 @@ sequential milestones below.
 
 ## [Milestone 20: Interactive 100,000-Agent Delivery](https://github.com/wnj00524/proxystate/milestone/21)
 
-- [ ] [M20.1 — Add incremental player-intelligence projection and investigation commands](https://github.com/wnj00524/proxystate/issues/120)
+- [x] [M20.1 — Add incremental player-intelligence projection and investigation commands](https://github.com/wnj00524/proxystate/issues/120)
 - [ ] [M20.2 — Virtualize dossier and debug inspection](https://github.com/wnj00524/proxystate/issues/121)
 - [ ] [M20.3 — Add population CLI and complete 100k verification](https://github.com/wnj00524/proxystate/issues/122)

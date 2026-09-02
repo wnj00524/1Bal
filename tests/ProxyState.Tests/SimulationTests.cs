@@ -179,7 +179,7 @@ public sealed class SimulationTests
             KnownTraitMask = 8L
         });
 
-        var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
+        var intelligence = PlayerIntelligenceDB.Create(store, catalog);
 
         Assert.Equal(new[] { operativeOne.Id, operativeTwo.Id }, intelligence.OperativeEntityIds);
         Assert.Equal(1L | 4L, intelligence.Agents.Single(agent => agent.EntityId == target.Id).KnownTraitMask);
@@ -210,7 +210,7 @@ public sealed class SimulationTests
             new AgentTravel { RouteLocationIds = Array.Empty<int>() });
 
         var snapshot = DebugSnapshotBuilder.Capture(store, catalog).Single();
-        var intelligence = PlayerIntelligenceDB.Capture(store, catalog);
+        var intelligence = PlayerIntelligenceDB.Create(store, catalog);
 
         Assert.Equal(1, snapshot.SecretStateHash);
         Assert.Equal("Surveillance", snapshot.SecretStateName);

@@ -337,12 +337,23 @@ select all available agents. Selection uses the spawner's injected `Random`, so
 seeded runs reproduce the same team membership.
 
 `PlayerIntelligenceAgentSnapshot` contains an agent ID, name ID, Operative
-marker, intelligence role, and the team-known trait mask. It intentionally omits
-the ground-truth secret state. `PlayerIntelligenceDB` contains a
-read-only list of these snapshots plus the selected Operative IDs. Its capture
-boundary scans only outgoing edges whose source has `OperativeTag` and combines
-their known trait masks per target with bitwise `OR`. It does not copy
-`Psychology` or retain ECS entities. Operatives are assigned the `Officer` role
+marker, intelligence role, team-known trait mask, and sanitized investigation
+flag. It intentionally omits the ground-truth secret state and all LOD details.
+`PlayerIntelligenceDB` owns a sorted snapshot array exposed through a read-only
+view plus the selected Operative IDs. Its one-time creation boundary scans
+outgoing edges whose source has `OperativeTag` and combines their known trait
+masks per target with bitwise `OR`; subsequent stable-ID lookups use binary
+search. It does not copy `Psychology` or retain ECS entities. Operative discovery
+and investigation events replace only affected copied entries.
+
+`OperativeTraitDiscoveryEvent` contains a target stable ID and sanitized known
+mask. `InvestigationChangedEvent` contains a stable ID and enabled flag.
+`InvestigationCommand` carries the same presentation request into the
+simulation-owned `InvestigationCommandQueue`; its result reports accepted and
+rejected command counts without exposing `AgentLodService` to ImGui.
+`PlayerIntelligenceProjectionDiagnostics` records one-time agent/edge visits and
+incremental replacements so scaling tests can prove that reads do not rescan ECS.
+Operatives are assigned the `Officer` role
 when spawned; other agents default to `None`. The dossier displays non-empty
 roles alongside each agent and applies each configured trait bit with
 `knownMask & trait.Bit` before choosing a visible name or `Trait: ???`.

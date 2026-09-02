@@ -171,6 +171,6 @@ The scans to remove in later Milestone 17 slices are explicitly:
   network selection creates transient candidate sets and ordered iterators;
 * `IntentExecutionSystem` copies every agent location on every elapsed tick;
 * `InteractionSystem` visits every directed `EdgeData` entity on its interval;
-* `PlayerIntelligenceDB.Capture` and debug/dossier projections retain separate
+* The long-lived `PlayerIntelligenceDB` and debug/dossier projections retain separate
   full-population or relationship scans. Those presentation-boundary scans are
   recorded here but remain explicitly outside Milestone 17 optimization scope.
