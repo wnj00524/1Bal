@@ -483,7 +483,7 @@ public sealed class SimulationTests
     }
 
     [Fact]
-    public void SpawnerCreatesTheRequestedPopulationWithGeneralizedAttributesAndTierOneTag()
+    public void SpawnerCreatesTheRequestedPopulationWithGeneralizedAttributesAndLodState()
     {
         var catalog = LoadCatalog();
         var store = new EntityStore();
@@ -495,7 +495,10 @@ public sealed class SimulationTests
         Assert.Equal(SimulationDefaults.AgentCount, store.Query<AgentAttributes>().Count);
         Assert.Equal(SimulationDefaults.AgentCount, store.Query<Psychology>().Count);
         Assert.Equal(SimulationDefaults.AgentCount, store.Query<AgentState>().Count);
-        Assert.Equal(SimulationDefaults.AgentCount, store.Query<AgentAttributes>().AllTags(Tags.Get<Tier1LodTag>()).Count);
+        Assert.Equal(SimulationDefaults.OperativeCount,
+            store.Query<AgentAttributes>().AllTags(Tags.Get<Tier1LodTag>()).Count);
+        Assert.Equal(SimulationDefaults.AgentCount,
+            store.Query<AgentAttributes>().AllTags(Tags.Get<DetailedSimulationTag>()).Count);
     }
 
     [Fact]

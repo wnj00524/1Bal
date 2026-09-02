@@ -90,15 +90,16 @@ public sealed class AgentLodContractTests
     }
 
     [Fact]
-    public void SpawnedAgentsRetainTierOneDetailedBootstrap()
+    public void SpawnedAgentsReceivePoiClassificationAfterBootstrap()
     {
         var catalog = LoadCatalog();
         var store = new EntityStore();
 
         new AgentSpawner(catalog).Spawn(store, 8, 18_001);
 
-        Assert.Equal(8, store.Query<AgentLodState>()
+        Assert.Equal(5, store.Query<AgentLodState>()
             .AllTags(Tags.Get<Tier1LodTag, DetailedSimulationTag>()).Count);
+        Assert.Equal(8, store.Query<AgentLodState>().AllTags(Tags.Get<DetailedSimulationTag>()).Count);
         Assert.All(store.Query<AgentLodState>().Entities,
             entity => Assert.True(AgentLodService.HasExactlyOneTierTag(entity)));
     }

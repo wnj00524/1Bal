@@ -135,6 +135,13 @@ Tier 1 and Tier 2 are detailed; Tier 3 is not. During the Milestone 18 rollout,
 a desired Tier 3 assignment is materialized as Tier 2 because Tier 3 remains
 disabled. The coarse-profile fields are reserved contracts for Milestone 19.
 
+`AgentLodService` owns a stable-ID POI set and a cached, sorted direct-neighbour
+list per POI. `DirectPoiReferenceCount` is incremented once for each operative
+or investigated direct neighbour, preventing an agent from leaving Tier 2 while
+another POI still references it. Its drained `InvestigationChangedEvent` values
+contain only `AgentId` and `Enabled`; the copied records can cross into a later
+player-intelligence projection without leaking ECS `Entity` handles or LOD state.
+
 `AgentAttributeSchema` loads the ordered numeric definitions from
 `data/agent-schema.json` and resolves IDs to indexes. Each generated agent stores
 one floating-point value per definition, so adding an attribute requires only a
