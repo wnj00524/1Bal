@@ -23,6 +23,7 @@ public static class Program
         // A fresh seed gives each interactive run a new population. The spawner
         // accepts Random explicitly so tests and future replay tools can inject one.
         spawner.Spawn(store, SimulationDefaults.AgentCount, new Random());
+        var lodService = spawner.LodService ?? throw new InvalidOperationException("Agent LOD service was not initialized by spawning.");
         // Retain the immutable bootstrap indexes for indexed simulation systems
         // introduced by subsequent Milestone 17 slices.
         var agentSocialIndexes = spawner.Indexes;
@@ -33,7 +34,7 @@ public static class Program
             clock,
             new AgentDecisionSystem(store, catalog, clock.ClockEntity, captureDiagnostics: debugMode,
                 socialIndexes: agentSocialIndexes),
-            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
+            new CoordinationSystem(store, catalog, clock.ClockEntity, agentSocialIndexes, lodService),
             new IntentExecutionSystem(store, catalog, clock.ClockEntity, agentSocialIndexes),
             new ActivityEffectsSystem(catalog, clock.ClockEntity),
             new InteractionSystem(store, catalog, new Random(), socialIndexes: agentSocialIndexes)
@@ -55,6 +56,10 @@ public static class Program
                 // Simulation runs before rendering so the frame presents the
                 // state produced by the current ECS tick.
                 clock.Advance(Raylib.GetFrameTime());
+                // Coarse effects advance before detailed decisions. Promotion
+                // requests therefore observe a caught-up representation.
+                lodService.UpdateCoarse((long)(clock.ClockEntity.GetComponent<WorldTime>().ElapsedSimulationSeconds /
+                    SimulationDefaults.SimulationSecondsPerMinute));
                 systems.Update(default);
                 var worldTime = WorldTimeSnapshot.From(clock.ClockEntity.GetComponent<WorldTime>());
                 var intelligence = PlayerIntelligenceDB.Capture(store, catalog);

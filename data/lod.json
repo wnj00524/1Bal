@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "tier3Enabled": false,
+  "tier3Enabled": true,
   "tier2": {
     "decisionIntervalMinutes": 60,
     "relatedBy": [
@@ -11,6 +11,16 @@
   },
   "demotionPolicy": "endOfDay",
   "tier3": {
-    "shardCount": 24
+    "shardCount": 24,
+    "workday": [
+      { "id": "workday-rest", "intent": "rest", "kind": "fixed", "location": "home", "fillRemaining": true, "effectRole": "initiator" },
+      { "id": "outbound-commute", "intent": "rest", "kind": "commuteToWork", "location": "work", "effectRole": "initiator" },
+      { "id": "scheduled-work", "intent": "work", "kind": "jobWork", "location": "work", "effectRole": "initiator" },
+      { "id": "return-commute", "intent": "rest", "kind": "commuteHome", "location": "home", "effectRole": "initiator" }
+    ],
+    "nonWorkday": [
+      { "id": "nonwork-rest", "intent": "rest", "kind": "fixed", "location": "home", "fillRemaining": true, "effectRole": "initiator" }
+    ],
+    "traitDurationModifiers": []
   }
 }

@@ -68,6 +68,6 @@ public sealed class DecisionPerformanceBaselineTests(ITestOutputHelper output)
         var selectiveEvaluations = totalEvaluations - fullEvaluations;
         output.WriteLine($"selectiveElapsedMs={stopwatch.Elapsed.TotalMilliseconds:F3}; selectiveAllocatedBytes={selectiveAllocatedBytes}; selectiveEvaluations={selectiveEvaluations}; fullEvaluations={fullEvaluations}");
         Assert.True(selectiveEvaluations <= population * measuredMinutes * 3L);
-        Assert.Equal(population, store.Query<IntentionState>().Count);
+        Assert.InRange(store.Query<IntentionState>().Count, SimulationDefaults.OperativeCount, population);
     }
 }

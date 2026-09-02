@@ -235,6 +235,21 @@ copy an entry and leave its old hash, faction ID, or trait bit in place.
 
 ## Checking your work
 
+### `lod.json`: Tier 3 routines
+
+Tier 3 routine content is a timetable template, not a list of hard-coded game
+actions. `workday` must include one `jobWork`, `commuteToWork`, and
+`commuteHome` segment; `nonWorkday` cannot contain those kinds. Each routine
+has one fixed segment with `fillRemaining: true`, which occupies all minutes
+not reserved by the job, commute, or other fixed segments. Each segment uses a
+unique stable `id`, an existing action `intent`, `home` or `work` location, and
+an `initiator` or `participant` `effectRole` that exists on that action.
+
+`traitDurationModifiers` adjusts a named segment by whole minutes for agents
+with a named trait. Both names are validated when content loads. Validation
+errors identify a path such as `lod.json:tier3.workday[2].intent`; correct that
+specific authored reference rather than adding a code special case.
+
 From the project folder, run:
 
 ```text

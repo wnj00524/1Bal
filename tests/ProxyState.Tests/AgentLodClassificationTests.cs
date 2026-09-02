@@ -38,9 +38,8 @@ public sealed class AgentLodClassificationTests
         AssertTier(agents[3], AgentLodTier.Tier3, 0); // coworker only
         AssertTier(agents[4], AgentLodTier.Tier3, 0);
 
-        // Tier 3 is desired but materializes as detailed Tier 2 during M18.
-        Assert.True(agents[2].Tags.Has<Tier2LodTag>());
-        Assert.True(agents[2].Tags.Has<DetailedSimulationTag>());
+        Assert.True(agents[2].Tags.Has<Tier3LodTag>());
+        Assert.False(agents[2].Tags.Has<DetailedSimulationTag>());
     }
 
     [Fact]

@@ -91,6 +91,29 @@ public sealed class Tier2LodDocument
 public sealed class Tier3LodDocument
 {
     public int ShardCount { get; init; }
+    public List<Tier3RoutineSegmentDocument>? Workday { get; init; }
+    public List<Tier3RoutineSegmentDocument>? NonWorkday { get; init; }
+    public List<TraitDurationModifierDocument>? TraitDurationModifiers { get; init; }
+}
+
+// These names are authoring-only. Tier 3 systems consume the compiled enum
+// representation below and never decide behaviour from an intent ID string.
+public sealed class Tier3RoutineSegmentDocument
+{
+    public string? Id { get; init; }
+    public string? Intent { get; init; }
+    public string? Kind { get; init; }
+    public string? Location { get; init; }
+    public int? FixedMinutes { get; init; }
+    public bool FillRemaining { get; init; }
+    public string? EffectRole { get; init; }
+}
+
+public sealed class TraitDurationModifierDocument
+{
+    public string? Trait { get; init; }
+    public string? SegmentId { get; init; }
+    public int Minutes { get; init; }
 }
 
 public enum AgentRelationKind : byte
@@ -105,6 +128,16 @@ public enum AgentDemotionPolicy : byte
     EndOfDay
 }
 
+public enum CoarseRoutineSegmentKind : byte { Fixed, JobWork, CommuteToWork, CommuteHome }
+public enum CoarseRoutineLocation : byte { Home, Work }
+public sealed record CompiledCoarseRoutineSegment(
+    string Id, ushort TemplateIndex, ushort RuntimeIndex, int IntentHash, CoarseRoutineSegmentKind Kind,
+    CoarseRoutineLocation Location, int FixedMinutes, bool FillRemaining, EffectSubject EffectRole);
+public sealed record CompiledTraitDurationModifier(long TraitBit, ushort SegmentIndex, int Minutes);
+public sealed record CompiledTier3Routines(
+    CompiledCoarseRoutineSegment[] Workday, CompiledCoarseRoutineSegment[] NonWorkday,
+    CompiledTraitDurationModifier[] TraitDurationModifiers);
+
 // Runtime settings contain enums rather than authoring strings, so simulation
 // code cannot silently acquire a second interpretation of the JSON contract.
 public sealed record AgentLodSettings(
@@ -113,7 +146,8 @@ public sealed record AgentLodSettings(
     int Tier2DecisionIntervalMinutes,
     IReadOnlyList<AgentRelationKind> RelatedBy,
     AgentDemotionPolicy DemotionPolicy,
-    int Tier3ShardCount);
+    int Tier3ShardCount,
+    CompiledTier3Routines Tier3Routines);
 
 public sealed class AgentAttributeSchema
 {
@@ -216,12 +250,13 @@ public sealed class ContentCatalog
         var agentAttributes = Validate(traits, actions, factions, schemaDocument.Attributes);
         var world = ValidateWorld(jobs, worldDocument.Locations, worldDocument.Connections);
         var networks = AgentNetworkCatalog.Load(networksPath, options);
-        var lod = ValidateLod(lodDocument);
         var intents = IntentCompiler.Compile(actions, traits, agentAttributes, networks);
+        var lod = ValidateLod(lodDocument, intents, traits, world, jobs);
         return new ContentCatalog(traits, actions, intents, secretStates, factions, agentAttributes, jobs, world, networks, lod);
     }
 
-    private static AgentLodSettings ValidateLod(LodDocument document)
+    private static AgentLodSettings ValidateLod(LodDocument document, CompiledIntentCatalog intents,
+        IReadOnlyList<TraitDefinition> traits, WorldTopology world, IReadOnlyList<JobDefinition> jobs)
     {
         if (document.Tier2 is null)
             throw new InvalidDataException("lod.json:tier2 is required.");
@@ -260,9 +295,109 @@ public sealed class ContentCatalog
         if (document.Tier3.ShardCount <= 0)
             throw new InvalidDataException("lod.json:tier3.shardCount must be positive.");
 
+        var routines = CompileTier3Routines(document.Tier3, intents, traits, world, jobs);
         return new AgentLodSettings(document.Enabled, document.Tier3Enabled,
             document.Tier2.DecisionIntervalMinutes, relations.AsReadOnly(), demotionPolicy,
-            document.Tier3.ShardCount);
+            document.Tier3.ShardCount, routines);
+    }
+
+    private static CompiledTier3Routines CompileTier3Routines(Tier3LodDocument tier3,
+        CompiledIntentCatalog intents, IReadOnlyList<TraitDefinition> traits, WorldTopology world,
+        IReadOnlyList<JobDefinition> jobs)
+    {
+        if (tier3.Workday is null || tier3.NonWorkday is null || tier3.TraitDurationModifiers is null)
+            throw new InvalidDataException("lod.json:tier3 must define workday, nonWorkday, and traitDurationModifiers.");
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var workday = CompileRoutine(tier3.Workday, "workday", intents, ids, 0);
+        var nonWorkday = CompileRoutine(tier3.NonWorkday, "nonWorkday", intents, ids, workday.Length);
+        ValidateCommuteWindows(jobs);
+        var segments = workday.Concat(nonWorkday).ToArray();
+        var indexById = segments.Select((segment, index) => new { segment.Id, Index = (ushort)index })
+            .ToDictionary(item => item.Id, item => item.Index, StringComparer.OrdinalIgnoreCase);
+        var traitBits = traits.ToDictionary(trait => trait.Id, trait => trait.Bit, StringComparer.OrdinalIgnoreCase);
+        var modifiers = tier3.TraitDurationModifiers.Select((modifier, index) =>
+        {
+            var path = $"lod.json:tier3.traitDurationModifiers[{index}]";
+            if (string.IsNullOrWhiteSpace(modifier.Trait) || !traitBits.TryGetValue(modifier.Trait, out var bit))
+                throw new InvalidDataException($"{path}.trait references unknown trait '{modifier.Trait}'.");
+            if (string.IsNullOrWhiteSpace(modifier.SegmentId) || !indexById.TryGetValue(modifier.SegmentId, out var segmentIndex))
+                throw new InvalidDataException($"{path}.segmentId references unknown segment '{modifier.SegmentId}'.");
+            if (modifier.Minutes == 0)
+                throw new InvalidDataException($"{path}.minutes must be non-zero.");
+            return new CompiledTraitDurationModifier(bit, segmentIndex, modifier.Minutes);
+        }).ToArray();
+        return new CompiledTier3Routines(workday, nonWorkday, modifiers);
+    }
+
+    private static CompiledCoarseRoutineSegment[] CompileRoutine(IReadOnlyList<Tier3RoutineSegmentDocument> source,
+        string routineName, CompiledIntentCatalog intents, HashSet<string> allIds, int templateOffset)
+    {
+        if (source.Count == 0) throw new InvalidDataException($"lod.json:tier3.{routineName} must not be empty.");
+        var result = new CompiledCoarseRoutineSegment[source.Count];
+        var fillCount = 0; var fixedMinutes = 0; var jobCount = 0; var outboundCount = 0; var returnCount = 0;
+        for (var index = 0; index < source.Count; index++)
+        {
+            var item = source[index]; var path = $"lod.json:tier3.{routineName}[{index}]";
+            if (string.IsNullOrWhiteSpace(item.Id) || !allIds.Add(item.Id))
+                throw new InvalidDataException($"{path}.id must be non-empty and globally unique.");
+            if (string.IsNullOrWhiteSpace(item.Intent) || !intents.All.Any(intent => string.Equals(intent.Id, item.Intent, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"{path}.intent references unknown intent '{item.Intent}'.");
+            var intent = intents.All.Single(intent => string.Equals(intent.Id, item.Intent, StringComparison.OrdinalIgnoreCase));
+            var kind = item.Kind switch
+            {
+                "fixed" => CoarseRoutineSegmentKind.Fixed,
+                "jobWork" => CoarseRoutineSegmentKind.JobWork,
+                "commuteToWork" => CoarseRoutineSegmentKind.CommuteToWork,
+                "commuteHome" => CoarseRoutineSegmentKind.CommuteHome,
+                _ => throw new InvalidDataException($"{path}.kind is unsupported.")
+            };
+            var location = item.Location switch
+            {
+                "home" => CoarseRoutineLocation.Home,
+                "work" => CoarseRoutineLocation.Work,
+                _ => throw new InvalidDataException($"{path}.location must be 'home' or 'work'.")
+            };
+            var role = item.EffectRole switch
+            {
+                "initiator" => EffectSubject.Initiator,
+                "participant" => EffectSubject.Participant,
+                _ => throw new InvalidDataException($"{path}.effectRole must be 'initiator' or 'participant'.")
+            };
+            if (!intent.Effects.Any(effect => effect.Subject == role))
+                throw new InvalidDataException($"{path}.effectRole has no matching effect on intent '{item.Intent}'.");
+            if (item.FillRemaining) fillCount++;
+            if (item.FixedMinutes is < 0) throw new InvalidDataException($"{path}.fixedMinutes cannot be negative.");
+            if (kind == CoarseRoutineSegmentKind.Fixed && !item.FillRemaining && item.FixedMinutes is null)
+                throw new InvalidDataException($"{path}.fixedMinutes is required for a fixed segment unless fillRemaining is true.");
+            if (kind != CoarseRoutineSegmentKind.Fixed && (item.FixedMinutes is not null || item.FillRemaining))
+                throw new InvalidDataException($"{path} job and commute segments cannot define fixedMinutes or fillRemaining.");
+            fixedMinutes += item.FixedMinutes ?? 0;
+            jobCount += kind == CoarseRoutineSegmentKind.JobWork ? 1 : 0;
+            outboundCount += kind == CoarseRoutineSegmentKind.CommuteToWork ? 1 : 0;
+            returnCount += kind == CoarseRoutineSegmentKind.CommuteHome ? 1 : 0;
+            result[index] = new(item.Id, checked((ushort)(templateOffset + index)), intent.RuntimeIndex, intent.Hash, kind, location, item.FixedMinutes ?? 0, item.FillRemaining, role);
+        }
+        if (fillCount != 1) throw new InvalidDataException($"lod.json:tier3.{routineName} must contain exactly one fillRemaining segment.");
+        if (fixedMinutes >= SimulationDefaults.SimulationMinutesPerDay)
+            throw new InvalidDataException($"lod.json:tier3.{routineName} fixed durations leave no minute for fillRemaining.");
+        var isWorkday = routineName == "workday";
+        if (isWorkday && (jobCount != 1 || outboundCount != 1 || returnCount != 1))
+            throw new InvalidDataException("lod.json:tier3.workday must contain one jobWork, commuteToWork, and commuteHome segment.");
+        if (!isWorkday && (jobCount != 0 || outboundCount != 0 || returnCount != 0))
+            throw new InvalidDataException("lod.json:tier3.nonWorkday cannot contain job or commute segments.");
+        return result;
+    }
+
+    private static void ValidateCommuteWindows(IReadOnlyList<JobDefinition> jobs)
+    {
+        foreach (var job in jobs)
+        {
+            // A route is assignment-specific and therefore cannot be rejected
+            // at catalog load. The profile compiler validates its exact length;
+            // this check still rejects a job interval with no possible commute.
+            if (job.WorkStartMinute <= 0 || job.WorkEndMinute >= SimulationDefaults.SimulationMinutesPerDay)
+                throw new InvalidDataException($"lod.json:tier3 commute cannot fit around job '{job.Id}'.");
+        }
     }
 
     private static IReadOnlyList<T> LoadFile<T>(

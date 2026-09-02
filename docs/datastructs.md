@@ -432,3 +432,18 @@ visits, edge visits, and transient allocation-sensitive operations.
 benchmark output. Neither type is an ECS component, and neither is exposed to
 the UI or `PlayerIntelligenceDB`; instrumentation is opt-in at system
 construction and does not affect decision state.
+
+### 2.11 Tier 3 Routine Contracts
+
+`data/lod.json` owns the coarse weekly routine templates. A workday and a
+non-workday each contain exactly one `fillRemaining` fixed segment. Workdays
+also contain exactly one `jobWork`, `commuteToWork`, and `commuteHome` segment.
+Every segment identifies an existing intent, its symbolic home/work location,
+and the authored effect role. `ContentCatalog` compiles these values into
+`CompiledCoarseRoutineSegment` records carrying an intent hash, dense runtime
+intent index, compact segment/location enums, and `EffectSubject`; no Tier 3
+runtime system parses a routine or branches on named intent IDs. Trait duration
+rules are compiled from trait IDs and segment IDs into a trait bit and segment
+index. The catalog rejects unknown references, duplicate IDs, invalid roles,
+negative or missing fixed durations, bad fill counts, invalid routine kinds,
+and infeasible job commute windows with `lod.json` paths for content authors.

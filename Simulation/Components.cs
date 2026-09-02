@@ -187,6 +187,13 @@ public struct AgentLocation : IComponent
     public int CurrentLocationId;
 }
 
+// Tier 3 keeps only the scalar route cost needed for its shared itinerary.
+// Detailed route arrays remain exclusively in AgentTravel after promotion.
+public struct AgentCommute : IComponent
+{
+    public int TravelMinutes;
+}
+
 // A network instance is an ECS entity. Type and role identifiers are stable
 // catalog hashes; an anchor of zero deliberately represents no location.
 public struct AgentNetworkData : IComponent
@@ -242,6 +249,7 @@ public static class SimulationDefaults
     public const double SimulationSecondsPerDay = 86_400d;
     public const double SimulationSecondsPerMinute = 60d;
     public const int SimulationMinutesPerDay = 1_440;
+    public const int SimulationMinutesPerWeek = SimulationMinutesPerDay * DaysPerWeek;
     public const int DaysPerWeek = 7;
     public const string ResidentialLocationType = "residential";
     public const int SocialRelationshipsPerAgent = 5;

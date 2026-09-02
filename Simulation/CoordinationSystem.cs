@@ -17,9 +17,10 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     private readonly Dictionary<int, JobDefinition> _jobs;
     private readonly CompiledIntent _fallback;
     private readonly AgentSocialIndexes _socialIndexes;
+    private readonly AgentLodService? _lodService;
 
     public CoordinationSystem(EntityStore store, ContentCatalog catalog, Entity clock,
-        AgentSocialIndexes? socialIndexes = null)
+        AgentSocialIndexes? socialIndexes = null, AgentLodService? lodService = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -28,6 +29,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         _jobs = catalog.Jobs.ToDictionary(job => job.Hash);
         _fallback = catalog.Intents.Fallback;
         _socialIndexes = socialIndexes ?? BuildIndexes(store);
+        _lodService = lodService;
         Filter.AllTags(Tags.Get<Tier1LodTag>());
     }
 
@@ -35,6 +37,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
     {
         var time = _clock.GetComponent<WorldTime>();
         var minute = (long)Math.Floor(time.ElapsedSimulationSeconds / SimulationDefaults.SimulationSecondsPerMinute);
+        PromoteInvitationTargets();
         var agents = _store.Query<Identity>().Entities
             .Where(IsCoordinatable).OrderBy(entity => entity.Id).ToArray();
         var byId = agents.ToDictionary(entity => entity.Id);
@@ -42,6 +45,21 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
 
         MaintainExistingPairs(agents, byId, targets, time, minute);
         MatchInvitations(agents, byId, targets, time, minute);
+    }
+
+    private void PromoteInvitationTargets()
+    {
+        if (_lodService is null) return;
+        var byId = _store.Query<Identity>().Entities.ToDictionary(entity => entity.Id);
+        foreach (var initiator in _store.Query<IntentionState>().Entities.Where(entity => entity.Tags.Has<Tier1LodTag>()))
+        {
+            var intention = initiator.GetComponent<IntentionState>();
+            if (!_intents.TryGetValue(intention.ActionHash, out var intent) || intent.Participation is null ||
+                !byId.TryGetValue(intention.TargetEntityId, out var participant) || !participant.Tags.Has<Tier3LodTag>()) continue;
+            // This happens outside any active component query iteration, so the
+            // target has all detailed state before offer evaluation can read it.
+            _lodService.PinActiveInteraction(participant);
+        }
     }
 
     private static AgentSocialIndexes BuildIndexes(EntityStore store)
@@ -274,6 +292,8 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         SetCooldown(participant, actionHash, minute + cooldown);
         ResetToFallback(initiator);
         ResetToFallback(participant);
+        _lodService?.ReleaseActiveInteraction(initiator);
+        _lodService?.ReleaseActiveInteraction(participant);
     }
 
     private void ReleaseSingle(Entity agent, int actionHash, long minute)
@@ -281,6 +301,7 @@ public sealed class CoordinationSystem : QuerySystem<CoordinationState>
         var cooldown = _intents.TryGetValue(actionHash, out var intent) ? intent.Controls.CooldownMinutes : 0;
         SetCooldown(agent, actionHash, minute + cooldown);
         ResetToFallback(agent);
+        _lodService?.ReleaseActiveInteraction(agent);
     }
 
     private void ResetToFallback(Entity agent)

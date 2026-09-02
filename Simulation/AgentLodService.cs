@@ -16,6 +16,9 @@ public sealed class AgentLodService : IDisposable
     private readonly HashSet<int> _pointsOfInterest = [];
     private readonly Dictionary<int, int[]> _poiNeighbours = new();
     private readonly List<InvestigationChangedEvent> _investigationEvents = [];
+    private ContentCatalog? _catalog;
+    private CoarseRoutineSystem? _coarse;
+    private long _coarseCurrentMinute;
     private bool _initialized;
 
     // Retained for isolated contract tests and bootstrap construction. Runtime
@@ -115,8 +118,43 @@ public sealed class AgentLodService : IDisposable
             throw new InvalidOperationException("Agent LOD state must be initialized before changing tier.");
         ref var state = ref entity.GetComponent<AgentLodState>();
         state.DesiredTier = desiredTier;
-        SynchronizeTags(entity, desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
-            ? AgentLodTier.Tier2 : desiredTier);
+        var actualTier = desiredTier == AgentLodTier.Tier3 && !_settings.Tier3Enabled
+            ? AgentLodTier.Tier2 : desiredTier;
+        TransitionRepresentation(entity, actualTier);
+        SynchronizeTags(entity, actualTier);
+    }
+
+    /// <summary>Connects this sole tier-mutation boundary to shared coarse state.</summary>
+    public void ConfigureCoarseRuntime(ContentCatalog catalog)
+    {
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _coarse = new CoarseRoutineSystem(catalog);
+    }
+
+    /// <summary>Advances exactly one deterministic coarse shard for the current simulation minute.</summary>
+    public void UpdateCoarse(long currentMinute)
+    {
+        _coarseCurrentMinute = currentMinute;
+        _coarse?.UpdateHour(currentMinute);
+    }
+
+    /// <summary>Catches an agent up before a detailed consumer reads its representation.</summary>
+    public void CatchUpCoarse(Entity entity, long currentMinute) => _coarse?.CatchUp(entity, currentMinute);
+
+    /// <summary>Promotes a proposed mutual-activity target before coordination reads detail.</summary>
+    public void PinActiveInteraction(Entity entity)
+    {
+        ref var state = ref entity.GetComponent<AgentLodState>();
+        state.InterestReasons |= AgentInterestReason.ActiveInteraction;
+        SetDesiredTier(entity, AgentLodTier.Tier2);
+    }
+
+    /// <summary>Releases the temporary promotion pin through coordination cleanup.</summary>
+    public void ReleaseActiveInteraction(Entity entity)
+    {
+        ref var state = ref entity.GetComponent<AgentLodState>();
+        state.InterestReasons &= ~AgentInterestReason.ActiveInteraction;
+        ApplyClassification(entity);
     }
 
     public static bool HasExactlyOneTierTag(Entity entity)
@@ -225,4 +263,46 @@ public sealed class AgentLodService : IDisposable
         }
         if (RequiresDetailedSimulation(tier)) entity.AddTag<DetailedSimulationTag>();
     }
+
+    private void TransitionRepresentation(Entity entity, AgentLodTier tier)
+    {
+        if (_catalog is null || _coarse is null || !entity.HasComponent<Identity>()) return;
+        if (tier == AgentLodTier.Tier3)
+        {
+            _coarse.Add(entity, _coarseCurrentMinute);
+            // Coarse state keeps identity, attributes, psychology, location,
+            // commute scalar, and LOD fields only; all detailed allocations go.
+            if (entity.HasComponent<IntentionState>()) entity.RemoveComponent<IntentionState>();
+            if (entity.HasComponent<ActivityState>()) entity.RemoveComponent<ActivityState>();
+            if (entity.HasComponent<DecisionState>()) entity.RemoveComponent<DecisionState>();
+            if (entity.HasComponent<AgentTravel>()) entity.RemoveComponent<AgentTravel>();
+            if (entity.HasComponent<CoordinationState>()) entity.RemoveComponent<CoordinationState>();
+            return;
+        }
+        _coarse.CatchUp(entity, _coarseCurrentMinute);
+        _coarse.Remove(entity);
+        if (!entity.HasComponent<IntentionState>()) entity.AddComponent(new IntentionState { ActionHash = _catalog.Intents.Fallback.Hash });
+        if (!entity.HasComponent<ActivityState>()) entity.AddComponent(new ActivityState
+        {
+            ActionHash = _catalog.Intents.Fallback.Hash, ActivityTypeHash = _catalog.Intents.Fallback.Activity.Hash,
+            Phase = ActivityPhase.Performing
+        });
+        if (!entity.HasComponent<DecisionState>()) entity.AddComponent(CreateDecisionState(_catalog.Intents.Count));
+        if (!entity.HasComponent<CoordinationState>()) entity.AddComponent<CoordinationState>();
+        if (!entity.HasComponent<AgentTravel>())
+        {
+            ref var location = ref entity.GetComponent<AgentLocation>();
+            var route = _catalog.World.FindShortestRoute(location.HomeLocationId, location.WorkLocationId)
+                ?? throw new InvalidOperationException("A promoted agent has no home-to-work route.");
+            entity.AddComponent(new AgentTravel { RouteLocationIds = route.LocationIds.ToArray(), TotalTravelMinutes = route.TravelMinutes });
+        }
+    }
+
+    private static DecisionState CreateDecisionState(int intentCount) => new()
+    {
+        LastConsideredMinute = -1, Dirty = true, ChangedFacts = FactDependencyMask.All,
+        CachedScores = new float[intentCount], CachedEligibility = new bool[intentCount],
+        CachedTargetEntityIds = new int[intentCount], CachedTargetLocationIds = new int[intentCount],
+        CooldownActionHashes = new int[intentCount], CooldownUntilMinutes = new long[intentCount]
+    };
 }
