@@ -132,6 +132,9 @@ public sealed class AgentNetworkBuilderTests
     }
 
     private static string[] CaptureAgents(EntityStore store) => store.Query<Identity>().Entities
+        // Adding relation components can move entities between ECS archetypes, so
+        // compare the population by its stable identity rather than query order.
+        .OrderBy(agent => agent.Id)
         .Select(agent => $"{agent.GetComponent<Identity>().NameId}:{agent.GetComponent<AgentLocation>().HomeLocationId}:" +
             $"{agent.GetComponent<AgentLocation>().WorkLocationId}:{agent.Tags.Has<OperativeTag>()}")
         .ToArray();
